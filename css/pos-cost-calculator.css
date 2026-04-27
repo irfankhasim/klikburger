@@ -503,6 +503,7 @@
         margin-top: 0.75rem;
         padding-top: 0.5rem;
         border-top: 1px solid var(--border);
+        justify-content: center;
       }
 
       .product-tile__ings {
@@ -569,6 +570,21 @@
 
       .product-tile__footer-profit strong {
         font-size: 1rem;
+      }
+
+      .product-tile:not(.product-tile--pkg-filter) .product-tile__footer {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .product-tile:not(.product-tile--pkg-filter) .product-tile__footer-profit {
+        flex: 1 1 100%;
+        justify-content: space-between;
+      }
+
+      .product-tile:not(.product-tile--pkg-filter) .product-tile__footer-actions {
+        flex: 1 1 100%;
+        justify-content: center;
       }
 
       .tile-add {
