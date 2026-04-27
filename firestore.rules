@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    /**
+     * Tetapan pembangunan / FYP — benarkan baca & tulis untuk koleksi yang digunakan app.
+     * Sebelum production: gantikan dengan `request.auth != null` dan semakan per dokumen.
+     */
+    match /ingredients/{docId} {
+      allow read, write: if true;
+    }
+    match /ingredient_ledger/{docId} {
+      allow read, write: if true;
+    }
+    match /ingredient_batches/{docId} {
+      allow read, write: if true;
+    }
+    match /modifiers/{docId} {
+      allow read, write: if true;
+    }
+    match /recipes/{docId} {
+      allow read, write: if true;
+    }
+    match /menu_items/{docId} {
+      allow read, write: if true;
+    }
+    match /sales/{docId} {
+      allow read, write: if true;
+    }
+    match /purchase_history/{docId} {
+      allow read, write: if true;
+    }
+
+    match /staff/{docId} {
+      allow read, write: if true;
+    }
+    match /staff_activity/{docId} {
+      allow read, write: if true;
+    }
+    match /staff_settings/{docId} {
+      allow read, write: if true;
+    }
+
+    /** POS — FYP: longgarkan seperti koleksi atas; production: `request.auth != null` + semakan `users/{uid}.role`. */
+    match /users/{docId} {
+      allow read, write: if true;
+    }
+    match /pos_meta/{docId} {
+      allow read, write: if true;
+    }
+    match /pos_orders/{orderId} {
+      allow read, write: if true;
+      match /items/{itemId} {
+        allow read, write: if true;
+      }
+    }
+    match /pos_receipts/{docId} {
+      allow read, write: if true;
+    }
+    match /pos_shifts/{shiftId} {
+      allow read, write: if true;
+      match /cash_movements/{movId} {
+        allow read, write: if true;
+      }
+    }
+    match /pos_sales_transactions/{docId} {
+      allow read, write: if true;
+    }
+    match /pos_audit_logs/{docId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

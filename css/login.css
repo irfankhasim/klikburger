@@ -1,0 +1,512 @@
+@import url("base.css");
+
+/* ——— Halaman log masuk — guna token :root sama seperti main-menu / POS ——— */
+
+.page-login {
+  position: relative;
+  min-height: 100vh;
+  color: var(--text);
+  background: linear-gradient(155deg, #e08a18 0%, var(--sidebar-accent) 42%, #c45a08 78%, #9a3d07 100%);
+}
+
+/* Latar penuh: oren hangat + titik halus + sudut lembut */
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.14) 1px, transparent 0),
+    linear-gradient(155deg, #e08a18 0%, var(--sidebar-accent) 42%, #c45a08 78%, #9a3d07 100%);
+  background-size: 22px 22px, auto;
+}
+
+.login-bg::before,
+.login-bg::after {
+  content: "";
+  position: absolute;
+  width: clamp(14rem, 40vmin, 26rem);
+  height: clamp(14rem, 40vmin, 26rem);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.login-bg::before {
+  top: -12%;
+  left: -8%;
+  background: radial-gradient(
+    circle closest-side,
+    rgba(0, 0, 0, 0.12) 0%,
+    rgba(0, 0, 0, 0.04) 42%,
+    transparent 70%
+  );
+}
+
+.login-bg::after {
+  bottom: -14%;
+  right: -6%;
+  background: radial-gradient(
+    circle closest-side,
+    rgba(0, 0, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.035) 48%,
+    transparent 72%
+  );
+}
+
+.page-login .app-wrap {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem) clamp(0.75rem, 2vw, 1.5rem);
+}
+
+/* Dua lajur: jenama / logo (kiri) · borang (kanan) — kad putih “terapung” */
+.login-split {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  max-width: 78rem;
+  min-height: min(33rem, calc(100vh - 2.75rem));
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.55) inset,
+    0 28px 55px -12px rgba(0, 0, 0, 0.28),
+    0 12px 24px -8px rgba(0, 0, 0, 0.12);
+  animation: login-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login-split__brand {
+  position: relative;
+  flex: 0 0 56%;
+  min-width: min(20rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.75rem, 4.5vw, 3rem) clamp(0.45rem, 1.2vw, 1rem) clamp(2.25rem, 5vw, 3rem);
+  text-align: center;
+  background:
+    repeating-linear-gradient(
+      -36deg,
+      transparent 0,
+      transparent 11px,
+      rgba(212, 120, 10, 0.028) 11px,
+      rgba(212, 120, 10, 0.028) 12px
+    ),
+    radial-gradient(circle at 1px 1px, rgba(212, 120, 10, 0.085) 1px, transparent 0),
+    linear-gradient(168deg, #fffefb 0%, #fff7ec 55%, #ffeedd 100%);
+  background-size: auto, 14px 14px, auto;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.login-hero__logo {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  max-width: min(660px, 100%);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.13)) drop-shadow(0 7px 18px rgba(245, 166, 35, 0.22));
+}
+
+.login-hero__trademark {
+  margin: 0.6rem 0 0;
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
+  font-style: italic;
+  font-weight: 900;
+  font-family: "Arial Black", "Segoe UI Black", "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.04em;
+  color: #2a1706;
+  text-transform: none;
+  -webkit-text-stroke: 0.35px rgba(255, 247, 234, 0.75);
+  text-shadow:
+    -1px -1px 0 rgba(255, 247, 234, 0.95),
+    1px -1px 0 rgba(255, 247, 234, 0.95),
+    -1px 1px 0 rgba(255, 247, 234, 0.95),
+    1px 1px 0 rgba(255, 247, 234, 0.95),
+    0 1px 0 #cf7a11,
+    0 2px 0 #bd6d0c,
+    0 3px 0 #ab6108,
+    0 7px 12px rgba(0, 0, 0, 0.24);
+}
+
+/* Panel kanan — borang (tanpa “kad” berganda) */
+.page-login .login-card.login-split__main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  width: auto;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: #fff;
+  background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.035) 1px, transparent 0);
+  background-size: 18px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-card__head {
+  padding: clamp(1.75rem, 4vw, 2.35rem) clamp(1.5rem, 4vw, 2.25rem) 1.2rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+
+.login-card__title {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.6rem, 3.8vw, 2.05rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.login-card__lead {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.58;
+  color: var(--text-muted);
+  max-width: 26rem;
+}
+
+.page-login .login-form {
+  padding: 1.5rem clamp(1.5rem, 4vw, 2.25rem) 0.35rem;
+}
+
+/* Medan dengan ikon */
+.page-login .field--with-icon {
+  margin-bottom: 1.15rem;
+}
+
+.page-login .field__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.42rem;
+}
+
+.page-login .field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.page-login .field__icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.page-login #password.field__input--with-icon {
+  padding-right: 2.8rem;
+}
+
+.page-login .field__toggle {
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.page-login .field__toggle:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text);
+}
+
+.page-login .field__toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.page-login .field__input--with-icon {
+  padding-left: 2.65rem;
+  padding-top: 0.72rem;
+  padding-bottom: 0.72rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: #f7f7f6;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.page-login .field__input--with-icon:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.page-login .field__input--with-icon:focus {
+  border-color: var(--sidebar-accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.page-login .login-submit {
+  margin-top: 0.5rem;
+  padding: 0.82rem 1rem;
+  font-size: 0.98rem;
+  font-weight: 800;
+  border-radius: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Butang utama — kuning / oren (jenama), seperti versi sebelum */
+.page-login .btn--primary {
+  background: linear-gradient(180deg, #ffb30d 0%, #e8890a 42%, #d97706 100%);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(217, 119, 6, 0.38);
+}
+
+.page-login .btn--primary:hover {
+  filter: brightness(1.05);
+  opacity: 1;
+}
+
+.page-login .btn--primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--accent-ring), 0 4px 18px rgba(217, 119, 6, 0.38);
+}
+
+/* Sambung sesi */
+.page-login .login-resume {
+  margin: 0 1.65rem 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.page-login .login-resume__text {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.page-login .login-resume__actions {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.page-login .btn--secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--border-strong);
+  box-shadow: none;
+}
+
+.page-login .btn--secondary:hover {
+  background: var(--surface-muted);
+  border-color: var(--sidebar-accent);
+}
+
+.page-login .btn--ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.page-login .btn--ghost:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+/* Nota pembangun — dilipat */
+.login-dev {
+  margin: 0.35rem clamp(1.5rem, 4vw, 2.25rem) 0;
+  border-top: none;
+  padding-top: 0.5rem;
+}
+
+.login-dev__summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.login-dev__summary::-webkit-details-marker {
+  display: none;
+}
+
+.login-dev__summary:hover {
+  color: var(--text);
+}
+
+.login-dev__chev {
+  font-size: 0.65rem;
+  opacity: 0.65;
+  transition: transform 0.2s ease;
+}
+
+.login-dev[open] .login-dev__chev {
+  transform: rotate(180deg);
+}
+
+.login-dev__body {
+  padding-bottom: 0.35rem;
+}
+
+.login-dev__hint {
+  margin: 0 0 0.5rem;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.login-dev__hint code {
+  font-size: 0.72em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* Footer — sama seperti base .form-footer a */
+.login-footer {
+  margin: 0;
+  margin-top: auto;
+  padding: 1.15rem clamp(1.5rem, 4vw, 2.25rem) 1.65rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  background: linear-gradient(180deg, transparent 0%, rgba(250, 250, 249, 0.65) 100%);
+}
+
+.login-footer__copyright {
+  display: block;
+  margin-top: 0.65rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.page-login .login-footer a {
+  color: var(--text);
+  border-bottom-color: var(--sidebar-accent);
+}
+
+.page-login .login-footer a:hover {
+  color: var(--sidebar-accent);
+}
+
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-split {
+    animation: none;
+  }
+
+  .login-dev__chev {
+    transition: none;
+  }
+}
+
+@media (max-width: 52rem) {
+  .login-split {
+    flex-direction: column;
+    min-height: 0;
+    max-width: 30rem;
+  }
+
+  .login-split__brand {
+    flex: none;
+    max-width: none;
+    width: 100%;
+    min-height: 0;
+    padding: 1.75rem 1.5rem 1.35rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .login-hero__logo {
+    max-width: min(520px, 98vw);
+  }
+
+  .page-login .login-card.login-split__main {
+    border-top: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-card__head {
+    padding: 1.35rem 1.25rem 0.95rem;
+  }
+
+  .page-login .login-form {
+    padding: 1.15rem 1.25rem 0.15rem;
+  }
+
+  .page-login .login-resume {
+    margin-left: 1.25rem;
+    margin-right: 1.25rem;
+  }
+
+  .login-dev {
+    margin-left: 1.25rem;
+    margin-right: 1.25rem;
+  }
+
+  .login-footer {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}

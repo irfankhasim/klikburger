@@ -1,0 +1,8 @@
+node_modules/
+firebase-service-account.json
+server/data/*.sqlite
+.env
+.firebase/
+scripts/.web-sdk-config.tmp.json
+*-debug.log
+server/

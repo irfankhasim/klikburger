@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="description" content="Klik Burger — menu utama, navigasi sisi." />
+    <title>Menu utama — Klik Burger</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/main-menu.css" />
+    <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+  </head>
+  <body class="page-main-menu" data-module="pos">
+    <div class="layout">
+      <aside class="sidebar" aria-label="Menu Klik Burger">
+        <button
+          type="button"
+          class="sidebar__brand js-module-trigger"
+          id="module-trigger"
+          aria-expanded="false"
+          aria-controls="module-layer"
+          aria-haspopup="dialog"
+        >
+          <div class="sidebar__titles">
+            <span class="sidebar__name">Klik <span class="sidebar__name-accent">Burger</span></span>
+            <span class="sidebar__tag js-module-tag">Kaunter</span>
+          </div>
+          <span class="sidebar__chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+        </button>
+
+        <!-- Menu: jualan / kaunter -->
+        <nav class="sidebar__nav sidebar__nav--pos js-nav-pos" aria-label="Menu jualan">
+          <p class="sidebar__section">Operasi</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link js-nav-clock"
+                href="#"
+                data-pos-lead="Clock in diperlukan untuk staf sebelum jualan. Owner boleh langkau."
+              >
+                <i class="fa-solid fa-user-clock" aria-hidden="true"></i>
+                <span>Clock In / Drawer</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar__link"
+                href="#"
+                data-pos-embed="pos-order.html"
+                data-rbac-lock="clocked"
+                data-pos-topbar="Ambil pesanan"
+                data-pos-title="Ambil pesanan — Klik Burger"
+                data-pos-lead="Aliran: troli → semakan → pembayaran → resit &amp; senarai dapur. Disambung dengan <strong>Resit</strong> dan <strong>Senarai pesanan</strong>."
+              >
+                <i class="fa-solid fa-cash-register" aria-hidden="true"></i>
+                <span>Jualan</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar__link"
+                href="#"
+                data-pos-embed="pos-receipts.html"
+                data-rbac-lock="clocked"
+                data-pos-topbar="Resit"
+                data-pos-title="Resit — Klik Burger"
+                data-pos-lead="Senarai resit — disegerakkan dengan jualan. Drawer tunai &amp; audit: menu <strong>Clock In / Drawer</strong>."
+              >
+                <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                <span>Resit</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar__link"
+                href="#"
+                data-pos-embed="pos-order-board.html"
+                data-rbac-lock="clocked"
+                data-pos-topbar="Senarai pesanan"
+                data-pos-title="Senarai pesanan — Klik Burger"
+                data-pos-lead="Papan dapur (KDS) — status pesanan selepas bayaran."
+              >
+                <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
+                <span>Senarai pesanan</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Kaunter</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link" href="#">
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                <span>Tetapan kaunter jualan</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        <!-- Menu: Back office -->
+        <nav class="sidebar__nav sidebar__nav--bo js-nav-bo is-hidden" aria-label="Menu pejabat belakang" hidden>
+          <p class="sidebar__section">Ringkasan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link is-active" href="#" data-bo-link>
+                <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+                <span>Papan pemuka</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Laporan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link" href="#">
+                <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+                <span>Ringkasan jualan</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link" href="#">
+                <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+                <span>Mengikut kategori</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Produk, staff &amp; pelanggan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link js-bo-calc"
+                href="#"
+                data-calc-tab="modifiers"
+                data-topbar="Menu produk"
+                data-bo-calc-copy="catalog"
+              >
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
+                <span>Produk</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link js-bo-staff" href="#">
+                <i class="fa-solid fa-users" aria-hidden="true"></i>
+                <span>Staff</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link" href="#">
+                <i class="fa-solid fa-address-book" aria-hidden="true"></i>
+                <span>Pelanggan</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Inventori</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link js-bo-calc" href="#" data-calc-tab="ingredients">
+                <i class="fa-solid fa-carrot" aria-hidden="true"></i>
+                <span>Bahan mentah</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link js-bo-calc" href="#" data-calc-tab="modifiers">
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
+                <span>Produk &amp; kos</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Sistem</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link" href="#">
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                <span>Tetapan</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        <div class="sidebar__footer">
+          <div id="kb-status-bar" class="kb-status-bar" aria-live="polite"></div>
+          <a class="sidebar__out" href="login.html">
+            <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+            <span>Log keluar</span>
+          </a>
+        </div>
+      </aside>
+
+      <div class="layout__main">
+        <header class="topbar">
+          <h1 class="topbar__title js-topbar-title">Laman utama — jualan</h1>
+          <p class="topbar__rbac-hint js-rbac-hint" hidden></p>
+        </header>
+        <main class="content" id="main-content">
+          <div class="content__default" id="content-default">
+            <div class="content__lead js-content-lead">
+              <strong>Klik Burger</strong> — anda dalam mod <strong>jualan di kaunter</strong>. Menu di sebelah kiri untuk operasi harian.
+            </div>
+            <div class="content__panel">
+              <h2 class="content__panel-title js-panel-title">Ringkasan giliran kerja</h2>
+              <div class="content__panel-body js-panel-body">
+                Klik Burger — contoh kandungan: jumlah jualan hari ini, pesanan aktif, dan status pencetak resit. Sambungkan ke data sebenar kemudian.
+              </div>
+            </div>
+          </div>
+          <div class="content__embed-wrap" id="content-embed-wrap" hidden>
+            <iframe
+              class="content__embed"
+              id="content-embed"
+              title="Kalkulator kos — Klik Burger"
+              src=""
+              loading="lazy"
+            ></iframe>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Popup: pilih modul jualan atau pejabat belakang -->
+    <div class="module-layer" id="module-layer" hidden>
+      <button type="button" class="module-layer__backdrop js-module-close" aria-label="Tutup"></button>
+      <div
+        class="module-layer__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="module-layer-title"
+        aria-describedby="module-layer-desc"
+      >
+        <h2 id="module-layer-title" class="module-layer__title">Pilih modul</h2>
+        <p id="module-layer-desc" class="module-layer__desc">
+          Setiap modul mempunyai menu yang berbeza di bar sisi.
+        </p>
+        <div class="module-layer__choices">
+          <button type="button" class="module-choice module-choice--pos js-set-module" data-module="pos">
+            <span class="module-choice__icon" aria-hidden="true"><i class="fa-solid fa-cash-register"></i></span>
+            <span class="module-choice__text">
+              <span class="module-choice__label">Kaunter</span>
+              <span class="module-choice__hint">Jualan, giliran kerja, resit</span>
+            </span>
+            <i class="fa-solid fa-chevron-right module-choice__go" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="module-choice module-choice--bo js-set-module" data-module="bo">
+            <span class="module-choice__icon" aria-hidden="true"><i class="fa-solid fa-briefcase"></i></span>
+            <span class="module-choice__text">
+              <span class="module-choice__label">Pejabat belakang</span>
+              <span class="module-choice__hint">Laporan, produk, pentadbiran</span>
+            </span>
+            <i class="fa-solid fa-chevron-right module-choice__go" aria-hidden="true"></i>
+          </button>
+        </div>
+        <button type="button" class="module-layer__cancel btn btn--ghost js-module-close">Tutup</button>
+      </div>
+    </div>
+
+    <div id="kb-shift-modal" class="order-flow" hidden aria-hidden="true">
+      <div class="order-flow__backdrop" id="kb-shift-modal-bd"></div>
+      <div class="order-flow__panel rc-modal-panel" role="dialog" aria-modal="true" aria-labelledby="kb-shift-modal-title">
+        <div class="order-flow__head">
+          <h2 class="order-flow__title" id="kb-shift-modal-title">Modal</h2>
+          <button type="button" class="rc-btn rc-btn--line rc-btn--sm" id="kb-shift-modal-x">Tutup</button>
+        </div>
+        <div class="order-flow__body" id="kb-shift-modal-body"></div>
+        <div class="order-flow__foot" id="kb-shift-modal-foot"></div>
+      </div>
+    </div>
+
+    <script type="module" src="../js/main-menu.js"></script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "fyp-klik-burger",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm install && node scripts/setup.mjs",
+    "setup:seed-only": "node scripts/setup.mjs --seed-only",
+    "setup:skip-deploy": "node scripts/setup.mjs --skip-deploy",
+    "seed:burger": "node scripts/seed-burger-firestore.mjs",
+    "seed:local": "node scripts/seed-local.mjs",
+    "seed:demo-users": "node scripts/seed-demo-auth-users.mjs",
+    "seed:pos": "node scripts/seed-pos-bootstrap.mjs",
+    "dev": "concurrently -n emu,seed -c blue,green \"npx firebase emulators:start --only firestore,auth,hosting\" \"node scripts/wait-and-seed-emulators.mjs\"",
+    "dev:emulators": "npx firebase emulators:start --only firestore,auth,hosting",
+    "cleanup": "node scripts/cleanup-legacy.mjs",
+    "deploy:firestore": "npx firebase deploy --only firestore:rules,firestore:indexes",
+    "sync:webconfig": "node scripts/sync-firebase-web-config.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "firebase-admin": "^13.0.0",
+    "firebase-tools": "^13.29.1"
+  }
+}
