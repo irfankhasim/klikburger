@@ -603,7 +603,7 @@ export function orderPriorityFlag(order) {
 export function paymentMethodLabel(code) {
   var m = {
     cash: "Tunai",
-    duitnow: "DuitNow QR",
+    duitnow: "QR",
     card: "Kad",
     ewallet: "eWallet"
   };

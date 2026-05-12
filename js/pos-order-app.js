@@ -1,5 +1,5 @@
 /**
- * POS — menu jualan disegerakkan dengan Firestore `modifiers` (Produk & kos).
+ * POS ??? menu jualan disegerakkan dengan Firestore `modifiers` (Produk & kos).
  */
 import { redirectIfPosPageWithoutAuth } from "./pos-page-auth.js";
 await redirectIfPosPageWithoutAuth();
@@ -15,6 +15,7 @@ import {
   getActiveFifoBatchFromList
 } from "./cost-calculator/ingredient-batch-repository.js";
 import { finalizePosSaleFifo, aggregateCartConsumption } from "./pos-sale-fifo.js";
+import { getPosHubState } from "./pos-operations-hub.js";
 import {
   subscribeRbac,
   canBypassStaffRestrictions,
@@ -28,21 +29,21 @@ import {
 var menuItems = [];
 /** Snapshot mentah modifier (sebelum agregat usage pakej). */
 var posRawProducts = [];
-/** Peta id modifier → objek docToProduct (untuk FIFO jualan). */
+/** Peta id modifier ??? objek docToProduct (untuk FIFO jualan). */
 var modifiersById = {};
 var posIngredients = [];
-/** Lot stok — untuk semak “menu tak boleh jual” sebelum checkout. */
+/** Lot stok ??? untuk semak ???menu tak boleh jual??? sebelum checkout. */
 var batchesByIngredientId = {};
 var batchesSnapshotReady = false;
 var menuLoadError = null;
-/** `"all"` atau id dokumen pakej — menapis grid jualan. */
+/** `"all"` atau id dokumen pakej ??? menapis grid jualan. */
 var activeCat = "all";
 var cart = [];
 
-/** { id, label, memberIds: string[] | null } — null pada "Semua". */
+/** { id, label, memberIds: string[] | null } ??? null pada "Semua". */
 var CATS = [];
 
-/** Sama seperti kalkulator kos (`LOW_STOCK_ACTIVE_LOT_FRACTION`): lot aktif ≤ nisbah ini = “rendah”. */
+/** Sama seperti kalkulator kos (`LOW_STOCK_ACTIVE_LOT_FRACTION`): lot aktif ??? nisbah ini = ???rendah???. */
 var LOW_STOCK_LOT_FRACTION = 0.25;
 
 function formatRM(n) {
@@ -144,7 +145,7 @@ function menuItemCanAddOne(menuId) {
   return true;
 }
 
-/** `lines`: `{ id, qty }[]` — sama seperti troli untuk `aggregateCartConsumption`. */
+/** `lines`: `{ id, qty }[]` ??? sama seperti troli untuk `aggregateCartConsumption`. */
 function cartLinesWithinStock(lines) {
   if (!batchesSnapshotReady) return true;
   var byIng = ingredientsByIdMap();
@@ -205,9 +206,9 @@ function updateOrderStockAlert() {
   el.textContent =
     "Amaran stok rendah bagi bahan dalam pesanan ini: " +
     names.join(", ") +
-    ". (Lot semasa ≤ " +
+    ". (Lot semasa ? " +
     Math.round(LOW_STOCK_LOT_FRACTION * 100) +
-    "% daripada asal — tambah belian jika perlu.)";
+    "% daripada asal ? tambah belian jika perlu.)";
 }
 
 function renderGrid() {
@@ -246,7 +247,7 @@ function renderGrid() {
   if (!items.length && menuItems.length) {
     grid.innerHTML =
       '<p class="order-cart__empty" style="text-align:left">' +
-      "Pakej kosong — ubah di Menu Produk atau pilih <strong>Semua menu</strong>." +
+      "Pakej kosong ? ubah di Menu Produk atau pilih <strong>Semua menu</strong>." +
       "</p>";
     return;
   }
@@ -370,7 +371,7 @@ function renderCart() {
         "</div>" +
         '<div class="order-line__ctrl">' +
         '<span class="order-line__qty">' +
-        '<button type="button" class="js-qty-minus" aria-label="Kurang">−</button>' +
+        '<button type="button" class="js-qty-minus" aria-label="Kurang">\u2212</button>' +
         "<span>" +
         line.qty +
         "</span>" +
@@ -446,12 +447,12 @@ function updatePosRbacChrome() {
       ban.hidden = false;
       ban.removeAttribute("hidden");
       ban.textContent =
-        "Drawer ditutup — mod baca sahaja. Bayaran baharu tidak dibenarkan sehingga drawer baharu dibuka atau anda clock out.";
+        "Drawer ditutup ? mod baca sahaja. Bayaran baharu tidak dibenarkan sehingga drawer baharu dibuka atau anda clock out.";
     } else if (!canUseFinancialControls()) {
       ban.hidden = false;
       ban.removeAttribute("hidden");
       ban.textContent =
-        "Drawer belum dibuka — sila buka drawer untuk membolehkan checkout dan bayaran.";
+        "Drawer belum dibuka ? sila buka drawer untuk membolehkan checkout dan bayaran.";
     } else {
       ban.hidden = true;
       ban.setAttribute("hidden", "");
@@ -610,13 +611,11 @@ function onBatchesError(err) {
   updateOrderStockAlert();
 }
 
-/* —— Aliran: semakan → pembayaran → kejayaan (disambung ke hab resit / senarai pesanan) —— */
+/* ?????? Aliran: semakan ??? pembayaran ??? kejayaan (disambung ke hab resit / senarai pesanan) ?????? */
 var checkoutLines = [];
 var flowStep = "review";
 var selectedPayment = "cash";
 var tenderedInputVal = "";
-var drawerSimulated = false;
-var cashReceivedAck = false;
 var lastSaleMeta = null;
 
 function flowEls() {
@@ -665,7 +664,7 @@ function renderFlowReview() {
         return (
           "<li><span>" +
           escapeHtml(l.name) +
-          " × " +
+          " \u00d7 " +
           l.qty +
           "</span><strong>" +
           formatRM(l.price * l.qty) +
@@ -703,7 +702,7 @@ function renderFlowPayment() {
     "</strong></p>" +
     '<div class="order-flow__pay-grid" id="flow-pay-opts">' +
     '<label class="order-flow__pay-opt is-active"><input type="radio" name="flow-pay" value="cash" checked /> Tunai</label>' +
-    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="duitnow" /> DuitNow QR</label>' +
+    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="duitnow" /> QR</label>' +
     '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="card" /> Kad</label>' +
     '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="ewallet" /> eWallet</label>' +
     "</div>" +
@@ -713,15 +712,13 @@ function renderFlowPayment() {
     '<label style="font-size:0.78rem;font-weight:600">Diberi pelanggan (RM)</label>' +
     '<input type="number" id="flow-tendered" min="0" step="0.01" style="padding:0.45rem;border:1px solid var(--border);border-radius:6px;font:inherit" />' +
     '<p id="flow-balance" style="margin:0;font-size:0.85rem;font-weight:700"></p>' +
-    '<button type="button" class="btn btn--ghost btn--sm" id="flow-drawer" style="width:fit-content">Simulasi buka laci tunai</button>' +
-    '<label style=\"display:flex;align-items:center;gap:0.35rem;font-size:0.8rem;cursor:pointer;margin-top:0.25rem\">' +
-    '<input type="checkbox" id="flow-cash-ack" /> Sahkan tunai diterima</label>' +
     "</div></div>";
+  selectedPayment = "cash";
 
-  function updateCashPanelVis() {
+  function updatePaymentPanels() {
     var cash = selectedPayment === "cash";
-    var p = document.getElementById("flow-cash-panel");
-    if (p) p.style.display = cash ? "block" : "none";
+    var pc = document.getElementById("flow-cash-panel");
+    if (pc) pc.style.display = cash ? "block" : "none";
   }
 
   function updateBalance() {
@@ -734,7 +731,7 @@ function renderFlowPayment() {
       return;
     }
     if (t <= 0) {
-      el.textContent = "Baki: —";
+      el.textContent = "Baki: ?";
       return;
     }
     el.textContent = "Baki untuk pelanggan: " + formatRM(bal);
@@ -750,7 +747,7 @@ function renderFlowPayment() {
     r.addEventListener("change", function () {
       selectedPayment = r.value;
       syncPayOptionStyles();
-      updateCashPanelVis();
+      updatePaymentPanels();
       updateBalance();
     });
   });
@@ -761,15 +758,7 @@ function renderFlowPayment() {
     tenderedInputVal = tenderInp.value;
     updateBalance();
   });
-  document.getElementById("flow-drawer").onclick = function () {
-    drawerSimulated = true;
-    showToast("Laci tunai dibuka (simulasi).");
-  };
-  document.getElementById("flow-cash-ack").checked = cashReceivedAck;
-  document.getElementById("flow-cash-ack").addEventListener("change", function (e) {
-    cashReceivedAck = e.target.checked;
-  });
-  updateCashPanelVis();
+  updatePaymentPanels();
   updateBalance();
 
   document.getElementById("flow-confirm-pay").onclick = function () {
@@ -782,7 +771,9 @@ function renderFlowSuccess(meta) {
   flowStep = "success";
   z.title.textContent = "Pembayaran berjaya";
   z.body.innerHTML =
-    '<p style="margin:0 0 0.5rem;font-weight:700;color:var(--success)">Terima kasih — pesanan telah direkodkan.</p>' +
+    '<p style="margin:0 0 0.5rem;font-weight:700;color:var(--success)">Terima kasih ? pesanan <strong>' +
+    escapeHtml(meta.orderNo || "") +
+    "</strong> telah direkodkan.</p>" +
     "<ul class=\"order-flow__success-list\">" +
     "<li>Bayaran diterima (" +
     escapeHtml(meta.payLabel) +
@@ -800,7 +791,7 @@ function renderFlowSuccess(meta) {
     "</ul>" +
     '<p class="ops-muted" style="margin:0.65rem 0 0;font-size:0.82rem">Jumlah: ' +
     formatRM(meta.subtotal) +
-    (meta.changeDue != null ? " · Baki tunai: " + formatRM(meta.changeDue) : "") +
+    (meta.changeDue != null ? " ? Baki tunai: " + formatRM(meta.changeDue) : "") +
     "</p>";
   z.foot.innerHTML =
     '<button type="button" class="btn btn--primary" id="flow-done">Pesanan baharu</button>';
@@ -811,7 +802,7 @@ function renderFlowSuccess(meta) {
 
 async function onConfirmPayment(subtotal) {
   if (!posSalesAllowed()) {
-    showToast("Bayaran tidak dibenarkan — sila buka drawer atau semak status clock in / drawer.");
+    showToast("Bayaran tidak dibenarkan ? sila buka drawer atau semak status clock in / drawer.");
     return;
   }
   selectedPayment =
@@ -819,14 +810,6 @@ async function onConfirmPayment(subtotal) {
     "cash";
   var tendered = parseFloat(document.getElementById("flow-tendered") && document.getElementById("flow-tendered").value) || 0;
   if (selectedPayment === "cash") {
-    if (!drawerSimulated) {
-      showToast("Tekan simulasi buka laci tunai dahulu.");
-      return;
-    }
-    if (!document.getElementById("flow-cash-ack") || !document.getElementById("flow-cash-ack").checked) {
-      showToast("Tandakan sahkan tunai diterima.");
-      return;
-    }
     if (tendered + 1e-9 < subtotal) {
       showToast("Amaun diberi tidak mencukupi.");
       return;
@@ -836,7 +819,7 @@ async function onConfirmPayment(subtotal) {
     return { id: l.id, name: l.name, price: l.price, qty: l.qty };
   });
   if (!cartLinesWithinStock(checkoutLines.map(function (x) { return { id: x.id, qty: x.qty }; }))) {
-    showToast("Stok tidak mencukupi — tutup aliran dan semak troli.");
+    showToast("Stok tidak mencukupi ? tutup aliran dan semak troli.");
     return;
   }
   var btn = document.getElementById("flow-confirm-pay");
@@ -844,6 +827,8 @@ async function onConfirmPayment(subtotal) {
   try {
     var act = getActorForAudit();
     var changeDue = selectedPayment === "cash" ? Math.round((tendered - subtotal) * 100) / 100 : null;
+    var hub = getPosHubState();
+    var drawerOpen = !!(hub && hub.shift && hub.shift.isOpen);
     var result = await finalizePosSaleFifo({
       cart: checkoutLines.map(function (l) {
         return { id: l.id, name: l.name, price: l.price, qty: l.qty };
@@ -858,9 +843,9 @@ async function onConfirmPayment(subtotal) {
       paymentMethod: selectedPayment,
       tendered: selectedPayment === "cash" ? tendered : null,
       changeDue: changeDue,
-      drawerOpenedSimulated: drawerSimulated
+      drawerOpenedSimulated: drawerOpen
     });
-    var labels = { cash: "Tunai", duitnow: "DuitNow QR", card: "Kad", ewallet: "eWallet" };
+    var labels = { cash: "Tunai", duitnow: "QR", card: "Kad", ewallet: "eWallet" };
     if (!result.order || !result.receipt) {
       throw new Error("Transaksi jualan tidak lengkap (pesanan/resit).");
     }
@@ -894,25 +879,23 @@ function startCheckoutFlowFromCart() {
     return;
   }
   if (!cart.length) {
-    showToast("Troli kosong — tambah item dahulu.");
+    showToast("Troli kosong ? tambah item dahulu.");
     return;
   }
   if (!posIngredients.length) {
-    showToast("Data bahan belum dimuatkan — tunggu sebentar atau muat semula halaman.");
+    showToast("Data bahan belum dimuatkan ? tunggu sebentar atau muat semula halaman.");
     return;
   }
   var cartLines = cart.map(function (l) {
     return { id: l.id, qty: l.qty };
   });
   if (!cartLinesWithinStock(cartLines)) {
-    showToast("Stok bahan tidak mencukupi untuk jualan ini — kurangkan kuantiti dalam troli.");
+    showToast("Stok bahan tidak mencukupi untuk jualan ini ? kurangkan kuantiti dalam troli.");
     return;
   }
   checkoutLines = cart.map(function (l) {
     return { id: l.id, name: l.name, price: l.price, qty: l.qty };
   });
-  drawerSimulated = false;
-  cashReceivedAck = false;
   tenderedInputVal = "";
   selectedPayment = "cash";
   openFlowOverlay();
@@ -932,7 +915,7 @@ async function init() {
   var grid = document.getElementById("order-grid");
   if (grid) {
     grid.innerHTML =
-      '<p class="order-cart__empty" style="text-align:left">Memuatkan senarai menu…</p>';
+      '<p class="order-cart__empty" style="text-align:left">Memuatkan senarai menu\u2026</p>';
   }
   subscribeModifiers(onModifiersSnapshot, onModifiersError);
   subscribeIngredients(onIngredientsSnapshot, onIngredientsError);

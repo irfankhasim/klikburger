@@ -79,7 +79,7 @@ export async function ensureSyntheticBatchIfNeeded(ingredientId) {
   var qty = typeof ing.purchaseQty === "number" ? ing.purchaseQty : parseFloat(ing.purchaseQty) || 0;
   if (qty <= 0) {
     throw new Error(
-      "Tiada lot stok — Tambah belian atau semak rujukan pakej."
+      "Tiada lot stok ??? Tambah belian atau semak rujukan pakej."
     );
   }
   var price = typeof ing.purchasePrice === "number" ? ing.purchasePrice : parseFloat(ing.purchasePrice) || 0;
@@ -120,12 +120,12 @@ function takeFifoCost(batchesById, ingId, qtyNeed) {
 /**
  * @param {object} opts
  * @param {Array<{id:string,name:string,price:number,qty:number}>} opts.cart
- * @param {Record<string, object>} opts.modifiersById — hasil docToProduct keyed by id
- * @param {Array<object>} opts.ingredientsList — docToIngredient[]
+ * @param {Record<string, object>} opts.modifiersById ??? hasil docToProduct keyed by id
+ * @param {Array<object>} opts.ingredientsList ??? docToIngredient[]
  * @param {string} [opts.table]
  * @param {string} [opts.customerName]
  * @param {string} [opts.notes]
- * @param {string} [opts.staffId] — kakitangan di kaunter (prestasi / audit)
+ * @param {string} [opts.staffId] ??? kakitangan di kaunter (prestasi / audit)
  * @param {string} [opts.staffName]
  * @param {'cash'|'duitnow'|'card'|'ewallet'} [opts.paymentMethod]
  * @param {number|null} [opts.tendered]
@@ -146,7 +146,7 @@ export async function finalizePosSaleFifo(opts) {
   var totalByIng = aggregateCartConsumption(ingredientsById, cart, modifiersById);
   var ingIds = Object.keys(totalByIng);
   if (!ingIds.length) {
-    throw new Error("Tiada resipi bahan pada produk dalam troli — semak Produk & kos.");
+    throw new Error("Tiada resipi bahan pada produk dalam troli ??? semak Produk & kos.");
   }
 
   for (var e = 0; e < ingIds.length; e++) {
@@ -293,7 +293,7 @@ export async function finalizePosSaleFifo(opts) {
         );
       }
       if (err && err.code === "missing-modifier") {
-        throw new Error("Menu tidak sepadan dengan troli — muat semula halaman POS.");
+        throw new Error("Menu tidak sepadan dengan troli ??? muat semula halaman POS.");
       }
       if (err && err.code === "failed-precondition") continue;
       if (err && err.code === "aborted") continue;

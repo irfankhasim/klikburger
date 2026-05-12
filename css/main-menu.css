@@ -530,6 +530,11 @@
   box-shadow: var(--shadow);
 }
 
+.module-choice.is-current:hover {
+  background: rgba(245, 166, 35, 0.14);
+  border-color: rgba(245, 166, 35, 0.6);
+}
+
 .module-choice:focus {
   outline: none;
 }
@@ -550,14 +555,26 @@
   flex-shrink: 0;
 }
 
-.module-choice--pos .module-choice__icon {
-  background: rgba(245, 166, 35, 0.2);
-  color: #b3740a;
-}
-
+/* Lalai: ikon neutral — kuning hanya pada lokasi semasa (.is-current) */
+.module-choice--pos .module-choice__icon,
 .module-choice--bo .module-choice__icon {
   background: rgba(26, 26, 26, 0.08);
-  color: var(--text);
+  color: var(--text-muted);
+}
+
+.module-choice.is-current {
+  border-color: rgba(245, 166, 35, 0.55);
+  background: rgba(245, 166, 35, 0.09);
+  box-shadow: 0 0 0 1px rgba(245, 166, 35, 0.12);
+}
+
+.module-choice.is-current .module-choice__icon {
+  background: rgba(245, 166, 35, 0.32);
+  color: #8a5f08;
+}
+
+.module-choice.is-current .module-choice__go {
+  color: #b3740a;
 }
 
 .module-choice__text {

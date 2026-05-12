@@ -162,7 +162,11 @@ function renderPayChips(b) {
       "</span></span>"
     );
   }
-  chips.innerHTML = chip("Tunai", b.cash) + chip("QR", b.duitnow) + chip("Kad", b.card) + chip("eW", b.ewallet);
+  chips.innerHTML =
+    chip("Tunai", b.cash) +
+    chip("QR", b.duitnow) +
+    chip("Kad", b.card) +
+    chip("eWallet", b.ewallet);
 }
 
 export function renderShiftPanelUI(state) {
@@ -327,15 +331,19 @@ function handleShiftClose() {
       "<dt>Jangkaan laci</dt><dd><strong>" +
       formatRM(exp) +
       "</strong></dd>" +
-      "<dt>Tunai / QR / Kad / eW</dt><dd>" +
+      "<dt>Tunai</dt><dd><strong>" +
       formatRM(br.cash) +
-      " · " +
+      "</strong></dd>" +
+      "<dt>QR</dt><dd><strong>" +
       formatRM(br.duitnow) +
-      " · " +
+      "</strong></dd>" +
+      "<dt>Kad</dt><dd><strong>" +
       formatRM(br.card) +
-      " · " +
+      "</strong></dd>" +
+      "<dt>eWallet</dt><dd><strong>" +
       formatRM(br.ewallet) +
-      "</dd></dl>" +
+      "</strong></dd>" +
+      "</dl>" +
       '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Kiraan tunai sebenar dalam laci (RM)</span></label>' +
       '<input type="number" id="mod-act" min="0" step="0.01" class="rc-input" style="width:100%;padding:0.55rem;margin-bottom:0.65rem" />' +
       '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Catatan bayaran balik (pilihan)</span></label>' +

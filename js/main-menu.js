@@ -65,14 +65,14 @@ var statusBar = document.getElementById("kb-status-bar");
 
 var copy = {
   pos: {
-    tag: "Kaunter",
+    tag: "Point Of Sale",
     topbar: "Laman utama — jualan",
     lead: "<strong>Klik Burger</strong> — kaunter. Menu kiri untuk operasi harian.",
     panelTitle: "Ringkasan giliran kerja",
     panelBody: "Contoh: jualan hari ini, pesanan aktif, resit. Sambung data kemudian."
   },
   bo: {
-    tag: "Pejabat belakang",
+    tag: "Back Office",
     topbar: "Laman utama — pentadbiran",
     lead: "<strong>Klik Burger</strong> — pejabat belakang. Menu kiri: laporan, produk, kakitangan, tetapan.",
     panelTitle: "Ringkasan perniagaan",
@@ -193,13 +193,29 @@ function showPosEmbedPage(file, iframeTitle, leadHtml, topbarText) {
   wrap.hidden = false;
   iframe.src = file;
   iframe.title = iframeTitle || "Klik Burger";
-  if (topbarTitle) topbarTitle.textContent = topbarText || iframeTitle || "Kaunter";
+  if (topbarTitle) topbarTitle.textContent = topbarText || iframeTitle || "Point Of Sale";
   if (contentLead) {
     contentLead.innerHTML = leadHtml || "";
     contentLead.removeAttribute("hidden");
   }
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
+}
+
+function syncModuleChoiceIndicator() {
+  var mod = body.getAttribute("data-module") === "bo" ? "bo" : "pos";
+  var posBtn = document.querySelector(".module-choice--pos");
+  var boBtn = document.querySelector(".module-choice--bo");
+  if (posBtn) {
+    posBtn.classList.toggle("is-current", mod === "pos");
+    if (mod === "pos") posBtn.setAttribute("aria-current", "true");
+    else posBtn.removeAttribute("aria-current");
+  }
+  if (boBtn) {
+    boBtn.classList.toggle("is-current", mod === "bo");
+    if (mod === "bo") boBtn.setAttribute("aria-current", "true");
+    else boBtn.removeAttribute("aria-current");
+  }
 }
 
 function applyModule(mode) {
@@ -233,15 +249,17 @@ function applyModule(mode) {
       setActiveNav(navBo, "[data-bo-link]");
     }
   }
+  syncModuleChoiceIndicator();
 }
 
 function openLayer() {
   if (!layer || !trigger) return;
+  syncModuleChoiceIndicator();
   layer.hidden = false;
   trigger.setAttribute("aria-expanded", "true");
   trigger.classList.add("is-open");
-  var firstChoice = layer.querySelector(".js-set-module");
-  if (firstChoice) firstChoice.focus();
+  var currentChoice = layer.querySelector(".module-choice.is-current") || layer.querySelector(".js-set-module");
+  if (currentChoice) currentChoice.focus();
 }
 
 function closeLayer() {
@@ -426,7 +444,7 @@ function tryConsumePosEmbedClick(t, navRoot, e) {
     window.alert(
       canBypassStaffRestrictions()
         ? "Buka drawer untuk mengaktifkan kawalan kewangan."
-        : "Sila buka drawer dari menu Clock In / Drawer — diperlukan untuk void resit dan kawalan tunai."
+        : "Sila buka drawer dari menu Clock In — diperlukan untuk void resit dan kawalan tunai."
     );
     return true;
   }
@@ -658,7 +676,7 @@ if (trigger && layer) {
     btn.addEventListener("click", function () {
       var mod = btn.getAttribute("data-module");
       if (mod === "bo" && !canAccessBackOfficeModule()) {
-        window.alert("Pejabat belakang hanya untuk pemilik / pentadbir.");
+        window.alert("Back Office hanya untuk pemilik / pentadbir.");
         return;
       }
       applyModule(mod);

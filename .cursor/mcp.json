@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "fyp-pos-firestore": {
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "cwd": "${workspaceFolder}",
+      "env": {}
+    }
+  }
+}

@@ -70,21 +70,32 @@ function ticketCard(o) {
       '<p class="ops-muted" style="margin:0;font-size:0.76rem">' +
       escapeHtml(isReadOnlyMode() ? "Read-only (shift closed)." : staffLockMessage()) +
       "</p>";
-  } else if (o.kitchenStage === "waiting") {
-    actions =
-      '<button type="button" class="ops-btn ops-btn--primary ops-btn--sm js-kb" data-act="prep" data-id="' +
-      escapeAttr(o.id) +
-      '">Terima → penyediaan</button>';
-  } else if (o.kitchenStage === "preparing") {
-    actions =
-      '<button type="button" class="ops-btn ops-btn--primary ops-btn--sm js-kb" data-act="ready" data-id="' +
-      escapeAttr(o.id) +
-      '">Tanda siap</button>';
-  } else if (o.kitchenStage === "ready") {
-    actions =
-      '<button type="button" class="ops-btn ops-btn--primary ops-btn--sm js-kb" data-act="hand" data-id="' +
-      escapeAttr(o.id) +
-      '">Diserahkan</button>';
+  } else {
+    var nextByStage = { waiting: "preparing", preparing: "ready", ready: "handed" };
+    var prevByStage = { preparing: "waiting", ready: "preparing", handed: "ready" };
+    var toNext = nextByStage[o.kitchenStage];
+    var toPrev = prevByStage[o.kitchenStage];
+    var leftBtn =
+      '<button type="button" class="ops-btn ops-btn--ghost ops-btn--sm ops-btn--icon" disabled aria-hidden="true">←</button>';
+    var rightBtn =
+      '<button type="button" class="ops-btn ops-btn--ghost ops-btn--sm ops-btn--icon" disabled aria-hidden="true">→</button>';
+    if (toPrev) {
+      leftBtn =
+        '<button type="button" class="ops-btn ops-btn--primary ops-btn--sm ops-btn--icon js-kb" data-to="' +
+        escapeAttr(toPrev) +
+        '" data-id="' +
+        escapeAttr(o.id) +
+        '" aria-label="Alih ke kolum sebelumnya">←</button>';
+    }
+    if (toNext) {
+      rightBtn =
+        '<button type="button" class="ops-btn ops-btn--primary ops-btn--sm ops-btn--icon js-kb" data-to="' +
+        escapeAttr(toNext) +
+        '" data-id="' +
+        escapeAttr(o.id) +
+        '" aria-label="Alih ke kolum seterusnya">→</button>';
+    }
+    actions = '<div class="ops-ticket__nav">' + leftBtn + rightBtn + "</div>";
   }
   return (
     '<article class="ops-ticket" data-order-id="' +
@@ -104,9 +115,7 @@ function ticketCard(o) {
     '<ul class="ops-ticket__lines">' +
     lines +
     "</ul>" +
-    '<div class="ops-ticket__actions">' +
-    actions +
-    "</div></article>"
+    '<div class="ops-ticket__actions">' + actions + "</div></article>"
   );
 }
 
@@ -158,11 +167,10 @@ function render() {
     btn.addEventListener("click", async function () {
       if (!kitchenMutationsAllowed()) return;
       var id = btn.getAttribute("data-id");
-      var act = btn.getAttribute("data-act");
+      var to = btn.getAttribute("data-to");
+      if (!id || !to) return;
       try {
-        if (act === "prep") await updateKitchenStage(id, "preparing");
-        else if (act === "ready") await updateKitchenStage(id, "ready");
-        else if (act === "hand") await updateKitchenStage(id, "handed");
+        await updateKitchenStage(id, to);
       } catch (e) {}
       render();
     });
