@@ -127,7 +127,7 @@ function takeFifoCost(batchesById, ingId, qtyNeed) {
  * @param {string} [opts.notes]
  * @param {string} [opts.staffId] ??? kakitangan di kaunter (prestasi / audit)
  * @param {string} [opts.staffName]
- * @param {'cash'|'duitnow'|'card'|'ewallet'} [opts.paymentMethod]
+ * @param {'cash'|'duitnow'} [opts.paymentMethod]
  * @param {number|null} [opts.tendered]
  * @param {number|null} [opts.changeDue]
  * @param {boolean} [opts.drawerOpenedSimulated]
@@ -272,7 +272,8 @@ export async function finalizePosSaleFifo(opts) {
           changeDue: opts.changeDue != null ? opts.changeDue : null,
           drawerOpenedSimulated: !!opts.drawerOpenedSimulated,
           staffId: opts.staffId ? String(opts.staffId) : "",
-          staffName: opts.staffName ? String(opts.staffName) : ""
+          staffName: opts.staffName ? String(opts.staffName) : "",
+          customerName: opts.customerName != null ? String(opts.customerName) : ""
         });
 
         return {

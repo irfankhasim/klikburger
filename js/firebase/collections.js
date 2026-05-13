@@ -70,3 +70,9 @@ export const COL_POS_SALES_TRANSACTIONS = "pos_sales_transactions";
 /** Log audit POS */
 export const COL_POS_AUDIT = "pos_audit_logs";
 
+/**
+ * Laporan bulanan agregat — dokumen id `YYYY-MM` (contoh `2026-05`).
+ * Medan utama ditulis oleh `js/monthly-reports/generate-monthly-report.js`.
+ */
+export const COL_MONTHLY_REPORTS = "monthly_reports";
+

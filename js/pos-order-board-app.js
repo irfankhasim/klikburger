@@ -5,7 +5,6 @@ import {
   subscribePosHub,
   getPosHubState,
   updateKitchenStage,
-  orderPriorityFlag,
   paymentMethodLabel
 } from "./pos-operations-hub.js";
 import {
@@ -32,19 +31,6 @@ function escapeAttr(s) {
   return escapeHtml(s).replace(/'/g, "&#39;");
 }
 
-function elapsedLabel(iso) {
-  if (!iso) return "—";
-  var sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  var m = Math.floor(sec / 60);
-  var s = sec % 60;
-  if (m >= 60) {
-    var h = Math.floor(m / 60);
-    m = m % 60;
-    return h + "j " + m + "m";
-  }
-  return m + "m " + s + "s";
-}
-
 function payPill(method) {
   var cls = "ops-pill";
   if (method !== "cash") cls += " ops-pill--pri";
@@ -56,13 +42,33 @@ function kitchenMutationsAllowed() {
   return canAccessOperationalModules() && !isReadOnlyMode();
 }
 
+function lineDisplayTotal(l) {
+  var lt = typeof l.lineTotal === "number" ? l.lineTotal : parseFloat(l.lineTotal);
+  if (!isNaN(lt) && lt >= 0) return lt;
+  var up = typeof l.unitPrice === "number" ? l.unitPrice : parseFloat(l.unitPrice);
+  var q = typeof l.qty === "number" ? l.qty : parseFloat(l.qty);
+  if (!isNaN(up) && !isNaN(q) && q > 0) return Math.round(up * q * 100) / 100;
+  return NaN;
+}
+
+function lineItemHtml(l) {
+  var qty = l.qty != null ? l.qty : "";
+  var namePart =
+    '<span class="ops-ticket__line-name">' +
+    escapeHtml(l.name || "") +
+    " × <strong>" +
+    escapeHtml(String(qty)) +
+    "</strong></span>";
+  var total = lineDisplayTotal(l);
+  var pricePart =
+    !isNaN(total) && total >= 0
+      ? '<span class="ops-ticket__line-price">' + escapeHtml(formatRM(total)) + "</span>"
+      : '<span class="ops-ticket__line-price">—</span>';
+  return "<li>" + namePart + pricePart + "</li>";
+}
+
 function ticketCard(o) {
-  var pri = orderPriorityFlag(o) ? '<span class="ops-pill ops-pill--pri">Utama</span> ' : "";
-  var lines = (o.lines || [])
-    .map(function (l) {
-      return "<li>" + escapeHtml(l.name) + " × <strong>" + l.qty + "</strong></li>";
-    })
-    .join("");
+  var lines = (o.lines || []).map(lineItemHtml).join("");
   var actions = "";
   var canGo = kitchenMutationsAllowed();
   if (!canGo) {
@@ -102,19 +108,24 @@ function ticketCard(o) {
     escapeAttr(o.id) +
     '">' +
     '<div class="ops-ticket__no">' +
-    pri +
     escapeHtml(o.orderNo) +
     "</div>" +
-    '<p class="ops-ticket__meta"><span class="js-elapsed" data-paid="' +
-    escapeHtml(o.paidAt || "") +
-    '">' +
-    escapeHtml(elapsedLabel(o.paidAt)) +
-    "</span> · " +
+    (String(o.customerName || "").trim()
+      ? '<p class="ops-ticket__customer" title="' +
+        escapeAttr(String(o.customerName).trim()) +
+        '">' +
+        escapeHtml(String(o.customerName).trim()) +
+        "</p>"
+      : "") +
+    '<p class="ops-ticket__meta">' +
     payPill(o.paymentMethod) +
     "</p>" +
     '<ul class="ops-ticket__lines">' +
     lines +
     "</ul>" +
+    '<p class="ops-ticket__total">Jumlah <strong>' +
+    escapeHtml(formatRM(typeof o.subtotal === "number" ? o.subtotal : parseFloat(o.subtotal) || 0)) +
+    "</strong></p>" +
     '<div class="ops-ticket__actions">' + actions + "</div></article>"
   );
 }
@@ -227,13 +238,6 @@ function setupAutoSim() {
     }, 22000);
   });
 }
-
-setInterval(function () {
-  document.querySelectorAll(".js-elapsed").forEach(function (el) {
-    var paid = el.getAttribute("data-paid");
-    el.textContent = elapsedLabel(paid);
-  });
-}, 1000);
 
 subscribePosHub(function () {
   render();

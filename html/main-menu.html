@@ -15,8 +15,47 @@
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/main-menu.css" />
     <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <!-- Gaya kritikal: elak kilat putih / layout sebelum CSS penuh -->
+    <style>
+      .page-main-menu.kb-app-boot {
+        overflow: hidden;
+      }
+      .page-main-menu.kb-app-boot .layout {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #kb-app-loader.kb-app-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1rem;
+        background: #1a1a1a;
+        color: rgba(255, 255, 255, 0.92);
+      }
+      #kb-app-loader.kb-app-loader.kb-app-loader--out {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    </style>
   </head>
-  <body class="page-main-menu" data-module="pos">
+  <body class="page-main-menu kb-app-boot" data-module="pos">
+    <div
+      id="kb-app-loader"
+      class="kb-app-loader"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Memuatkan menu"
+    >
+      <div class="kb-app-loader__inner">
+        <span class="kb-app-loader__ring" aria-hidden="true"></span>
+        <span class="kb-app-loader__label">Memuatkan…</span>
+      </div>
+    </div>
     <div class="layout">
       <aside class="sidebar" aria-label="Menu Klik Burger">
         <button
@@ -94,7 +133,7 @@
           <p class="sidebar__section">Tetapan</p>
           <ul class="sidebar__list">
             <li>
-              <a class="sidebar__link" href="#">
+              <a class="sidebar__link" href="#" data-kb-restore="pos-counter-settings">
                 <i class="fa-solid fa-gear" aria-hidden="true"></i>
                 <span>Tetapan kaunter jualan</span>
               </a>
@@ -116,19 +155,13 @@
           <p class="sidebar__section">Laporan</p>
           <ul class="sidebar__list">
             <li>
-              <a class="sidebar__link" href="#">
+              <a class="sidebar__link js-bo-monthly-reports" href="#">
                 <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
-                <span>Ringkasan jualan</span>
-              </a>
-            </li>
-            <li>
-              <a class="sidebar__link" href="#">
-                <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
-                <span>Mengikut kategori</span>
+                <span>Laporan penuh</span>
               </a>
             </li>
           </ul>
-          <p class="sidebar__section">Produk, staff &amp; pelanggan</p>
+          <p class="sidebar__section">Produk &amp; kakitangan</p>
           <ul class="sidebar__list">
             <li>
               <a
@@ -145,13 +178,7 @@
             <li>
               <a class="sidebar__link js-bo-staff" href="#">
                 <i class="fa-solid fa-users" aria-hidden="true"></i>
-                <span>Staff</span>
-              </a>
-            </li>
-            <li>
-              <a class="sidebar__link" href="#">
-                <i class="fa-solid fa-address-book" aria-hidden="true"></i>
-                <span>Pelanggan</span>
+                <span>Kakitangan</span>
               </a>
             </li>
           </ul>
@@ -173,7 +200,7 @@
           <p class="sidebar__section">Sistem</p>
           <ul class="sidebar__list">
             <li>
-              <a class="sidebar__link" href="#">
+              <a class="sidebar__link" href="#" data-kb-restore="bo-system-settings">
                 <i class="fa-solid fa-gear" aria-hidden="true"></i>
                 <span>Tetapan</span>
               </a>
@@ -195,6 +222,9 @@
           <h1 class="topbar__title js-topbar-title">Laman utama — jualan</h1>
           <p class="topbar__rbac-hint js-rbac-hint" hidden></p>
         </header>
+        <div class="topbar__embed-lead js-topbar-embed-lead" hidden>
+          <p class="topbar__embed-lead__text js-topbar-embed-lead-text"></p>
+        </div>
         <main class="content" id="main-content">
           <div class="content__default" id="content-default">
             <div class="content__lead js-content-lead">

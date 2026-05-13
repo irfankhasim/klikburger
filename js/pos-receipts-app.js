@@ -55,6 +55,14 @@ function fmtReceiptTime(iso) {
   }
 }
 
+function lineTotalReceipt(l) {
+  if (typeof l.lineTotal === "number" && !isNaN(l.lineTotal)) return l.lineTotal;
+  var up = typeof l.unitPrice === "number" ? l.unitPrice : parseFloat(l.unitPrice);
+  var q = typeof l.qty === "number" ? l.qty : parseFloat(l.qty);
+  if (!isNaN(up) && !isNaN(q)) return Math.round(up * q * 100) / 100;
+  return NaN;
+}
+
 function renderRbacBanner() {
   var el = document.getElementById("rc-rbac-banner");
   if (!el) return;
@@ -191,14 +199,15 @@ function openDrawer(state) {
       ? "<ul>" +
         r.lines
           .map(function (l) {
-            var lt = typeof l.lineTotal === "number" ? l.lineTotal : l.unitPrice * l.qty;
+            var lt = lineTotalReceipt(l);
+            var amtStr = !isNaN(lt) ? formatRM(lt) : "—";
             return (
               "<li>" +
-              escapeHtml(l.name) +
+              escapeHtml(String(l.name || "").trim() || "(Item)") +
               " × " +
-              l.qty +
+              escapeHtml(String(l.qty != null ? l.qty : "")) +
               " — " +
-              formatRM(lt) +
+              amtStr +
               "</li>"
             );
           })
@@ -223,6 +232,9 @@ function openDrawer(state) {
     "</dd>" +
     "<dt>Bayaran</dt><dd>" +
     escapeHtml(paymentMethodLabel(r.paymentMethod)) +
+    "</dd>" +
+    "<dt>Nama pelanggan</dt><dd>" +
+    escapeHtml(String(r.customerName || "").trim() || "—") +
     "</dd>" +
     "<dt>ID jualan</dt><dd style=\"word-break:break-all\">" +
     escapeHtml(r.saleId || "—") +

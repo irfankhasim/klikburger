@@ -11,6 +11,7 @@
   display: flex;
   min-height: 100vh;
   width: 100%;
+  transition: opacity 0.32s ease;
 }
 
 /* Sidebar — gaya app-sidebar */
@@ -253,6 +254,40 @@
   font-weight: 600;
   color: var(--text-muted);
   text-align: right;
+}
+
+/* Perihalan bawah topbar untuk semua iframe BO/POS (teks rata, tiada kotak) */
+.topbar__embed-lead {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.35rem 1.5rem 0.85rem;
+  background: var(--content-bg);
+}
+
+.topbar__embed-lead__text {
+  margin: 0;
+  max-width: 46rem;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.topbar__embed-lead__text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.topbar__embed-lead__text code,
+.topbar__embed-code {
+  font-size: 0.9em;
+  padding: 0;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 
 .kb-status-bar {
@@ -621,5 +656,49 @@
 
   .layout__main {
     min-height: auto;
+  }
+}
+
+/* ——— Boot: loader global + kemasukan layout lembut ——— */
+.kb-app-loader__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kb-app-loader__ring {
+  display: block;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--sidebar-accent, #f59e0b);
+  animation: kb-app-loader-spin 0.72s linear infinite;
+}
+
+.kb-app-loader__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.kb-app-loader {
+  transition:
+    opacity 0.38s ease,
+    visibility 0.38s ease;
+}
+
+.kb-app-loader--out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes kb-app-loader-spin {
+  to {
+    transform: rotate(360deg);
   }
 }

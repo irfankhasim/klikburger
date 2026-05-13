@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kos menu (Firestore) — Klik Burger</title>
+    <link rel="stylesheet" href="../css/base.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 1.25rem 1.5rem 2rem;
+        max-width: 960px;
+        margin-inline: auto;
+        font-family: var(--font);
+        background: var(--content-bg);
+        color: var(--text);
+      }
+      h1 {
+        font-size: 1.35rem;
+        margin: 0 0 0.5rem;
+      }
+      .lead {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin: 0 0 1rem;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .btn {
+        padding: 0.5rem 0.85rem;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        background: var(--sidebar-bg);
+        color: #fff;
+      }
+      .btn--ghost {
+        background: var(--surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+      }
+      #seed-status {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        font-size: 0.875rem;
+      }
+      th,
+      td {
+        padding: 0.6rem 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        background: #fafafa;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+      .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      code {
+        font-size: 0.85em;
+      }
+      .sell-price-input {
+        width: 6.75rem;
+        max-width: 100%;
+        padding: 0.4rem 0.5rem;
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      .sell-price-input:focus {
+        outline: none;
+        border-color: var(--sidebar-accent);
+        box-shadow: 0 0 0 2px var(--accent-ring);
+      }
+      .sell-price-input:disabled {
+        opacity: 0.65;
+        cursor: wait;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Kos menu (Firestore)</h1>
+    <p class="lead">
+      Jadual gabungan <code>menu_items</code> + <code>recipes</code> + <code>ingredients</code>. Ubah <strong>harga jual</strong>
+      dalam jadual — nilai akan disimpan ke Firestore selepas anda klik luar medan atau tekan Enter. Kalkulator asal kekal di
+      <a href="pos-cost-calculator.html">pos-cost-calculator.html</a> (koleksi <code>modifiers</code>).
+    </p>
+    <div class="toolbar">
+      <button type="button" class="btn" id="btn-seed-demo">Seed demo</button>
+      <span id="seed-status"></span>
+      <a class="btn btn--ghost" href="main-menu.html" style="text-decoration: none; display: inline-block">← Menu utama</a>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Menu item</th>
+          <th>Resipi</th>
+          <th class="num">Harga modal</th>
+          <th class="num">Harga jual</th>
+          <th class="num">Untung</th>
+          <th class="num">Margin</th>
+        </tr>
+      </thead>
+      <tbody id="menu-costing-tbody">
+        <tr>
+          <td colspan="6">Memuatkan…</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <script type="module" src="../js/menu-costing/admin-app.js"></script>
+  </body>
+</html>

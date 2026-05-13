@@ -40,6 +40,24 @@ var menuLoadError = null;
 var activeCat = "all";
 var cart = [];
 
+var posOrderFirestoreUnsubs = [];
+var posOrderPagehideBound = false;
+
+function teardownPosOrderFirestoreListeners() {
+  posOrderFirestoreUnsubs.forEach(function (u) {
+    try {
+      if (typeof u === "function") u();
+    } catch (e) {}
+  });
+  posOrderFirestoreUnsubs = [];
+}
+
+function bindPosOrderPagehideOnce() {
+  if (posOrderPagehideBound) return;
+  posOrderPagehideBound = true;
+  window.addEventListener("pagehide", teardownPosOrderFirestoreListeners);
+}
+
 /** { id, label, memberIds: string[] | null } ??? null pada "Semua". */
 var CATS = [];
 
@@ -617,6 +635,8 @@ var flowStep = "review";
 var selectedPayment = "cash";
 var tenderedInputVal = "";
 var lastSaleMeta = null;
+/** Nama pelanggan (wajib) — kekal semasa ulang-alik semakan ↔ pembayaran */
+var flowCustomerName = "";
 
 function flowEls() {
   return {
@@ -643,6 +663,7 @@ function closeFlowOverlay() {
   z.overlay.setAttribute("aria-hidden", "true");
   checkoutLines = [];
   flowStep = "review";
+  flowCustomerName = "";
 }
 
 function cartSubtotalFromLines(lines) {
@@ -658,6 +679,11 @@ function renderFlowReview() {
   var sub = cartSubtotalFromLines(checkoutLines);
   z.body.innerHTML =
     '<p class="ops-muted" style="margin:0 0 0.65rem">Semak item sebelum pembayaran. Status: <strong>Belum bayar</strong>.</p>' +
+    '<div style="margin:0 0 0.75rem">' +
+    '<label for="flow-customer-name" style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.3rem">Nama pelanggan <span style="color:var(--danger)">*</span></label>' +
+    '<input type="text" id="flow-customer-name" maxlength="120" autocomplete="name" placeholder="Contoh: Puan Aminah" style="width:100%;box-sizing:border-box;padding:0.5rem 0.55rem;border:1px solid var(--border);border-radius:var(--radius-md);font:inherit" value="' +
+    escapeAttr(flowCustomerName) +
+    '" /></div>' +
     "<ul class=\"order-flow__list\">" +
     checkoutLines
       .map(function (l) {
@@ -681,7 +707,18 @@ function renderFlowReview() {
     '<button type="button" class="btn btn--ghost" id="flow-back-dismiss">Kembali</button>' +
     '<button type="button" class="btn btn--primary" id="flow-to-pay">Teruskan ke pembayaran</button>';
   document.getElementById("flow-back-dismiss").onclick = closeFlowOverlay;
-  document.getElementById("flow-to-pay").onclick = renderFlowPayment;
+  document.getElementById("flow-to-pay").onclick = function () {
+    var inp = document.getElementById("flow-customer-name");
+    var raw = inp && inp.value != null ? String(inp.value) : "";
+    var trimmed = raw.trim();
+    if (!trimmed) {
+      showToast("Sila masukkan nama pelanggan.");
+      if (inp) inp.focus();
+      return;
+    }
+    flowCustomerName = trimmed;
+    renderFlowPayment();
+  };
 }
 
 function syncPayOptionStyles() {
@@ -700,11 +737,12 @@ function renderFlowPayment() {
     '<p class="ops-muted" style="margin:0 0 0.5rem">Jumlah perlu bayar: <strong>' +
     formatRM(sub) +
     "</strong></p>" +
+    '<p class="ops-muted" style="margin:0 0 0.65rem;font-size:0.82rem">Pelanggan: <strong>' +
+    escapeHtml(flowCustomerName) +
+    "</strong></p>" +
     '<div class="order-flow__pay-grid" id="flow-pay-opts">' +
     '<label class="order-flow__pay-opt is-active"><input type="radio" name="flow-pay" value="cash" checked /> Tunai</label>' +
     '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="duitnow" /> QR</label>' +
-    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="card" /> Kad</label>' +
-    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="ewallet" /> eWallet</label>' +
     "</div>" +
     '<div id="flow-cash-panel" style="margin-top:0.5rem;padding:0.65rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-muted)">' +
     "<strong style=\"font-size:0.82rem\">Tunai</strong>" +
@@ -775,6 +813,7 @@ function renderFlowSuccess(meta) {
     escapeHtml(meta.orderNo || "") +
     "</strong> telah direkodkan.</p>" +
     "<ul class=\"order-flow__success-list\">" +
+    "<li>Pelanggan: <strong>" + escapeHtml(meta.customerName || "") + "</strong></li>" +
     "<li>Bayaran diterima (" +
     escapeHtml(meta.payLabel) +
     ")</li>" +
@@ -805,9 +844,17 @@ async function onConfirmPayment(subtotal) {
     showToast("Bayaran tidak dibenarkan ? sila buka drawer atau semak status clock in / drawer.");
     return;
   }
+  var custTrim = String(flowCustomerName || "").trim();
+  if (!custTrim) {
+    showToast("Sila masukkan nama pelanggan — kembali ke semakan pesanan.");
+    return;
+  }
   selectedPayment =
     (document.querySelector('input[name="flow-pay"]:checked') && document.querySelector('input[name="flow-pay"]:checked').value) ||
     "cash";
+  if (selectedPayment !== "cash" && selectedPayment !== "duitnow") {
+    selectedPayment = "cash";
+  }
   var tendered = parseFloat(document.getElementById("flow-tendered") && document.getElementById("flow-tendered").value) || 0;
   if (selectedPayment === "cash") {
     if (tendered + 1e-9 < subtotal) {
@@ -836,7 +883,7 @@ async function onConfirmPayment(subtotal) {
       modifiersById: modifiersById,
       ingredientsList: posIngredients,
       table: "",
-      customerName: "",
+      customerName: custTrim,
       notes: "",
       staffId: act.userId || "",
       staffName: act.userName || "",
@@ -845,7 +892,7 @@ async function onConfirmPayment(subtotal) {
       changeDue: changeDue,
       drawerOpenedSimulated: drawerOpen
     });
-    var labels = { cash: "Tunai", duitnow: "QR", card: "Kad", ewallet: "eWallet" };
+    var labels = { cash: "Tunai", duitnow: "QR" };
     if (!result.order || !result.receipt) {
       throw new Error("Transaksi jualan tidak lengkap (pesanan/resit).");
     }
@@ -856,7 +903,8 @@ async function onConfirmPayment(subtotal) {
       ktId: result.order.kitchenTicketId,
       subtotal: result.subtotal,
       changeDue: changeDue,
-      payLabel: labels[selectedPayment] || selectedPayment
+      payLabel: labels[selectedPayment] || selectedPayment,
+      customerName: custTrim
     };
     cart = [];
     renderCart();
@@ -896,6 +944,7 @@ function startCheckoutFlowFromCart() {
   checkoutLines = cart.map(function (l) {
     return { id: l.id, name: l.name, price: l.price, qty: l.qty };
   });
+  flowCustomerName = "";
   tenderedInputVal = "";
   selectedPayment = "cash";
   openFlowOverlay();
@@ -917,9 +966,10 @@ async function init() {
     grid.innerHTML =
       '<p class="order-cart__empty" style="text-align:left">Memuatkan senarai menu\u2026</p>';
   }
-  subscribeModifiers(onModifiersSnapshot, onModifiersError);
-  subscribeIngredients(onIngredientsSnapshot, onIngredientsError);
-  subscribeIngredientBatches(onBatchesSnapshot, onBatchesError);
+  bindPosOrderPagehideOnce();
+  posOrderFirestoreUnsubs.push(subscribeModifiers(onModifiersSnapshot, onModifiersError));
+  posOrderFirestoreUnsubs.push(subscribeIngredients(onIngredientsSnapshot, onIngredientsError));
+  posOrderFirestoreUnsubs.push(subscribeIngredientBatches(onBatchesSnapshot, onBatchesError));
 
   var btnClear = document.getElementById("order-clear");
   if (btnClear) {
@@ -944,11 +994,13 @@ async function init() {
 
   wireOrderFlowChrome();
 
-  subscribeRbac(function () {
-    updatePosRbacChrome();
-    renderGrid();
-    renderCart();
-  });
+  posOrderFirestoreUnsubs.push(
+    subscribeRbac(function () {
+      updatePosRbacChrome();
+      renderGrid();
+      renderCart();
+    })
+  );
 
   renderCats();
   renderCart();

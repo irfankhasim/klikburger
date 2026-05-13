@@ -162,11 +162,7 @@ function renderPayChips(b) {
       "</span></span>"
     );
   }
-  chips.innerHTML =
-    chip("Tunai", b.cash) +
-    chip("QR", b.duitnow) +
-    chip("Kad", b.card) +
-    chip("eWallet", b.ewallet);
+  chips.innerHTML = chip("Tunai", b.cash) + chip("QR", b.duitnow);
 }
 
 export function renderShiftPanelUI(state) {
@@ -336,12 +332,6 @@ function handleShiftClose() {
       "</strong></dd>" +
       "<dt>QR</dt><dd><strong>" +
       formatRM(br.duitnow) +
-      "</strong></dd>" +
-      "<dt>Kad</dt><dd><strong>" +
-      formatRM(br.card) +
-      "</strong></dd>" +
-      "<dt>eWallet</dt><dd><strong>" +
-      formatRM(br.ewallet) +
       "</strong></dd>" +
       "</dl>" +
       '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Kiraan tunai sebenar dalam laci (RM)</span></label>' +

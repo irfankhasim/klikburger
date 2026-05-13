@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Laporan penuh — Klik Burger</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/bo-monthly-reports.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="staff-dash">
+    <div class="mr-app" id="mr-root">
+      <header class="mr-header kb-page-header">
+        <h1 class="sr-only">Laporan penuh</h1>
+        <div class="mr-page-desc">
+          <p class="mr-page-desc__text">
+            <strong>Paparan</strong> — mengikut <strong>tahun &amp; bulan</strong> kalendar. Sambungan data penuh boleh diaktifkan kemudian;
+            gunakan <code class="mr-code">?demo=1</code> pada URL untuk <strong>pratonton UI</strong> tanpa Firestore.
+          </p>
+        </div>
+      </header>
+
+      <section class="mr-toolbar" aria-label="Penapis dan tindakan">
+        <div class="mr-toolbar__row">
+          <div class="mr-field">
+            <span class="mr-field__label" id="mr-lbl-year">Tahun</span>
+            <select id="mr-year" class="mr-select" aria-labelledby="mr-lbl-year"></select>
+          </div>
+          <div class="mr-field">
+            <span class="mr-field__label" id="mr-lbl-month">Bulan</span>
+            <select id="mr-month" class="mr-select" aria-labelledby="mr-lbl-month"></select>
+          </div>
+          <div class="mr-toolbar__actions">
+            <button type="button" class="btn btn--primary" id="mr-load">
+              <i class="fa-solid fa-rotate" aria-hidden="true"></i> Muat laporan
+            </button>
+            <button
+              type="button"
+              class="btn btn--outline"
+              id="mr-generate"
+              title="Jana atau tulis ganti laporan untuk bulan ini (pemilik / pentadbir)"
+            >
+              <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i> Jana / Jana semula
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <p id="mr-status" class="mr-status mr-status--hidden" role="status" aria-live="polite"></p>
+
+      <div class="mr-tabs-wrap">
+        <div class="mr-tabs" role="tablist" aria-label="Jenis laporan">
+          <button
+            type="button"
+            class="mr-tab is-active"
+            role="tab"
+            id="mr-tab-sales"
+            aria-selected="true"
+            aria-controls="mr-panel-sales"
+            tabindex="0"
+            data-tab="sales"
+          >
+            Jualan
+          </button>
+          <button
+            type="button"
+            class="mr-tab"
+            role="tab"
+            id="mr-tab-raw"
+            aria-selected="false"
+            aria-controls="mr-panel-raw"
+            tabindex="-1"
+            data-tab="raw"
+          >
+            Bahan mentah
+          </button>
+          <button
+            type="button"
+            class="mr-tab"
+            role="tab"
+            id="mr-tab-staff"
+            aria-selected="false"
+            aria-controls="mr-panel-staff"
+            tabindex="-1"
+            data-tab="staff"
+          >
+            Gaji kakitangan
+          </button>
+          <button
+            type="button"
+            class="mr-tab"
+            role="tab"
+            id="mr-tab-company"
+            aria-selected="false"
+            aria-controls="mr-panel-company"
+            tabindex="-1"
+            data-tab="company"
+          >
+            Syarikat (P&amp;L)
+          </button>
+        </div>
+      </div>
+
+      <section
+        class="mr-panel"
+        id="mr-panel-sales"
+        role="tabpanel"
+        aria-labelledby="mr-tab-sales"
+      ></section>
+      <section
+        class="mr-panel"
+        id="mr-panel-raw"
+        role="tabpanel"
+        aria-labelledby="mr-tab-raw"
+        hidden
+      ></section>
+      <section
+        class="mr-panel"
+        id="mr-panel-staff"
+        role="tabpanel"
+        aria-labelledby="mr-tab-staff"
+        hidden
+      ></section>
+      <section
+        class="mr-panel"
+        id="mr-panel-company"
+        role="tabpanel"
+        aria-labelledby="mr-tab-company"
+        hidden
+      ></section>
+    </div>
+
+    <script type="module" src="../js/bo-monthly-reports-app.js"></script>
+  </body>
+</html>

@@ -25,6 +25,7 @@ import {
  * @param {boolean} [params.drawerOpenedSimulated]
  * @param {string} [params.staffId]
  * @param {string} [params.staffName]
+ * @param {string} [params.customerName]
  */
 export function appendCheckoutInTransaction(transaction, countersSnap, params) {
   var countersRef = countersSnap.ref;
@@ -44,6 +45,7 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
   var subtotal = typeof params.subtotal === "number" ? params.subtotal : 0;
   var totalCogs = typeof params.totalCogsFifo === "number" ? params.totalCogsFifo : 0;
   var pay = params.paymentMethod || "cash";
+  var cust = String(params.customerName != null ? params.customerName : "").trim();
   var kt = "KT-" + receiptNo.replace(/^R-/, "");
 
   var hubLines = saleLines.map(function (ln) {
@@ -85,6 +87,7 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     drawerOpenedSimulated: !!params.drawerOpenedSimulated,
     staffId: params.staffId || "",
     staffName: params.staffName || "",
+    customerName: cust,
     shiftDocId: activeShiftDocId || null,
     lines: hubLines
   });
@@ -116,6 +119,7 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     voidedAt: null,
     voidReason: null,
     refundNote: null,
+    customerName: cust,
     lines: hubLines
   });
 
@@ -129,7 +133,8 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     lines: saleLines,
     createdAt: now,
     staffId: params.staffId || "",
-    staffName: params.staffName || ""
+    staffName: params.staffName || "",
+    customerName: cust
   });
 
   transaction.update(params.saleRef, {
@@ -159,7 +164,8 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
       kitchenTicketId: kt,
       drawerOpenedSimulated: !!params.drawerOpenedSimulated,
       staffId: params.staffId || "",
-      staffName: params.staffName || ""
+      staffName: params.staffName || "",
+      customerName: cust
     },
     receipt: {
       receiptNo: receiptNo,
@@ -174,7 +180,8 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
       voided: false,
       voidedAt: null,
       voidReason: null,
-      refundNote: null
+      refundNote: null,
+      customerName: cust
     },
     orderNo: orderNo,
     receiptNo: receiptNo

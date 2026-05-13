@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resit — Klik Burger</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) document.documentElement.classList.add("kb-embed");
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="rc-body">
+    <div class="rc-page ops-app">
+      <p id="rc-rbac-banner" class="rc-rbac-banner" hidden role="status"></p>
+
+      <!-- Utama: senarai resit dahulu (kerja pantas kaunter) -->
+      <section class="rc-primary" aria-label="Senarai resit">
+        <span id="rc-count" class="sr-only" aria-live="polite" aria-atomic="true"></span>
+        <div class="rc-filters">
+          <div class="rc-filters__search">
+            <label class="sr-only" for="rc-search">Cari</label>
+            <span class="rc-filters__icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="search" id="rc-search" class="rc-input rc-input--search" placeholder="No. resit / pesanan" autocomplete="off" />
+          </div>
+          <div class="rc-filters__pay">
+            <label for="rc-filter-pay">Bayaran</label>
+            <select id="rc-filter-pay" class="rc-input rc-input--select">
+              <option value="">Semua</option>
+              <option value="cash">Tunai</option>
+              <option value="duitnow">QR</option>
+            </select>
+          </div>
+        </div>
+        <div id="rc-list" class="rc-receipt-list" role="list"></div>
+      </section>
+    </div>
+
+    <div id="rc-drawer-back" class="ops-drawer-backdrop" aria-hidden="true"></div>
+    <aside id="rc-drawer" class="ops-drawer rc-drawer" aria-hidden="true" aria-labelledby="rc-drawer-title">
+      <div class="ops-drawer__head rc-drawer__head">
+        <div>
+          <h2 id="rc-drawer-title" class="rc-drawer__title">Resit</h2>
+          <p id="rc-drawer-sub" class="rc-drawer__sub"></p>
+        </div>
+        <button type="button" class="rc-btn rc-btn--line rc-btn--icon" id="rc-drawer-close" aria-label="Tutup">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="ops-drawer__body rc-drawer__body" id="rc-drawer-body"></div>
+    </aside>
+
+    <script type="module" src="../js/pos-receipts-app.js"></script>
+  </body>
+</html>

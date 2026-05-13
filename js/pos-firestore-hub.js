@@ -133,6 +133,7 @@ function mapOrderDoc(d) {
     drawerOpenedSimulated: !!x.drawerOpenedSimulated,
     staffId: x.staffId || "",
     staffName: x.staffName || "",
+    customerName: x.customerName != null ? String(x.customerName) : "",
     cancelReason: x.cancelReason || undefined
   };
 }
@@ -152,7 +153,8 @@ function mapReceiptDoc(d) {
     voided: !!x.voided,
     voidedAt: tsToIso(x.voidedAt),
     voidReason: x.voidReason || null,
-    refundNote: x.refundNote || null
+    refundNote: x.refundNote || null,
+    customerName: x.customerName != null ? String(x.customerName) : ""
   };
 }
 
@@ -646,7 +648,7 @@ function startFirestoreHubListeners() {
     })
   );
 
-  var auditQ = query(collection(db, COL_POS_AUDIT), orderBy("at", "desc"), limit(500));
+  var auditQ = query(collection(db, COL_POS_AUDIT), orderBy("at", "desc"), limit(150));
   unsubscribers.push(
     onSnapshot(auditQ, function (snap) {
       var auditLog = snap.docs.map(mapAuditDoc);

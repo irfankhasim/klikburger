@@ -18,6 +18,24 @@ var menuItems = [];
 var pending = { ingredients: false, recipes: false, menuItems: false };
 var sellPriceHandlersBound = false;
 
+var menuCostingUnsubs = [];
+var menuCostingPagehideBound = false;
+
+function teardownMenuCostingListeners() {
+  menuCostingUnsubs.forEach(function (u) {
+    try {
+      if (typeof u === "function") u();
+    } catch (e) {}
+  });
+  menuCostingUnsubs = [];
+}
+
+function bindMenuCostingPagehideOnce() {
+  if (menuCostingPagehideBound) return;
+  menuCostingPagehideBound = true;
+  window.addEventListener("pagehide", teardownMenuCostingListeners);
+}
+
 function recipeById(id) {
   return recipes.find(function (r) {
     return r.id === id;
@@ -153,7 +171,10 @@ function markReady() {
   render();
 }
 
-subscribeIngredients(
+bindMenuCostingPagehideOnce();
+
+menuCostingUnsubs.push(
+  subscribeIngredients(
   function (snap) {
     ingredients = snap.docs.map(docToIngredient);
     pending.ingredients = true;
@@ -164,9 +185,11 @@ subscribeIngredients(
     var el = document.getElementById("menu-costing-tbody");
     if (el) el.innerHTML = '<tr><td colspan="6" style="color:#c0392b">Ralat ingredients: ' + escapeHtml(e.message || String(e)) + "</td></tr>";
   }
+)
 );
 
-subscribeRecipes(
+menuCostingUnsubs.push(
+  subscribeRecipes(
   function (snap) {
     recipes = snap.docs.map(docToRecipe);
     pending.recipes = true;
@@ -175,9 +198,11 @@ subscribeRecipes(
   function (e) {
     console.error(e);
   }
+)
 );
 
-subscribeMenuItems(
+menuCostingUnsubs.push(
+  subscribeMenuItems(
   function (snap) {
     menuItems = snap.docs.map(docToMenuItem);
     pending.menuItems = true;
@@ -186,6 +211,7 @@ subscribeMenuItems(
   function (e) {
     console.error(e);
   }
+)
 );
 
 bindSellPriceHandlersOnce();

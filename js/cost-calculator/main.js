@@ -516,6 +516,25 @@ var modalState = { open: false, productId: null, snapshot: null, draftProduct: n
 
 var selectedLedgerIngredientId = null;
 var ledgerUnsubscribe = null;
+/** Langganan koleksi inventori utama — dibuang pada `pagehide` untuk elak pendua (HMR/tab). */
+var coreInventoryUnsubs = [];
+var coreInventoryPagehideBound = false;
+
+function teardownCoreInventoryListeners() {
+  coreInventoryUnsubs.forEach(function (u) {
+    try {
+      if (typeof u === "function") u();
+    } catch (e) {}
+  });
+  coreInventoryUnsubs = [];
+}
+
+function bindCoreInventoryPagehideOnce() {
+  if (coreInventoryPagehideBound) return;
+  coreInventoryPagehideBound = true;
+  window.addEventListener("pagehide", teardownCoreInventoryListeners);
+}
+
 /** Snapshot lejar terakhir (pop-up) — untuk render semula highlight batch selepas kemas kini lot. */
 var lastLedgerSnapForDrawer = null;
 /** @type {Record<string, Array<object>>} */
@@ -1437,7 +1456,8 @@ function syncPageFromHash() {
 async function init() {
   if (appLoadingEl) appLoadingEl.hidden = false;
 
-  subscribeIngredients(
+  coreInventoryUnsubs.push(
+    subscribeIngredients(
     function (snap) {
       ingredients = snap.docs.map(docToIngredient);
       ingredients.sort(function (a, b) {
@@ -1477,9 +1497,11 @@ async function init() {
       tryHideAppLoading();
       setLineStatus("ing-firestore-status", firestoreErrorMessage(err), "error");
     }
+  )
   );
 
-  subscribeIngredientBatches(
+  coreInventoryUnsubs.push(
+    subscribeIngredientBatches(
     function (snap) {
       batchesByIngredientId = groupBatchesByIngredientId(snap);
       patchIngredientBatchDisplays();
@@ -1495,9 +1517,11 @@ async function init() {
         renderLedgerRows(lastLedgerSnapForDrawer);
       }
     }
+  )
   );
 
-  subscribeModifiers(
+  coreInventoryUnsubs.push(
+    subscribeModifiers(
     function (snap) {
       rawProducts = snap.docs.map(docToProduct);
       rawProducts.sort(function (a, b) {
@@ -1524,7 +1548,10 @@ async function init() {
       tryHideAppLoading();
       setLineStatus("mod-firestore-status", firestoreErrorMessage(err), "error");
     }
+  )
   );
+
+  bindCoreInventoryPagehideOnce();
 
   document.getElementById("btn-add-ing").addEventListener("click", function () {
     if (isIngAddDraftVisible()) {

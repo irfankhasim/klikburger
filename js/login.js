@@ -43,10 +43,13 @@ async function showResumeSessionIfNeeded() {
       "</strong>)" : "") +
     ".</p>" +
     '<p class="login-resume__actions">' +
-    '<button type="button" class="btn btn--secondary login-resume__menu">Terus ke menu</button> ' +
+    '<button type="button" class="btn btn--primary login-resume__menu">Terus ke menu</button>' +
     '<button type="button" class="btn btn--ghost login-resume__out">Log keluar</button>' +
     "</p>";
   form.parentNode.insertBefore(wrap, form);
+  form.hidden = true;
+  var footer = document.querySelector(".login-footer");
+  if (footer) footer.hidden = true;
   wrap.querySelector(".login-resume__menu").addEventListener("click", async function () {
     try {
       var payload = await getPosUserRbacPayload(u);
@@ -61,6 +64,8 @@ async function showResumeSessionIfNeeded() {
       await signOut(auth);
     } catch (e) {}
     wrap.remove();
+    form.hidden = false;
+    if (footer) footer.hidden = false;
     if (emailInput) emailInput.value = "";
     var pw = document.getElementById("password");
     if (pw) pw.value = "";
