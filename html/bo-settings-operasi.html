@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Operasi — Tetapan</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="staff-dash">
+    <div class="sd-app bs-settings">
+      <header class="kb-page-header">
+        <div class="kb-page-header__row">
+          <h1 class="kb-page-title">Operasi kaunter</h1>
+        </div>
+        <p class="kb-page-lead">
+          Tetapkan peratus cukai yang dikenakan kepada pelanggan pada setiap transaksi POS. Perubahan berkuat kuasa serta-merta di terminal jualan.
+        </p>
+      </header>
+
+      <p id="bs-ops-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
+
+      <section class="sd-panel bs-settings__form-panel" aria-labelledby="bs-ops-tax-title">
+        <h2 class="sd-panel__title" id="bs-ops-tax-title">Cukai pelanggan</h2>
+        <div class="sd-form-grid">
+          <label class="sd-field">
+            Peratus cukai (%)
+            <input
+              type="number"
+              id="bs-ops-tax-percent"
+              min="0"
+              max="100"
+              step="0.01"
+              inputmode="decimal"
+              placeholder="0"
+            />
+            <span class="sd-footnote" style="margin-top: 0.35rem; display: block">
+              Contoh: <strong>6</strong> untuk cukai 6% ke atas jumlah menu (sebelum cukai). Set <strong>0</strong> jika tiada cukai.
+            </span>
+          </label>
+        </div>
+        <div class="bs-settings__actions">
+          <button type="button" class="btn btn--primary" id="bs-ops-save">Simpan</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="../js/staff/bo-settings-operasi-app.js"></script>
+    <script type="module" src="../js/staff/bo-settings-iframe-autosize.js"></script>
+  </body>
+</html>

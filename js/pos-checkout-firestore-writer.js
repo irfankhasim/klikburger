@@ -43,7 +43,12 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
   var now = serverTimestamp();
   var saleLines = params.saleLines || [];
   var subtotal = typeof params.subtotal === "number" ? params.subtotal : 0;
+  var taxPercent = typeof params.taxPercent === "number" ? params.taxPercent : 0;
+  var taxAmount = typeof params.taxAmount === "number" ? params.taxAmount : 0;
+  var total = typeof params.total === "number" ? params.total : subtotal + taxAmount;
+  total = Math.round(total * 100) / 100;
   var totalCogs = typeof params.totalCogsFifo === "number" ? params.totalCogsFifo : 0;
+  var grossProfit = Math.round((subtotal - totalCogs) * 100) / 100;
   var pay = params.paymentMethod || "cash";
   var cust = String(params.customerName != null ? params.customerName : "").trim();
   var kt = "KT-" + receiptNo.replace(/^R-/, "");
@@ -79,7 +84,11 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     paidAt: now,
     updatedAt: now,
     subtotal: subtotal,
+    taxPercent: taxPercent,
+    taxAmount: taxAmount,
+    total: total,
     totalCogsFifo: totalCogs,
+    totalGrossProfitFifo: grossProfit,
     paymentMethod: pay,
     tendered: params.tendered != null ? params.tendered : null,
     changeDue: params.changeDue != null ? params.changeDue : null,
@@ -114,7 +123,11 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     createdAt: now,
     paymentMethod: pay,
     subtotal: subtotal,
+    taxPercent: taxPercent,
+    taxAmount: taxAmount,
+    total: total,
     totalCogsFifo: totalCogs,
+    totalGrossProfitFifo: grossProfit,
     voided: false,
     voidedAt: null,
     voidReason: null,
@@ -129,7 +142,11 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
     orderId: orderId,
     receiptNo: receiptNo,
     subtotal: subtotal,
+    taxPercent: taxPercent,
+    taxAmount: taxAmount,
+    total: total,
     totalCogsFifo: totalCogs,
+    totalGrossProfitFifo: grossProfit,
     lines: saleLines,
     createdAt: now,
     staffId: params.staffId || "",
@@ -157,7 +174,11 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
       updatedAt: nowIso,
       lines: hubLines,
       subtotal: subtotal,
+      taxPercent: taxPercent,
+      taxAmount: taxAmount,
+      total: total,
       totalCogsFifo: totalCogs,
+      totalGrossProfitFifo: grossProfit,
       paymentMethod: pay,
       tendered: params.tendered != null ? params.tendered : null,
       changeDue: params.changeDue != null ? params.changeDue : null,
@@ -175,7 +196,11 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
       createdAt: nowIso,
       paymentMethod: pay,
       subtotal: subtotal,
+      taxPercent: taxPercent,
+      taxAmount: taxAmount,
+      total: total,
       totalCogsFifo: totalCogs,
+      totalGrossProfitFifo: grossProfit,
       lines: hubLines,
       voided: false,
       voidedAt: null,

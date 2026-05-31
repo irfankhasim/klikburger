@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mengalihkan…</title>
+    <script>
+      /** URL lama — Pengetahuan AI kini di Tetapan → Pangkalan data */
+      (function () {
+        try {
+          sessionStorage.setItem("fyp_bo_settings_tab_v1", "database");
+        } catch (e1) {}
+        try {
+          var p = { v: 1, r: "bo-settings", module: "bo", settingsTab: "database" };
+          var s = JSON.stringify(p);
+          sessionStorage.setItem("fyp_klikburger_restore_v1", s);
+          localStorage.setItem("fyp_klikburger_restore_ls_v1", s);
+        } catch (e2) {}
+        window.location.replace("main-menu.html");
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Mengalihkan ke menu utama…</p>
+  </body>
+</html>

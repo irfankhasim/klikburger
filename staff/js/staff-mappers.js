@@ -16,6 +16,7 @@ export function docToStaff(d) {
   return {
     id: d.id,
     name: String(data.name || "").trim() || "Tanpa nama",
+    email: String(data.email || "").trim(),
     role: String(data.role || "cashier"),
     phone: String(data.phone || "").trim(),
     startedAt: data.startedAt,

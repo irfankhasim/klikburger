@@ -412,20 +412,35 @@
   margin: 0 -0.25rem;
   width: calc(100% + 0.5rem);
   max-width: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  /* Wajib visible: overflow:hidden memotong popup native <select> dalam iframe */
+  overflow: visible;
 }
 
 .content__embed-wrap[hidden] {
   display: none !important;
 }
 
+/* Tiada border-radius pada iframe — bucu bulat pada wrap sahaja supaya kawalan
+   native (<select>, date) dalam iframe tidak terklip oleh lapisan komposit. */
 .content__embed {
   flex: 1;
   width: 100%;
   min-height: min(70vh, 720px);
   border: none;
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: block;
+  overflow: visible;
+}
+
+/* Tetapan BO: tinggi ditetapkan oleh mesej daripada iframe (kandungan penuh, tiada scroll bertingkat) */
+.content__embed.content__embed--intrinsic {
+  flex: 0 0 auto;
+  min-height: 0 !important;
 }
 
 .content__lead {
@@ -700,5 +715,117 @@
 @keyframes kb-app-loader-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Panel Clock In — pilih nama sebelum clock in (kandungan terang) */
+.kb-clock-staff-pick {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  max-width: 28rem;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.kb-clock-staff-pick__label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+  color: var(--text, #1a1a1a);
+}
+
+.kb-clock-staff-pick__hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted, #555);
+}
+
+.kb-clock-staff-pick__select {
+  width: 100%;
+  max-width: 28rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #fff;
+  color: #1a1a1a;
+}
+
+/* Modal pilih kakitangan — selepas tekan Clock in */
+.kb-clock-in-staff-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  animation: kb-modal-fade-in 0.2s ease;
+}
+
+.kb-clock-in-staff-modal {
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.25rem 1.35rem 1.15rem;
+  border-radius: 12px;
+  background: var(--content-bg, #fafafa);
+  color: var(--text, #1a1a1a);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+}
+
+.kb-clock-in-staff-modal__title {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.kb-clock-in-staff-modal__lead {
+  margin: 0 0 1rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--text-muted, #555);
+}
+
+.kb-clock-in-staff-modal__label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #666);
+  margin-bottom: 0.35rem;
+}
+
+.kb-clock-in-staff-modal__select {
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  font-size: 0.92rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  margin-bottom: 0.35rem;
+}
+
+.kb-clock-in-staff-modal__retry {
+  margin: 0 0 0.65rem;
+  text-align: center;
+}
+
+.kb-clock-in-staff-modal__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@keyframes kb-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

@@ -16,6 +16,7 @@ export function docToStaff(d) {
   return {
     id: d.id,
     name: String(data.name || "").trim() || "Tanpa nama",
+    email: String(data.email || "").trim(),
     role: String(data.role || "cashier"),
     phone: String(data.phone || "").trim(),
     startedAt: data.startedAt,
@@ -35,11 +36,13 @@ export function docToStaff(d) {
         return !isNaN(r.day) && r.day >= 0 && r.day <= 6;
       }),
     createdAt: data.createdAt,
-    updatedAt: data.updatedAt
+    updatedAt: data.updatedAt,
+    pin: String(data.pin || "").trim()
   };
 }
 
 export const STAFF_ROLES_MS = {
+  owner: "Pemilik",
   cashier: "Kaunter",
   kitchen: "Dapur",
   runner: "Runner",
@@ -58,3 +61,58 @@ export const SHIFT_LABELS_MS = {
   penuh: "Sepenuh masa",
   cuti: "Cuti"
 };
+
+/** Nama untuk padanan longgar (huruf kecil, ruang tunggal). */
+export function normalizeStaffNameKey(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Nama paparan kanon (betulkan ejaan biasa); selain itu pulangkan nama asal.
+ */
+export function staffCanonicalDisplayName(name) {
+  var n = normalizeStaffNameKey(name);
+  if (n === "aina razak") return "Aina Razak";
+  if (n === "danial chong" || n === "daniel chong") return "Daniel Chong";
+  var t = String(name || "").trim();
+  return t || "Tanpa nama";
+}
+
+/** @deprecated — guna `staffCanonicalDisplayName` */
+export var retailStaffCanonicalLabel = staffCanonicalDisplayName;
+
+function staffDocRecencyMillis(s) {
+  if (!s) return 0;
+  if (s.updatedAt && typeof s.updatedAt.toMillis === "function") return s.updatedAt.toMillis();
+  if (s.createdAt && typeof s.createdAt.toMillis === "function") return s.createdAt.toMillis();
+  return 0;
+}
+
+/**
+ * Satu rekod setiap nama (kunci dinormalkan); kekalkan dokumen dengan kemas kini terkini.
+ * Disusun mengikut nama paparan.
+ */
+export function dedupeStaffByNameKey(staffRows) {
+  var by = {};
+  (staffRows || []).forEach(function (s) {
+    var k = normalizeStaffNameKey(s.name);
+    if (!k) return;
+    var prev = by[k];
+    if (!prev || staffDocRecencyMillis(s) >= staffDocRecencyMillis(prev)) by[k] = s;
+  });
+  return Object.keys(by)
+    .map(function (k) {
+      return by[k];
+    })
+    .sort(function (a, b) {
+      return staffCanonicalDisplayName(a.name).localeCompare(staffCanonicalDisplayName(b.name), "ms");
+    });
+}
+
+/** @deprecated — guna `dedupeStaffByNameKey` */
+export function dedupeStaffByCanonical(rows) {
+  return dedupeStaffByNameKey(rows);
+}

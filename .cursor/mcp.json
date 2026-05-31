@@ -1,10 +1,36 @@
 {
   "mcpServers": {
-    "fyp-pos-firestore": {
+    "klikburger": {
       "command": "node",
       "args": ["mcp-server.mjs"],
       "cwd": "${workspaceFolder}",
-      "env": {}
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "./firebase-service-account.json",
+        "MCP_PERMISSION_LEVEL": "owner",
+        "MCP_FULL_FIRESTORE_ACCESS": "1",
+        "NODE_ENV": "production"
+      }
+    },
+    "klikburger-readonly": {
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "./firebase-service-account.json",
+        "MCP_PERMISSION_LEVEL": "read",
+        "NODE_ENV": "production"
+      }
+    },
+    "klikburger-emulator": {
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080",
+        "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
+        "GCLOUD_PROJECT": "possystem-6907d",
+        "MCP_PERMISSION_LEVEL": "owner"
+      }
     }
   }
 }

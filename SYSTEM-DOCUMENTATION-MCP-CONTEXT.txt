@@ -1,0 +1,434 @@
+================================================================================
+KLik Burger FYP — SYSTEM DOCUMENTATION & MCP CONTEXT (AI-readable)
+Repo: c:\fyp | Generated for Claude / MCP setup | Based on actual codebase
+================================================================================
+
+NOTE: This document is derived from repository files. Items not present in code
+are explicitly stated (e.g. no Cloud Functions, no Storage SDK usage).
+
+================================================================================
+PART 1 — SYSTEM OVERVIEW
+================================================================================
+
+Project purpose
+---------------
+Klik Burger — POS (Point of Sale) and back-office system for a burger outlet:
+counter sales, receipts, order/kitchen lists, cash drawer/shifts, ingredient
+costing (FIFO), menu costing, staff, and monthly reports. Backend data is
+Firestore + Firebase Auth. No custom REST API server found in repo.
+
+Main features (from code)
+---------------------------
+- Authentication: email/password Firebase (html/login.html + js/login.js).
+- Main menu shell: POS vs Back Office navigation, iframe embeds, route restore
+  (html/main-menu.html, js/main-menu.js).
+- Client RBAC: OWNER, ADMIN, SHIFT_LEAD, CASHIER; clock in/out; drawer/shift
+  gates; read-only mode after shift close (js/pos-rbac-session.js).
+- POS sales: cart, batch stock checks, Firestore checkout with FIFO deduction,
+  sales + POS order/receipt docs (js/pos-order-app.js, js/pos-sale-fifo.js,
+  js/pos-checkout-firestore-writer.js).
+- POS operations hub: real-time orders, receipts, shift, cash movements, audit
+  (js/pos-firestore-hub.js, re-exported via js/pos-operations-hub.js).
+- Costing & inventory: ingredients, ingredient_batches, ingredient_ledger,
+  modifiers (legacy), recipes, menu_items, purchase_history — schema notes in
+  js/firebase/collections.js.
+- Staff: CRUD staff, activity, KPI settings (js/staff/staff-repository.js and
+  staff/js/ mirrors).
+- Monthly reports: aggregate to monthly_reports/{YYYY-MM}
+  (js/monthly-reports/generate-monthly-report.js, html/bo-monthly-reports.html).
+- Landing: html/landing.html; index.html redirects to landing.
+- Dev scripts: seed Firestore/Auth, deploy rules/indexes, emulators
+  (scripts/*.mjs, package.json npm scripts).
+- MCP (existing): stdio server, read-only Firestore via Admin SDK
+  (mcp-server.mjs, .cursor/mcp.json).
+
+User roles
+----------
+- Firestore users/{uid} (or lookup by email): role mapped to RBAC
+  (js/pos-firebase-auth-bridge.js; seed example: scripts/seed-demo-auth-users.mjs).
+- Client RBAC (js/pos-rbac-session.js): ROLES.OWNER, ADMIN, SHIFT_LEAD, CASHIER;
+  back office only OWNER/ADMIN (canAccessBackOfficeModule).
+
+Main workflows
+--------------
+1. User -> login.html -> Firebase Auth -> getPosUserRbacPayload -> loginSession
+   -> main-menu.html.
+2. Staff POS: clock in -> (if needed) open shift drawer -> sale/checkout ->
+   receipts; close shift -> read-only per RBAC.
+3. Owner/Admin: BO modules (dashboard, staff, cost calculator, monthly reports)
+   via shell menu.
+4. Checkout: finalizePosSaleFifo — transaction: read/update ingredient_batches,
+   write sales, update pos_meta/counters, write pos_orders (+ subcollection items),
+   pos_receipts, pos_sales_transactions.
+
+System architecture summary
+-----------------------------
+| Layer   | Technology | Evidence |
+|---------|------------|----------|
+| UI      | Static HTML + CSS + ES modules (Firebase client from CDN) | js/firebase/init.js |
+| Data    | Cloud Firestore (or emulator) | firebase.json, js/firebase/init.js |
+| Auth    | Firebase Auth (email/password) | js/login.js, js/firebase/init.js |
+| Hosting | Firebase Hosting, public: "." | firebase.json |
+| Admin/AI| Node + firebase-admin, seed scripts, mcp-server.mjs | package.json, scripts/lib/admin-init.mjs |
+
+No Cloud Functions folder; no getStorage / firebase-storage; no getDatabase for
+Realtime DB in code (databaseURL exists in js/firebase/config.js but unused).
+
+
+================================================================================
+PART 2 — TECH STACK
+================================================================================
+
+Frontend
+--------
+Not React/Vue/Next — multi-page static app with JavaScript modules.
+Firebase Web SDK 10.14.1 loaded from gstatic in js/firebase/init.js.
+
+Backend services
+----------------
+No application server (Express/FastAPI, etc.) in repo.
+Firestore as primary backend; business logic in browser + Node scripts
+(firebase-admin).
+
+Firebase services used (evidence-based)
+----------------------------------------
+| Service          | Used? | Reference |
+|------------------|-------|-----------|
+| Firestore        | Yes   | Throughout js/, staff/js/, menu/js/, etc. |
+| Auth             | Yes   | js/firebase/init.js, js/login.js |
+| Hosting          | Yes (config) | firebase.json |
+| Emulator Suite   | Yes (dev) | firebase.json emulators, npm run dev |
+| Cloud Functions  | No    | No httpsCallable / functions imports |
+| Storage          | No    | No getStorage in repo |
+| Realtime Database| Not used in code | Only databaseURL in js/firebase/config.js |
+
+Dependencies (package.json)
+---------------------------
+devDependencies only: @modelcontextprotocol/sdk, concurrently, firebase-admin,
+firebase-tools.
+Firebase client is NOT npm-installed — loaded from CDN in js/firebase/init.js.
+
+APIs used
+---------
+Firebase client SDK only; no third-party REST APIs beyond Firebase/Google in init.
+
+External integrations
+----------------------
+- Font Awesome CDN on some HTML (e.g. html/main-menu.html).
+- Firebase (Auth, Firestore, Hosting).
+
+
+================================================================================
+PART 3 — FOLDER STRUCTURE
+================================================================================
+
+Repo is a static monorepo with some duplicate path trees for POS/menu/staff.
+
+html/          Main app pages: login.html, main-menu.html, landing.html,
+               pos-order.html, pos-receipts.html, dashboard.html,
+               bo-monthly-reports.html, staff-dashboard.html, etc.
+
+js/            Core logic: firebase (js/firebase/), POS (pos-*.js), costing
+               (cost-calculator/, menu-costing/), staff (staff/),
+               monthly-reports/, bo-monthly-reports-app.js, main-menu.js, login.js.
+
+css/           Global and module styles (base.css, main-menu.css,
+               pos-ops-shared.css, etc.).
+
+pos/           POS HTML/JS variant (pos-order.html, pos/js/*) — similar to
+               html/ + js/ (duplicate paths for hosting or legacy).
+
+menu/          Menu costing / cost calculator (menu-costing.html,
+               pos-cost-calculator.html, menu/js/...).
+
+staff/         Staff dashboard UI and JS (staff-dashboard.html, staff/js/...).
+
+shared/firebase/  Duplicate init.js / collections.js for subfolders.
+
+scripts/       Node ESM: setup, seed, cleanup, sync web config,
+               lib/admin-init.mjs, lib/read-project-id.mjs.
+
+assets/        Static assets (e.g. klik-burger-logo.svg).
+
+auth/          login.css for login styling.
+
+Root           index.html, firebase.json, firestore.rules, firestore.indexes.json,
+               mcp-server.mjs, package.json, .firebaserc.
+
+No dedicated hooks/, components/ (React), or api/ REST folders.
+
+
+================================================================================
+PART 4 — FIREBASE ANALYSIS
+================================================================================
+
+Firestore collections (single source: js/firebase/collections.js)
+------------------------------------------------------------------
+Inventory & menu:
+  ingredients, ingredient_ledger, ingredient_batches, modifiers (legacy),
+  recipes, menu_items, purchase_history, sales.
+
+Staff:
+  staff, staff_activity, staff_settings.
+
+POS:
+  users, pos_meta, pos_orders (+ subcollection items), pos_receipts,
+  pos_shifts (+ subcollection cash_movements), pos_sales_transactions,
+  pos_audit_logs.
+
+Reports:
+  monthly_reports.
+
+Document structure (abbreviated from code)
+------------------------------------------
+- sales: createdAt, lines[], subtotal, totalCogsFifo, totalGrossProfitFifo,
+  table, customerName, notes, staffId, staffName; after POS checkout:
+  posOrderId, posReceiptNo, posReceiptDocId
+  (js/pos-sale-fifo.js, js/pos-checkout-firestore-writer.js).
+
+- pos_orders: orderNo, receiptNo, saleId, lifecycle, kitchenStage, timestamps,
+  lines[], subtotal, totalCogsFifo, paymentMethod, tendered, changeDue,
+  staffId, staffName, customerName, shiftDocId, etc.; subcollection items with
+  productId, qty, prices, cogsFifo (js/pos-checkout-firestore-writer.js).
+
+- pos_meta/counters: seqOrder, seqReceipt, activeShiftDocId
+  (js/pos-checkout-firestore-writer.js, js/pos-firestore-hub.js).
+
+- pos_shifts: shiftCode, status, openedAt, openingCash, openedBy*, closing, etc.;
+  subcollection cash_movements (js/pos-firestore-hub.js).
+
+- users/{uid}: displayName, role, email (seed) — scripts/seed-demo-auth-users.mjs.
+
+- monthly_reports/{YYYY-MM}: aggregates from multiple collections
+  (js/monthly-reports/generate-monthly-report.js).
+
+Authentication flow
+-------------------
+1. signInWithEmailAndPassword / existing session — js/login.js.
+2. waitForAuthUser waits authStateReady — js/pos-firebase-auth-bridge.js.
+3. getPosUserRbacPayload reads users/{uid} or email query — same file.
+4. loginSession stores RBAC + identity in localStorage — js/pos-rbac-session.js.
+5. Standalone POS pages: redirectIfPosPageWithoutAuth — js/pos-page-auth.js
+   (imported by js/pos-order-app.js).
+
+Security rules (firestore.rules)
+--------------------------------
+Listed collections allow read, write: if true (FYP/dev; comments suggest
+production: request.auth != null + per-document checks).
+Catch-all: match /{document=**} { allow read, write: if false; }.
+
+Firebase config
+---------------
+js/firebase/config.js: apiKey, projectId possystem-6907d, authDomain,
+storageBucket, messagingSenderId, appId, measurementId, databaseURL.
+
+Emulator: connectFirestoreEmulator, connectAuthEmulator when
+shouldUseFirebaseEmulators() — js/firebase/init.js
+(hosting ports 5000/5001, ?fbEmu=1, or localStorage kb_fb_emu=1).
+
+Cloud Functions
+---------------
+None in repo.
+
+Storage usage
+-------------
+No firebase/storage code; storageBucket in config not used in codebase search.
+
+Real-time listeners
+-------------------
+onSnapshot on orders, receipts, audit, shift meta, cash movements —
+js/pos-firestore-hub.js.
+Repositories use onSnapshot (e.g. js/staff/staff-repository.js,
+js/cost-calculator/*-repository.js).
+
+
+================================================================================
+PART 5 — BUSINESS LOGIC
+================================================================================
+
+User flow
+---------
+Login -> RBAC payload -> main menu -> (POS) clock in per role -> embed sales/receipts/order board.
+
+Admin flow
+----------
+OWNER/ADMIN can switch to Back Office (canAccessBackOfficeModule in
+js/pos-rbac-session.js); BO nav in js/main-menu.js / html/main-menu.html.
+
+Approval flow
+-------------
+No explicit approval workflow in code; financial void uses prototype manager PIN
+(js/pos-security-constants.js, voidReceiptInHub in js/pos-firestore-hub.js).
+
+Automation flow
+---------------
+- Monthly: generateAndWriteMonthlyReport — timestamp range aggregation
+  (js/monthly-reports/generate-monthly-report.js).
+- Seed: scripts/setup.mjs -> runAllSeeds.
+
+Data flow
+---------
+Read: onSnapshot / getDocs.
+Sale write: single large runTransaction in finalizePosSaleFifo — batch updates,
+create sales, appendCheckoutInTransaction for POS docs
+(js/pos-sale-fifo.js + js/pos-checkout-firestore-writer.js).
+Shift: runTransaction open shift, update pos_meta/counters.activeShiftDocId
+(js/pos-firestore-hub.js).
+
+CRUD flow
+---------
+Repository pattern (addDoc, updateDoc, deleteDoc, setDoc) for staff, ingredients,
+etc.; POS uses transactions/batches as above.
+
+
+================================================================================
+PART 6 — MCP PREPARATION
+================================================================================
+
+Current state
+-------------
+- mcp-server.mjs: MCP @modelcontextprotocol/sdk (stdio), firebase-admin via
+  getAdminFirestore(); READ-ONLY tools:
+  get_menu_items, get_orders, get_staff_list, get_sales_summary, get_ingredients.
+- .cursor/mcp.json: node mcp-server.mjs from workspace root.
+- Credentials: same as scripts — GOOGLE_APPLICATION_CREDENTIALS,
+  firebase-service-account.json, or emulator env (scripts/lib/admin-init.mjs).
+
+Suggested production MCP architecture
+-------------------------------------
+1. Layering: MCP tools -> thin Node module -> Firestore Admin; no raw wide write.
+2. Tools by domain: orders, inventory, staff, reports — align with
+   js/firebase/collections.js.
+3. Separate read vs write tools; writes whitelisted (e.g. append_audit_log,
+   regenerate_monthly_report) with input validation.
+4. External MCP auth: do not expose service account to agent clients.
+
+Security model & permission layer
+---------------------------------
+Current Firestore rules are open (if true) — Admin SDK bypasses rules; control
+must be at MCP server + IAM (least-privilege SA, or client read-only tools only).
+Role gate: only trusted humans connect write-capable MCP.
+
+Recommended MCP structure
+-------------------------
+tools/read/   — bounded queries, pagination
+tools/write/ — small whitelisted actions + idempotency
+resources/    — project id, schema version snapshot
+
+
+================================================================================
+PART 7 — AI TOOL CAPABILITIES
+================================================================================
+
+With current mcp-server.mjs: READ only for selected collections.
+
+| Action                         | MCP mcp-server.mjs | Web client (rules true) | Admin scripts |
+|--------------------------------|--------------------|-------------------------|---------------|
+| Read Firestore (subset)        | Yes                | Yes                     | Yes           |
+| Write/update/delete Firestore| No tools           | Yes (loose rules)       | Yes           |
+| Manage Auth users              | No                 | Not in normal UI        | Yes (seed)    |
+| Upload Storage                 | N/A                | No Storage code         | N/A           |
+| Trigger Cloud Functions        | N/A                | No functions            | N/A           |
+| Admin automation               | No                 | BO UI                   | Yes           |
+| Reports                        | No                 | generate-monthly-report | Can wrap tool |
+
+For production MCP, define explicit write tools with server-side validation (do
+not rely on hardcoded client PIN).
+
+
+================================================================================
+PART 8 — SECURITY REVIEW
+================================================================================
+
+Issue                          Evidence                              Recommendation
+------------------------------------------------------------------------------------------
+Firestore rules wide open      firestore.rules if true               Use request.auth + role checks
+Prototype manager PIN          js/pos-security-constants.js "2580";
+                               error message exposes PIN in void   Server-side / remove PIN leak
+Web API key in repo            js/firebase/config.js                Restrict key in GCP console
+Service account file           .gitignore firebase-service-account   Never commit; least IAM
+Client-only RBAC               pos-rbac-session.js localStorage      Verify sensitive ops server-side
+MCP stdio no auth              mcp-server.mjs                        Run only on admin machine; limit SA
+
+
+================================================================================
+PART 9 — IMPLEMENTATION PLAN
+================================================================================
+
+Step-by-step MCP integration
+----------------------------
+1. Treat js/firebase/collections.js as single source of truth; optional JSON
+   schema for tool inputs.
+2. Document env: GOOGLE_APPLICATION_CREDENTIALS / emulator (see .env.example,
+   admin-init.mjs).
+3. Extend MCP: read tools with limit, cursor, where; add write tools one-by-one
+   with tests.
+4. Tighten Firestore rules before production agent/client on same project.
+5. Structured logging per MCP tool (minimize PII).
+6. CI smoke: node --check or emulator test for mcp-server.mjs.
+
+Production architecture plan
+----------------------------
+Phase 1: MCP read-only (existing) + Firestore rules with auth.
+Phase 2: Cloud Functions or small backend for void/refund/stock with idempotency.
+Phase 3: Storage if PDF/image receipts needed.
+
+Scalable structure
+------------------
+Optional packages/mcp-server or mcp/ with tools/, auth/, shared queries — avoid
+one huge file; reuse COL_* imports (already pattern).
+
+Recommended improvements
+------------------------
+1. Replace if true in firestore.rules.
+2. Remove or secure prototype PIN; server-side checks.
+3. Automated tests for sale transaction (emulator).
+4. Reduce duplication pos/js vs js if possible.
+
+
+================================================================================
+AUTH vs STAFF (MODEL OPERASI)
+================================================================================
+
+Firebase Auth — hanya dua jenis akaun utama untuk sistem ini:
+  - Owner (contoh: Irfan) — akses BO + POS mengikut RBAC.
+  - Staff kongsi (contoh: Ikhwan) — satu akaun Auth untuk semua pekerja kaunter.
+
+Koleksi Firestore `staff` — BUKAN akaun log masuk individu. Ia menyimpan data
+operasi & pemantauan: peranan kerja, jadual, aktiviti, analytics, dan ID yang
+dicatat pada jualan apabila pekerja memilih nama mereka di menu utama (medan
+sesi `operationalStaffId` / `operationalStaffName` dalam pos-rbac-session.js).
+
+MCP / Admin SDK: urus dokumen `staff` & `staff_activity` tanpa mencipta
+pengguna Auth baru untuk setiap pekerja. Auth demo kekal pada
+scripts/seed-demo-auth-users.mjs (dua pengguna).
+
+================================================================================
+QUICK REFERENCE — KEY FILES FOR CLAUDE
+================================================================================
+
+Topic                    File(s)
+--------------------------------------------------------------------------------
+Collection names + notes js/firebase/collections.js
+Firebase init + emulator js/firebase/init.js, js/firebase/config.js
+Auth + RBAC payload      js/pos-firebase-auth-bridge.js, js/login.js
+Client RBAC session      js/pos-rbac-session.js
+POS hub + shift + audit  js/pos-firestore-hub.js
+POS checkout in txn      js/pos-checkout-firestore-writer.js
+Sale FIFO                js/pos-sale-fifo.js
+POS order UI             js/pos-order-app.js
+Main menu shell          js/main-menu.js, html/main-menu.html
+Admin SDK / seed         scripts/lib/admin-init.mjs, scripts/setup.mjs
+MCP server               mcp-server.mjs, .cursor/mcp.json
+Rules & indexes          firestore.rules, firestore.indexes.json
+Hosting                  firebase.json
+
+ONE-LINE SUMMARY FOR AI
+-----------------------
+Static Firebase Hosting app + Firestore + Auth; POS/FIFO/reports in ES modules;
+Node firebase-admin for seeds; MCP (stdio) with permission tiers + optional full
+Firestore generic tools; no Cloud Functions, Storage SDK, or custom REST backend in repo.
+
+================================================================================
+END OF FILE
+================================================================================

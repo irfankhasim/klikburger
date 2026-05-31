@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kakitangan — Klik Burger</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="staff-dash">
+    <div class="sd-app">
+      <header class="kb-page-header">
+        <h1 class="kb-page-title">Kakitangan</h1>
+        <p class="kb-page-lead">
+          <strong>Pemantauan</strong> — kehadiran (clock in/out dari POS), <strong>penutupan drawer tunai</strong> (shift ditutup
+          dalam <code>pos_shifts</code>: amaun awal/akhir &amp; varians), dan ringkasan staf. Urus butiran penuh rekod staf di
+          <strong>Tetapan → Kakitangan</strong>.
+        </p>
+      </header>
+
+      <p id="sd-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
+
+      <section class="sd-toolbar" aria-label="Penapis bulan">
+        <div class="sd-toolbar__row">
+          <label class="sd-field">
+            <span>Bulan paparan</span>
+            <input type="month" id="sd-filter-month" title="Pilih bulan untuk jadual di bawah" />
+          </label>
+        </div>
+      </section>
+
+      <section class="sd-metrics" id="sd-summary" aria-label="Ringkasan pemantauan"></section>
+
+      <section class="sd-panel" aria-labelledby="sd-clock-title">
+        <h2 class="sd-panel__title" id="sd-clock-title">Kehadiran — Clock In / Clock Out</h2>
+        <p class="sd-footnote" style="margin-top: 0">
+          Data daripada <code>staff_activity</code> (jenis <code>clock_in</code> / <code>clock_out</code>), dicerminkan dari terminal POS.
+        </p>
+        <div class="sd-table-wrap">
+          <table class="sd-table">
+            <thead>
+              <tr>
+                <th>Masa</th>
+                <th>Staf</th>
+                <th>Jenis</th>
+                <th>Butiran</th>
+              </tr>
+            </thead>
+            <tbody id="sd-clock-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sd-panel sd-panel--drawer" aria-labelledby="sd-drawer-title">
+        <h2 class="sd-panel__title" id="sd-drawer-title">Drawer tunai — penutupan shift</h2>
+        <p class="sd-footnote" style="margin-top: 0">
+          Satu baris = satu shift ditutup. <strong>Amaun awal</strong> ialah tunai pembukaan;
+          <strong>Amaun akhir</strong> ialah kiraan tunai semasa tutup. <strong>Varians</strong> = amaun akhir − jangkaan sistem
+          (dicatat dalam <code>closing.variance</code> &amp; <code>closing.varianceCategory</code> semasa tutup di POS / MCP).
+        </p>
+        <div class="sd-table-wrap sd-table-wrap--drawer">
+          <table class="sd-table sd-table--drawer">
+            <thead>
+              <tr>
+                <th>Masa / tarikh</th>
+                <th>Amaun awal</th>
+                <th>Amaun akhir</th>
+                <th>Varians</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody id="sd-drawer-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="../js/staff/staff-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

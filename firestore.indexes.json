@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "pos_shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "closedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pos_shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "closedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "ingredient_ledger",
       "queryScope": "COLLECTION",
       "fields": [

@@ -438,9 +438,11 @@
           <p id="order-stock-alert" class="order-stock-alert" hidden role="status" aria-live="polite"></p>
           <div class="order-cart__list" id="order-cart-list"></div>
           <div class="order-cart__foot">
-            <div class="order-total-row">
-              <span>Jumlah</span>
-              <strong id="order-total">RM 0.00</strong>
+            <div id="order-total-summary">
+              <div class="order-total-row">
+                <span>Jumlah</span>
+                <strong id="order-total">RM 0.00</strong>
+              </div>
             </div>
             <div class="order-actions">
               <button type="button" class="btn btn--ghost" id="order-clear">Kosongkan troli</button>
@@ -473,5 +475,7 @@
     <div class="order-toast" id="order-toast" role="status"></div>
 
     <script type="module" src="../js/pos-order-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
   </body>
 </html>

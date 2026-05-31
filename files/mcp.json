@@ -1,0 +1,48 @@
+{
+  "_comment": "KLik Burger MCP Configuration — .cursor/mcp.json",
+  "_doc": {
+    "MCP_PERMISSION_LEVEL": [
+      "read  — safe reads only (default, safe for any agent)",
+      "write — reads + create/update docs",
+      "admin — write + delete/void/shift management",
+      "owner — all tools including monthly report generation"
+    ],
+    "setup": [
+      "1. Copy firebase-service-account.json to project root",
+      "2. Set MCP_PERMISSION_LEVEL based on what the AI agent should be able to do",
+      "3. For emulator: add FIRESTORE_EMULATOR_HOST=localhost:8080 and GCLOUD_PROJECT=possystem-6907d"
+    ]
+  },
+  "mcpServers": {
+    "klikburger": {
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "./firebase-service-account.json",
+        "MCP_PERMISSION_LEVEL": "write",
+        "NODE_ENV": "production"
+      }
+    },
+    "klikburger-readonly": {
+      "_comment": "Safe read-only instance — no writes possible",
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "./firebase-service-account.json",
+        "MCP_PERMISSION_LEVEL": "read",
+        "NODE_ENV": "production"
+      }
+    },
+    "klikburger-emulator": {
+      "_comment": "Local development with Firebase emulator",
+      "command": "node",
+      "args": ["mcp-server.mjs"],
+      "env": {
+        "FIRESTORE_EMULATOR_HOST": "localhost:8080",
+        "FIREBASE_AUTH_EMULATOR_HOST": "localhost:9099",
+        "GCLOUD_PROJECT": "possystem-6907d",
+        "MCP_PERMISSION_LEVEL": "owner"
+      }
+    }
+  }
+}

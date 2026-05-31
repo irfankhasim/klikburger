@@ -7,6 +7,11 @@
   font-family: var(--font);
 }
 
+/* Iframe Tetapan / BO — jangan paksa tinggi skrin penuh; scroll utama di induk */
+html.kb-embed body.staff-dash {
+  min-height: 0;
+}
+
 html.kb-embed .staff-dash .sd-app {
   padding: 0.75rem 1rem 2rem;
 }
@@ -75,9 +80,11 @@ html.kb-embed .staff-dash .sd-app {
 
 .sd-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  /* auto-fit: kad memenuhi lebar penuh (auto-fill meninggalkan lajur kosong di kanan) */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
+  width: 100%;
 }
 
 .sd-metric {
@@ -304,29 +311,66 @@ html.kb-embed .staff-dash .sd-app {
 
 .sd-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
+  width: 100%;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .sd-kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sd-kpi-card {
-  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 100%;
+  padding: 0.85rem 1rem;
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-strong);
   background: var(--surface-muted);
 }
 
+.sd-kpi-card__label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .sd-kpi-card strong {
   display: block;
   font-size: 1.1rem;
-  margin-top: 0.25rem;
+  font-weight: 700;
+  margin-top: 0.4rem;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.sd-kpi-card__sub {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 .sd-kpi-form__row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+@media (max-width: 520px) {
+  .sd-kpi-form__row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sd-kpi-form label {
@@ -474,4 +518,64 @@ html.kb-embed .sd-app .kb-page-title {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Jadual penutupan drawer — lebar penuh, varians jelas */
+.sd-panel--drawer {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sd-table-wrap--drawer {
+  width: 100%;
+}
+
+.sd-table--drawer tbody tr {
+  cursor: default;
+}
+
+.sd-table--drawer td:last-child {
+  white-space: normal;
+  min-width: 10rem;
+}
+
+.sd-variance {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sd-variance--balanced {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 1px solid rgba(46, 125, 30, 0.35);
+}
+
+.sd-variance--short {
+  background: #ffebee;
+  color: #b71c1c;
+  border: 1px solid rgba(183, 28, 28, 0.28);
+}
+
+.sd-variance--over {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border: 1px solid rgba(13, 71, 161, 0.25);
+}
+
+.sd-variance--unknown {
+  background: #f5f5f5;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .sd-table--drawer th,
+  .sd-table--drawer td {
+    padding: 0.45rem 0.4rem;
+    font-size: 0.8rem;
+  }
 }

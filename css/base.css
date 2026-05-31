@@ -31,6 +31,13 @@
   --shadow-sm: var(--shadow);
   --shadow-md: var(--shadow);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+  /* Kawalan permukaan / segmen — seragam dengan .btn--outline & .kb-surface-btn */
+  --kb-control-surface: var(--surface);
+  --kb-control-surface-hover: var(--surface-muted);
+  --kb-control-border: var(--border);
+  --kb-control-border-strong: var(--border-strong);
+  --kb-control-active-bar: var(--sidebar-accent);
 }
 
 *,
@@ -178,7 +185,7 @@ body {
   transition: opacity 0.15s, transform 0.1s, background 0.15s;
 }
 
-.btn:active {
+.btn:active:not(:disabled) {
   transform: scale(0.98);
 }
 
@@ -187,7 +194,7 @@ body {
   color: #fff;
 }
 
-.btn--primary:hover {
+.btn--primary:hover:not(:disabled) {
   opacity: 0.92;
 }
 
@@ -196,16 +203,124 @@ body {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
+.btn--primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Butang putih / sisi — sama corak hover, tekan, fokus seperti utama */
+.btn--outline {
+  background: var(--kb-control-surface);
+  color: var(--text);
+  border: 1px solid var(--kb-control-border-strong);
+  box-shadow: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn--outline:hover:not(:disabled) {
+  background: var(--kb-control-surface-hover);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.btn--outline:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn--outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .btn--ghost {
   margin-top: 0.75rem;
   background: transparent;
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  border: 1px solid var(--kb-control-border);
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.btn--ghost:hover {
-  background: #f0f0f0;
+.btn--ghost:hover:not(:disabled) {
+  background: var(--kb-control-surface-hover);
   color: var(--text);
+  border-color: var(--kb-control-border-strong);
+}
+
+.btn--ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn--ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/**
+ * Butang segmen / tab lebar permukaan (penapis papan pemuka, tab laporan, dll.)
+ * Gabung dengan .is-active atau aria-selected="true" untuk keadaan pilihan.
+ */
+.kb-surface-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.kb-surface-btn:hover:not(:disabled):not(.is-active):not([aria-selected="true"]) {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.045);
+  border-color: transparent;
+}
+
+.kb-surface-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.kb-surface-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.kb-surface-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kb-surface-btn.is-active,
+.kb-surface-btn[aria-selected="true"] {
+  color: var(--text);
+  background: var(--kb-control-surface);
+  border-color: var(--kb-control-border);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 -2px 0 0 var(--kb-control-active-bar);
 }
 
 .form-footer {

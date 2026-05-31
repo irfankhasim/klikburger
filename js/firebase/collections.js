@@ -22,7 +22,7 @@
  *
  * **sales** (transaksi / ringkasan jualan)
  * - createdAt, lines[], subtotal, totalCogsFifo, table, customerName, notes
- * - staffId, staffName (POS — jejak prestasi kakitangan)
+ * - staffId, staffName (POS — ID dokumen `staff/{id}` atau jejak operator; Auth mungkin kongsi)
  *
  * **purchase_history** (belian stok / bulk)
  * - createdAt, totalAmount, supplier?, lines[{ ingredientId?, label, qty, unit, unitCost, lineTotal }], notes?
@@ -47,7 +47,7 @@ export const COL_MENU_ITEMS = "menu_items";
 export const COL_SALES = "sales";
 export const COL_PURCHASE_HISTORY = "purchase_history";
 
-/** Kakitangan — profil pekerja + syif mingguan (weeklyRoster) */
+/** Kakitangan — data operasi (jadual, aktiviti, peranan kerja); bukan 1:1 dengan akaun Firebase Auth */
 export const COL_STAFF = "staff";
 /** Log audit / aktiviti POS (siapa jual, ubah, dll.) */
 export const COL_STAFF_ACTIVITY = "staff_activity";
@@ -55,7 +55,7 @@ export const COL_STAFF_ACTIVITY = "staff_activity";
 export const COL_STAFF_SETTINGS = "staff_settings";
 
 /** --- POS (Firestore sahaja; tiada SQLite) --- */
-/** Profil POS / peranan (`role`: owner | staff), selaras Auth UID */
+/** Profil POS / peranan (`role` dalam Firestore: huruf kecil, cth. owner | staff | admin | shift_lead), selaras Auth UID */
 export const COL_POS_USERS = "users";
 /** `counters`: seqOrder, seqReceipt, activeShiftDocId */
 export const COL_POS_META = "pos_meta";
@@ -63,7 +63,8 @@ export const COL_POS_META = "pos_meta";
 export const COL_POS_ORDERS = "pos_orders";
 /** Resit POS */
 export const COL_POS_RECEIPTS = "pos_receipts";
-/** Drawer tunai; subkoleksi `cash_movements` */
+/** Drawer tunai — giliran POS (`status`: open|closed); subkoleksi `cash_movements`. */
+/** Bila ditutup: `closing` { expectedDrawer, actualDrawer, variance, varianceCategory: balanced|short|over, refundNotes, … } */
 export const COL_POS_SHIFTS = "pos_shifts";
 /** Ringkasan transaksi jualan POS (selaras `sales` / checkout) */
 export const COL_POS_SALES_TRANSACTIONS = "pos_sales_transactions";
@@ -75,4 +76,16 @@ export const COL_POS_AUDIT = "pos_audit_logs";
  * Medan utama ditulis oleh `js/monthly-reports/generate-monthly-report.js`.
  */
 export const COL_MONTHLY_REPORTS = "monthly_reports";
+
+/**
+ * Laporan tahunan agregat — dokumen id `YYYY` (contoh `2026`).
+ * Medan utama ditulis oleh `js/monthly-reports/generate-yearly-report.js`.
+ */
+export const COL_YEARLY_REPORTS = "yearly_reports";
+
+/** Pangkalan pengetahuan — Pembantu AI (Owner urus, Staff/Owner baca untuk chat) */
+export const COL_KNOWLEDGE_BASE = "knowledge_base";
+
+/** Dokumen teks tunggal owner (editor satu textarea) */
+export const KB_MASTER_DOC_ID = "owner_master";
 

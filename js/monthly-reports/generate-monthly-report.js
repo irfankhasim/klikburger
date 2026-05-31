@@ -18,6 +18,7 @@ import {
 } from "../firebase/init.js";
 import {
   COL_POS_RECEIPTS,
+  COL_POS_SHIFTS,
   COL_PURCHASE_HISTORY,
   COL_INGREDIENT_LEDGER,
   COL_INGREDIENTS,
@@ -25,6 +26,12 @@ import {
   COL_SALES,
   COL_MONTHLY_REPORTS
 } from "../firebase/collections.js";
+import { varianceCategoryFromVariance } from "../drawer-variance.js";
+import {
+  staffSalaryForCalendarMonth,
+  staffAccumulatedSalaryToDate,
+  staffStartedAtIso
+} from "./staff-salary-calc.js";
 
 var PAGE = 400;
 
@@ -90,11 +97,55 @@ async function fetchPagedByRange(colName, field, tsStart, tsEnd) {
   return out;
 }
 
-function staffMonthlySalaryEstimate(data) {
-  var pt = String(data.payType || "hourly").toLowerCase();
-  var amt = typeof data.payAmount === "number" ? data.payAmount : parseFloat(data.payAmount) || 0;
-  if (pt === "monthly" || pt === "salary" || pt === "bulanan") return round2(amt);
-  return round2(amt * 160);
+/**
+ * Shift ditutup dalam julat `closedAt` (Timestamp puncak).
+ * Tapisan `status === "closed"` dalam klien — elak indeks komposit status+closedAt.
+ */
+async function fetchClosedShiftsInRange(tsStart, tsEnd) {
+  var out = [];
+  var lastSnap = null;
+  while (true) {
+    var q = lastSnap
+      ? query(
+          collection(db, COL_POS_SHIFTS),
+          where("closedAt", ">=", tsStart),
+          where("closedAt", "<", tsEnd),
+          orderBy("closedAt", "asc"),
+          startAfter(lastSnap),
+          limit(PAGE)
+        )
+      : query(
+          collection(db, COL_POS_SHIFTS),
+          where("closedAt", ">=", tsStart),
+          where("closedAt", "<", tsEnd),
+          orderBy("closedAt", "asc"),
+          limit(PAGE)
+        );
+    var snap = await getDocs(q);
+    if (snap.empty) break;
+    snap.docs.forEach(function (d) {
+      var x = d.data();
+      if (String(x.status || "") !== "closed") return;
+      out.push(d);
+    });
+    lastSnap = snap.docs[snap.docs.length - 1];
+    if (snap.docs.length < PAGE) break;
+  }
+  return out;
+}
+
+function varianceFromClosing(closing) {
+  if (!closing || typeof closing !== "object") return null;
+  var v = typeof closing.variance === "number" ? closing.variance : parseFloat(closing.variance);
+  if (v != null && !isNaN(v)) return round2(v);
+  var expected =
+    typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : parseFloat(closing.expectedDrawer);
+  var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : parseFloat(closing.actualDrawer);
+  if ((actual == null || isNaN(actual)) && closing.closingCash != null) {
+    actual = parseFloat(closing.closingCash);
+  }
+  if (isNaN(expected) || isNaN(actual)) return null;
+  return round2(actual - expected);
 }
 
 /**
@@ -112,6 +163,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var receiptDocs = await fetchPagedByRange(COL_POS_RECEIPTS, "createdAt", tsStart, tsEnd);
   var purchaseDocs = await fetchPagedByRange(COL_PURCHASE_HISTORY, "createdAt", tsStart, tsEnd);
   var ledgerDocs = await fetchPagedByRange(COL_INGREDIENT_LEDGER, "occurredAt", tsStart, tsEnd);
+  var shiftDocs = await fetchClosedShiftsInRange(tsStart, tsEnd);
 
   var ingSnap = await getDocs(collection(db, COL_INGREDIENTS));
   var ingNameById = {};
@@ -126,8 +178,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   staffSnap.docs.forEach(function (d) {
     var x = d.data();
     var status = String(x.employmentStatus || "active");
-    var est = staffMonthlySalaryEstimate(x);
-    if (status === "active") payrollTotal += est;
+    var est = staffSalaryForCalendarMonth(x, year, month1to12);
+    if (status === "active" && est > 0) payrollTotal += est;
     staffLines.push({
       staffId: d.id,
       name: String(x.name || "").trim() || "Tanpa nama",
@@ -135,7 +187,9 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       employmentStatus: status,
       payType: String(x.payType || "hourly"),
       payAmount: typeof x.payAmount === "number" ? x.payAmount : parseFloat(x.payAmount) || 0,
-      estimatedMonthlySalaryRm: est
+      startedAt: staffStartedAtIso(x),
+      estimatedMonthlySalaryRm: est,
+      accumulatedSalaryRm: staffAccumulatedSalaryToDate(x, year, month1to12)
     });
   });
   payrollTotal = round2(payrollTotal);
@@ -166,6 +220,30 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     byPay[k] = round2(byPay[k]);
   });
   var grossProfit = round2(grossSales - totalCogs);
+  var avgNonVoidSubtotalRm = netReceiptCount > 0 ? round2(grossSales / netReceiptCount) : 0;
+
+  var varianceByCategory = { balanced: 0, short: 0, over: 0, unknown: 0 };
+  var totalVarianceRm = 0;
+  var shiftLines = [];
+  shiftDocs.forEach(function (d) {
+    var x = d.data();
+    var clos = x.closing && typeof x.closing === "object" ? x.closing : {};
+    var v = varianceFromClosing(clos);
+    var cat = String(clos.varianceCategory || varianceCategoryFromVariance(v) || "unknown");
+    if (varianceByCategory[cat] == null) cat = "unknown";
+    varianceByCategory[cat] = (varianceByCategory[cat] || 0) + 1;
+    if (typeof v === "number" && !isNaN(v)) totalVarianceRm += v;
+    shiftLines.push({
+      shiftId: d.id,
+      varianceRm: v,
+      varianceCategory: cat,
+      expectedDrawerRm:
+        typeof clos.expectedDrawer === "number" ? clos.expectedDrawer : parseFloat(clos.expectedDrawer) || null,
+      actualDrawerRm:
+        typeof clos.actualDrawer === "number" ? clos.actualDrawer : parseFloat(clos.actualDrawer) || null
+    });
+  });
+  totalVarianceRm = round2(totalVarianceRm);
 
   var purchaseTotalRm = 0;
   var purchaseCount = purchaseDocs.length;
@@ -228,7 +306,10 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   legacySalesTotal = round2(legacySalesTotal);
 
   var otherExpensesRm = 0;
-  var netOperating = round2(grossProfit - purchaseTotalRm - payrollTotal - otherExpensesRm);
+  // Operasi bersih = Untung kasar - Gaji - Perbelanjaan lain
+  // purchaseTotalRm TIDAK ditolak dari sini kerana ia adalah pembelian stok
+  // untuk masa hadapan, bukan kos operasi terus bulan ini (COGS sudah dalam grossProfit)
+  var netOperating = round2(grossProfit - payrollTotal - otherExpensesRm);
 
   var payload = {
     monthKey: key,
@@ -237,7 +318,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     boundsNote:
       "Julat masa ikut tengah malam tempatan pelayar semasa penjanaan (new Date(year, month-1, 1) → bulan berikut).",
     generatedAt: serverTimestamp(),
-    generatorVersion: 1,
+    generatorVersion: 2,
     source: o.source || "user_regenerate",
     actorUid: o.actorUid != null ? String(o.actorUid) : "",
     rawMaterials: {
@@ -259,11 +340,20 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       grossProfitRm: grossProfit,
       byPaymentMethodRm: byPay,
       legacyColSalesDocumentCount: legacyCount,
-      legacyColSalesSubtotalRm: legacySalesTotal
+      legacyColSalesSubtotalRm: legacySalesTotal,
+      avgNonVoidSubtotalRm: avgNonVoidSubtotalRm
+    },
+    cashDrawer: {
+      note:
+        "Shift ditutup dalam julat: `status` == closed dan `closedAt` (Timestamp puncak dokumen) dalam bulan. Varians dari `closing.variance` atau actual − expected.",
+      closedShiftsInRange: shiftDocs.length,
+      totalVarianceRm: totalVarianceRm,
+      varianceByCategory: varianceByCategory,
+      shiftsSample: shiftLines.slice(0, 40)
     },
     staffSalary: {
       note:
-        "Anggaran gaji: `monthly`/`salary`/`bulanan` = payAmount sebulan; selain itu hourly × 160 jam (anggapan FYP).",
+        "Anggaran gaji bulan ini prorata mengikut tarikh mula kerja. Gaji tetap = payAmount sebulan; gaji jam = kadar × 160 jam. Medan accumulatedSalaryRm = jumlah terkumpul dari tarikh mula hingga akhir bulan laporan.",
       staffCount: staffLines.length,
       activeStaffPayrollEstimateRm: payrollTotal,
       lines: staffLines
@@ -278,7 +368,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       netOperatingEstimateRm: netOperating,
       includesLegacySalesCollection: legacyCount > 0,
       narrative:
-        "Anggaran operasi = untung kasar − belian stok (purchase_history) − anggaran gaji aktif. Kos bahan dari resit (FIFO) sudah dalam COGS. Penyesuaian cukai / utiliti tidak disimpan dalam FYP ini."
+        "Anggaran operasi bersih = Untung kasar (Jualan - COGS) - Anggaran gaji pekerja aktif. Pembelian stok (purchase_history) dipaparkan berasingan sebagai maklumat perbelanjaan inventori — ia tidak ditolak dari operasi bersih kerana COGS sudah mengambil kira kos bahan yang digunakan."
     }
   };
 

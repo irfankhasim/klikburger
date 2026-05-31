@@ -1,33 +1,15 @@
 /**
- * Dashboard Kakitangan — pejabat belakang Klik Burger.
+ * Dashboard Kakitangan — pemantauan kehadiran & drawer tunai (BO).
  */
-import { Timestamp } from "../firebase/init.js";
-import { docToStaff, STAFF_ROLES_MS, STAFF_STATUS_MS, SHIFT_LABELS_MS } from "./staff-mappers.js";
-import {
-  subscribeStaff,
-  subscribeRecentSales,
-  addStaff,
-  persistStaff,
-  removeStaff,
-  getStaffSettings,
-  saveStaffSettings,
-  fetchSalesForStaff
-} from "./staff-repository.js";
-import {
-  aggregateStaffSales,
-  teamRevenue,
-  bonusPoolEstimate,
-  parseSaleDoc,
-  inMonth
-} from "./staff-analytics.js";
-
-function pad2(n) {
-  return (n < 10 ? "0" : "") + n;
-}
+import { auth } from "../firebase/init.js";
+import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
+import { docToStaff, dedupeStaffByNameKey } from "./staff-mappers.js";
+import { subscribeStaff, subscribeStaffActivity, subscribeClosedPosShifts } from "./staff-repository.js";
+import { roundMoney, varianceCategoryFromVariance, varianceLabelMs } from "../drawer-variance.js";
 
 var staffList = [];
-var saleDocs = [];
-var settings = { teamMonthlyTargetRm: 15000, bonusRateAboveTarget: 0.03, ratingBase: 3.6 };
+var activityRows = [];
+var posShiftRows = [];
 var filterMonthStr = "";
 
 var staffFirestoreUnsubs = [];
@@ -48,13 +30,9 @@ function bindStaffPagehideOnce() {
   window.addEventListener("pagehide", teardownStaffFirestoreListeners);
 }
 
-var DAY_NAMES_MS = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
-var SHIFT_OPTIONS = [
-  { v: "pagi", l: SHIFT_LABELS_MS.pagi },
-  { v: "petang", l: SHIFT_LABELS_MS.petang },
-  { v: "penuh", l: SHIFT_LABELS_MS.penuh },
-  { v: "cuti", l: SHIFT_LABELS_MS.cuti }
-];
+function pad2(n) {
+  return (n < 10 ? "0" : "") + n;
+}
 
 function $(id) {
   return document.getElementById(id);
@@ -66,10 +44,6 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function formatRM(n) {
-  return "RM " + (Math.round(n * 100) / 100).toFixed(2);
 }
 
 function setStatus(msg, kind) {
@@ -87,360 +61,239 @@ function setStatus(msg, kind) {
 }
 
 function ymParts() {
-  var v = filterMonthStr || $("sd-filter-month").value;
+  var v = filterMonthStr || ($("sd-filter-month") && $("sd-filter-month").value);
   var p = String(v || "").split("-");
   var y = parseInt(p[0], 10) || new Date().getFullYear();
   var m = parseInt(p[1], 10) || new Date().getMonth() + 1;
   return { y: y, m0: m - 1 };
 }
 
-function filteredStaff() {
-  return staffList;
+function tsToMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.toDate === "function") {
+    var d = ts.toDate();
+    return d && !isNaN(d.getTime()) ? d.getTime() : 0;
+  }
+  return 0;
 }
 
-function computeStats() {
-  var ym = ymParts();
-  var base = filteredStaff();
-  var agg = aggregateStaffSales(base, saleDocs, ym.y, ym.m0);
-  return agg;
+function shiftClosedMillis(shiftData) {
+  if (!shiftData || typeof shiftData !== "object") return 0;
+  var m = tsToMillis(shiftData.closedAt);
+  if (m) return m;
+  var c = shiftData.closing && shiftData.closing.closedAt;
+  if (!c) return 0;
+  if (typeof c === "string") {
+    var d = new Date(c);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  return tsToMillis(c);
 }
 
-function renderMetrics(stats) {
-  var el = $("sd-metrics");
+function inCalendarMonth(ms, y, m0) {
+  if (!ms) return false;
+  var d = new Date(ms);
+  return d.getFullYear() === y && d.getMonth() === m0;
+}
+
+function renderSummary() {
+  var el = $("sd-summary");
   if (!el) return;
   var ym = ymParts();
   var active = staffList.filter(function (s) {
     return s.employmentStatus === "active";
   }).length;
-  var team = teamRevenue(stats);
-  var orders = stats.reduce(function (s, x) {
-    return s + (x.orders || 0);
-  }, 0);
-  var best = stats.slice().sort(function (a, b) {
-    return (b.revenue || 0) - (a.revenue || 0);
-  })[0];
-  var pool = bonusPoolEstimate(team, settings.teamMonthlyTargetRm, settings.bonusRateAboveTarget);
-
+  var clockN = 0;
+  (activityRows || []).forEach(function (r) {
+    var k = String(r.kind || "");
+    if (k !== "clock_in" && k !== "clock_out") return;
+    if (!inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0)) return;
+    clockN++;
+  });
+  var drawerN = 0;
+  (posShiftRows || []).forEach(function (r) {
+    if (!inCalendarMonth(shiftClosedMillis(r.raw), ym.y, ym.m0)) return;
+    drawerN++;
+  });
   el.innerHTML =
     '<article class="sd-metric"><div class="sd-metric__label">Staf aktif</div><div class="sd-metric__value">' +
     active +
-    '</div><div class="sd-metric__hint">Dalam sistem</div></article>' +
-    '<article class="sd-metric"><div class="sd-metric__label">Jualan bulan</div><div class="sd-metric__value">' +
-    formatRM(team) +
-    '</div><div class="sd-metric__hint">' +
+    '</div><div class="sd-metric__hint">Daripada ' +
+    staffList.length +
+    " rekod (nama unik)</div></article>" +
+    '<article class="sd-metric"><div class="sd-metric__label">Rekod clock (bulan)</div><div class="sd-metric__value">' +
+    clockN +
+    '</div><div class="sd-metric__hint">Clock in / clock out</div></article>' +
+    '<article class="sd-metric"><div class="sd-metric__label">Tutup shift (bulan)</div><div class="sd-metric__value">' +
+    drawerN +
+    '</div><div class="sd-metric__hint">Penutupan drawer (<code>pos_shifts</code>)</div></article>' +
+    '<article class="sd-metric"><div class="sd-metric__label">Bulan paparan</div><div class="sd-metric__value">' +
     ym.y +
     "-" +
     pad2(ym.m0 + 1) +
-    "</div></article>" +
-    '<article class="sd-metric"><div class="sd-metric__label">Order direkod</div><div class="sd-metric__value">' +
-    orders +
-    '</div><div class="sd-metric__hint">POS dengan staf</div></article>' +
-    '<article class="sd-metric"><div class="sd-metric__label">Anggaran bonus</div><div class="sd-metric__value">' +
-    formatRM(pool) +
-    '</div><div class="sd-metric__hint">Jika sasaran dicapai</div></article>' +
-    (best && best.orders > 0
-      ? '<article class="sd-metric"><div class="sd-metric__label">Terbaik (jualan)</div><div class="sd-metric__value">' +
-        escapeHtml(best.name) +
-        '</div><div class="sd-metric__hint">' +
-        formatRM(best.revenue) +
-        "</div></article>"
-      : "");
+    '</div><div class="sd-metric__hint">Tukar penapis di atas</div></article>';
 }
 
-function renderTable(stats) {
-  var tb = $("sd-table-body");
+function activityKindLabel(kind) {
+  var k = String(kind || "");
+  if (k === "clock_in") return "Clock in";
+  if (k === "clock_out") return "Clock out";
+  return k || "—";
+}
+
+function renderClockTable() {
+  var tb = $("sd-clock-body");
   if (!tb) return;
-  tb.innerHTML = stats
+  var ym = ymParts();
+  var rows = (activityRows || [])
+    .filter(function (r) {
+      var k = String(r.kind || "");
+      if (k !== "clock_in" && k !== "clock_out") return false;
+      return inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0);
+    })
+    .sort(function (a, b) {
+      return tsToMillis(b.createdAt) - tsToMillis(a.createdAt);
+    });
+  if (!rows.length) {
+    tb.innerHTML =
+      '<tr><td colspan="4" class="sd-footnote">Tiada clock in/out pada bulan ini dalam <code>staff_activity</code>.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows
     .map(function (r) {
+      var ts = r.createdAt;
+      var t =
+        ts && typeof ts.toDate === "function"
+          ? ts.toDate().toLocaleString("ms-MY", { hour12: true })
+          : "—";
       return (
-        "<tr data-staff-id=\"" +
-        escapeHtml(r.staffId) +
-        "\">" +
-        "<td>" +
-        escapeHtml(r.name) +
+        "<tr><td>" +
+        escapeHtml(t) +
         "</td><td>" +
-        formatRM(r.revenue) +
+        escapeHtml(r.staffName || "") +
         "</td><td>" +
-        (r.orders || 0) +
+        escapeHtml(activityKindLabel(r.kind)) +
         "</td><td>" +
-        (r.lineItems || 0) +
+        escapeHtml(String(r.detail || "").slice(0, 140)) +
         "</td></tr>"
       );
     })
     .join("");
-  tb.querySelectorAll("tr").forEach(function (tr) {
-    tr.addEventListener("click", function () {
-      openDetailModal(tr.getAttribute("data-staff-id"));
-    });
-  });
 }
 
-function renderKpi(stats) {
-  var el = $("sd-kpi-body");
-  if (!el) return;
-  var team = teamRevenue(stats);
-  var pool = bonusPoolEstimate(team, settings.teamMonthlyTargetRm, settings.bonusRateAboveTarget);
-  var achievers = stats.filter(function (s) {
-    return (s.orders || 0) > 0;
-  }).length;
-  var share = achievers > 0 && pool > 0 ? pool / achievers : 0;
-  el.innerHTML =
-    '<div class="sd-kpi-card">Sasaran pasukan<strong>' +
-    formatRM(settings.teamMonthlyTargetRm) +
-    "</strong></div>" +
-    '<div class="sd-kpi-card">Jualan vs sasaran<strong>' +
-    (team >= settings.teamMonthlyTargetRm ? "Capai" : "Belum capai") +
-    "</strong>" +
-    formatRM(team) +
-    "</div>" +
-    '<div class="sd-kpi-card">Anggaran kolam bonus<strong>' +
-    formatRM(pool) +
-    '</strong><span class="sd-muted">Anggaran bahagi staf berjualan: ' +
-    formatRM(Math.round(share * 100) / 100) +
-    "</span></div>";
-}
-
-function renderRosterInputs(roster) {
-  var wrap = $("sd-form-roster");
-  if (!wrap) return;
-  var map = {};
-  (roster || []).forEach(function (r) {
-    map[r.day] = r.shift;
-  });
-  wrap.innerHTML = DAY_NAMES_MS.map(function (label, day) {
-    var cur = map[day] != null && map[day] !== "" ? map[day] : "pagi";
-    return (
-      '<label class="sd-roster-cell">' +
-      label +
-      '<select data-roster-day="' +
-      day +
-      '">' +
-      SHIFT_OPTIONS.map(function (o) {
-        return (
-          '<option value="' +
-          o.v +
-          '"' +
-          (o.v === cur ? " selected" : "") +
-          ">" +
-          escapeHtml(o.l) +
-          "</option>"
-        );
-      }).join("") +
-      "</select></label>"
-    );
-  }).join("");
-}
-
-function readRosterFromForm() {
-  var wrap = $("sd-form-roster");
-  if (!wrap) return [];
-  var out = [];
-  wrap.querySelectorAll("select[data-roster-day]").forEach(function (sel) {
-    var day = parseInt(sel.getAttribute("data-roster-day"), 10);
-    out.push({ day: day, shift: sel.value || "pagi" });
-  });
-  return out.sort(function (a, b) {
-    return a.day - b.day;
-  });
-}
-
-function openStaffModal(id) {
-  var bd = $("sd-modal-staff-backdrop");
-  var isEdit = Boolean(id);
-  $("sd-modal-staff-title").textContent = isEdit ? "Sunting kakitangan" : "Tambah kakitangan";
-  $("sd-form-id").value = id || "";
-  $("sd-form-delete").hidden = !isEdit;
-  if (!isEdit) {
-    $("sd-form-name").value = "";
-    $("sd-form-role").value = "cashier";
-    $("sd-form-status").value = "active";
-    $("sd-form-phone").value = "";
-    $("sd-form-started").value = "";
-    $("sd-form-paytype").value = "hourly";
-    $("sd-form-pay").value = "8";
-    $("sd-form-default-shift").value = "pagi";
-    renderRosterInputs(
-      DAY_NAMES_MS.map(function (_, day) {
-        return { day: day, shift: "pagi" };
-      })
-    );
-  } else {
-    var s = staffList.find(function (x) {
-      return String(x.id) === String(id);
-    });
-    if (!s) return;
-    $("sd-form-name").value = s.name;
-    $("sd-form-role").value = s.role || "cashier";
-    $("sd-form-status").value = s.employmentStatus || "active";
-    $("sd-form-phone").value = s.phone || "";
-    if (s.startedAtDate) {
-      var d = s.startedAtDate;
-      $("sd-form-started").value =
-        d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
-    } else {
-      $("sd-form-started").value = "";
-    }
-    $("sd-form-paytype").value = s.payType || "hourly";
-    $("sd-form-pay").value = String(s.payAmount != null ? s.payAmount : "");
-    $("sd-form-default-shift").value = s.defaultShift || "pagi";
-    renderRosterInputs(s.weeklyRoster && s.weeklyRoster.length ? s.weeklyRoster : null);
-  }
-  bd.hidden = false;
-  bd.setAttribute("aria-hidden", "false");
-}
-
-function closeStaffModal() {
-  var bd = $("sd-modal-staff-backdrop");
-  if (bd) {
-    bd.hidden = true;
-    bd.setAttribute("aria-hidden", "true");
+function formatMsDateTime(ms) {
+  if (!ms) return "—";
+  try {
+    return new Date(ms).toLocaleString("ms-MY", { dateStyle: "short", timeStyle: "short", hour12: true });
+  } catch (e) {
+    return "—";
   }
 }
 
-function startedTimestampFromInput() {
-  var v = $("sd-form-started").value;
-  if (!v) return null;
-  var d = new Date(v + "T12:00:00");
-  if (isNaN(d.getTime())) return null;
-  return Timestamp.fromDate(d);
+function buildNoteFromClosing(closing) {
+  if (!closing || typeof closing !== "object") return "";
+  var parts = [];
+  if (closing.refundNotes) parts.push(String(closing.refundNotes).trim());
+  if (closing.notes && String(closing.notes).trim() && String(closing.notes) !== String(closing.refundNotes || "")) {
+    parts.push(String(closing.notes).trim());
+  }
+  if (closing.source === "MCP_AGENT") parts.push("Tutupan MCP");
+  return parts.join(" · ").slice(0, 220);
 }
 
-async function saveStaffForm() {
-  var id = $("sd-form-id").value.trim();
-  var name = $("sd-form-name").value.trim();
-  if (!name) {
-    setStatus("Isi nama.", "err");
+function varianceCellHtml(closing) {
+  if (!closing || typeof closing !== "object") closing = {};
+  var expected = typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : parseFloat(closing.expectedDrawer);
+  var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : parseFloat(closing.actualDrawer);
+  if ((actual == null || isNaN(actual)) && closing.closingCash != null) {
+    actual = parseFloat(closing.closingCash);
+  }
+  var v = typeof closing.variance === "number" ? closing.variance : null;
+  if ((v == null || isNaN(v)) && !isNaN(expected) && !isNaN(actual)) {
+    v = roundMoney(actual - expected);
+  }
+  var cat = closing.varianceCategory || varianceCategoryFromVariance(v);
+  var label = varianceLabelMs(cat);
+  var rmPart = "";
+  if (v != null && !isNaN(v) && cat !== "unknown") {
+    rmPart = " (" + (v >= 0 ? "+" : "−") + "RM " + Math.abs(roundMoney(v)).toFixed(2) + ")";
+  }
+  var cls = "sd-variance sd-variance--" + (cat || "unknown");
+  return '<span class="' + escapeHtml(cls) + '">' + escapeHtml(label + rmPart) + "</span>";
+}
+
+function renderDrawerTable() {
+  var tb = $("sd-drawer-body");
+  if (!tb) return;
+  var ym = ymParts();
+  var rows = (posShiftRows || [])
+    .filter(function (r) {
+      return inCalendarMonth(shiftClosedMillis(r.raw), ym.y, ym.m0);
+    })
+    .sort(function (a, b) {
+      return shiftClosedMillis(b.raw) - shiftClosedMillis(a.raw);
+    });
+  if (!rows.length) {
+    tb.innerHTML =
+      '<tr><td colspan="5" class="sd-footnote">Tiada shift ditutup pada bulan ini dalam <code>pos_shifts</code>. Varians dikira automatik semasa tutup shift di POS.</td></tr>';
     return;
   }
-  var payload = {
-    name: name,
-    role: $("sd-form-role").value,
-    employmentStatus: $("sd-form-status").value,
-    phone: $("sd-form-phone").value.trim(),
-    payType: $("sd-form-paytype").value,
-    payAmount: parseFloat($("sd-form-pay").value) || 0,
-    defaultShift: $("sd-form-default-shift").value,
-    weeklyRoster: readRosterFromForm()
-  };
-  var st = startedTimestampFromInput();
-  if (st) payload.startedAt = st;
-
-  try {
-    if (id) {
-      await persistStaff(id, payload);
-      setStatus("Kakitangan dikemas kini.", "ok");
-    } else {
-      await addStaff(payload);
-      setStatus("Kakitangan ditambah.", "ok");
-    }
-    closeStaffModal();
-  } catch (e) {
-    console.error(e);
-    setStatus(e.message || String(e), "err");
-  }
-}
-
-async function deleteStaffForm() {
-  var id = $("sd-form-id").value.trim();
-  if (!id) return;
-  if (!confirm("Padam kakitangan ini dari pangkalan data?")) return;
-  try {
-    await removeStaff(id);
-    setStatus("Dipadam.", "ok");
-    closeStaffModal();
-  } catch (e) {
-    console.error(e);
-    setStatus(e.message || String(e), "err");
-  }
-}
-
-async function openDetailModal(staffId) {
-  var s = staffList.find(function (x) {
-    return String(x.id) === String(staffId);
-  });
-  var bd = $("sd-modal-detail-backdrop");
-  var body = $("sd-modal-detail-body");
-  var title = $("sd-modal-detail-title");
-  if (!bd || !body || !title) return;
-  title.textContent = s ? s.name : "Butiran";
-  body.innerHTML = "<p>Memuatkan…</p>";
-  bd.hidden = false;
-  bd.setAttribute("aria-hidden", "false");
-
-  var stats = computeStats().find(function (x) {
-    return String(x.staffId) === String(staffId);
-  });
-  var ym = ymParts();
-  var rows = [];
-  try {
-    rows = await fetchSalesForStaff(staffId, 40);
-  } catch (e) {
-    console.error(e);
-  }
-  var recent = rows
-    .map(function (d) {
-      var p = parseSaleDoc(d);
-      if (!inMonth(p.createdAt, ym.y, ym.m0)) return null;
-      var t = p.createdAt ? p.createdAt.toLocaleString("ms-MY", { hour12: true }) : "—";
-      return { t: t, sub: p.subtotal, id: p.id };
+  tb.innerHTML = rows
+    .map(function (r) {
+      var raw = r.raw;
+      var clos = raw.closing && typeof raw.closing === "object" ? raw.closing : {};
+      var ms = shiftClosedMillis(raw);
+      var when = formatMsDateTime(ms);
+      var opening = typeof raw.openingCash === "number" ? raw.openingCash : parseFloat(raw.openingCash) || 0;
+      var openingStr = "RM " + roundMoney(opening).toFixed(2);
+      var actualN = typeof clos.actualDrawer === "number" ? clos.actualDrawer : parseFloat(clos.actualDrawer);
+      if ((actualN == null || isNaN(actualN)) && clos.closingCash != null) {
+        actualN = parseFloat(clos.closingCash);
+      }
+      var actualStr = actualN != null && !isNaN(actualN) ? "RM " + roundMoney(actualN).toFixed(2) : "—";
+      var note = buildNoteFromClosing(clos);
+      var varHtml = varianceCellHtml(clos);
+      return (
+        "<tr><td>" +
+        escapeHtml(when) +
+        "</td><td>" +
+        escapeHtml(openingStr) +
+        "</td><td>" +
+        escapeHtml(actualStr) +
+        "</td><td>" +
+        varHtml +
+        "</td><td>" +
+        escapeHtml(note) +
+        "</td></tr>"
+      );
     })
-    .filter(Boolean);
-
-  var html =
-    "<div class=\"sd-detail-grid\">" +
-    "<p><strong>Status</strong><br>" +
-    escapeHtml(s ? STAFF_STATUS_MS[s.employmentStatus] || s.employmentStatus : "—") +
-    "</p>" +
-    "<p><strong>Jualan (bulan)</strong><br>" +
-    formatRM(stats ? stats.revenue : 0) +
-    "</p>" +
-    "<p><strong>Bil. order</strong><br>" +
-    (stats ? stats.orders : 0) +
-    "</p>" +
-    "<p><strong>Bil jualan</strong><br>" +
-    (stats ? stats.lineItems : 0) +
-    "</p></div>" +
-    "<h3 class=\"sd-roster-label\">Jualan terkini (bulan dipilih)</h3>" +
-    (recent.length
-      ? "<ul class=\"sd-detail-list\">" +
-        recent
-          .map(function (r) {
-            return (
-              "<li>" +
-              escapeHtml(r.t) +
-              " — " +
-              formatRM(r.sub) +
-              ' <span class="sd-muted">#' +
-              escapeHtml(r.id.slice(0, 8)) +
-              "…</span></li>"
-            );
-          })
-          .join("") +
-        "</ul>"
-      : "<p class=\"sd-footnote\">Tiada rekod POS untuk staf ini pada bulan ini.</p>");
-  body.innerHTML = html;
-}
-
-function closeDetailModal() {
-  var bd = $("sd-modal-detail-backdrop");
-  if (bd) {
-    bd.hidden = true;
-    bd.setAttribute("aria-hidden", "true");
-  }
+    .join("");
 }
 
 function refreshAll() {
-  var stats = computeStats();
-  renderMetrics(stats);
-  renderTable(stats);
-  renderKpi(stats);
+  try {
+    renderSummary();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    renderClockTable();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    renderDrawerTable();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function initMonthInput() {
   var inp = $("sd-filter-month");
   var n = new Date();
   filterMonthStr = n.getFullYear() + "-" + pad2(n.getMonth() + 1);
-  inp.value = filterMonthStr;
+  if (inp) inp.value = filterMonthStr;
 }
 
 function wireEvents() {
@@ -448,84 +301,100 @@ function wireEvents() {
     filterMonthStr = $("sd-filter-month").value;
     refreshAll();
   });
-  $("sd-btn-add-staff").addEventListener("click", function () {
-    openStaffModal(null);
-  });
-  $("sd-modal-staff-close").addEventListener("click", closeStaffModal);
-  $("sd-form-cancel").addEventListener("click", closeStaffModal);
-  $("sd-form-save").addEventListener("click", function () {
-    saveStaffForm();
-  });
-  $("sd-form-delete").addEventListener("click", function () {
-    deleteStaffForm();
-  });
-  $("sd-modal-staff-backdrop").addEventListener("click", function (e) {
-    if (e.target.id === "sd-modal-staff-backdrop") closeStaffModal();
-  });
-  $("sd-modal-detail-close").addEventListener("click", closeDetailModal);
-  $("sd-modal-detail-done").addEventListener("click", closeDetailModal);
-  $("sd-modal-detail-backdrop").addEventListener("click", function (e) {
-    if (e.target.id === "sd-modal-detail-backdrop") closeDetailModal();
-  });
-  $("sd-kpi-form").addEventListener("submit", async function (e) {
-    e.preventDefault();
-    try {
-      await saveStaffSettings({
-        teamMonthlyTargetRm: parseFloat($("sd-kpi-target").value) || 0,
-        bonusRateAboveTarget: parseFloat($("sd-kpi-rate").value) || 0,
-        ratingBase: typeof settings.ratingBase === "number" ? settings.ratingBase : 3.6
-      });
-      settings = await getStaffSettings();
-      setStatus("Tetapan KPI disimpan.", "ok");
-      refreshAll();
-    } catch (err) {
-      console.error(err);
-      setStatus(err.message || String(err), "err");
-    }
-  });
 }
 
-function main() {
+async function main() {
   initMonthInput();
   wireEvents();
   bindStaffPagehideOnce();
 
+  try {
+    await waitForAuthUser();
+    if (auth.currentUser) {
+      await auth.currentUser.getIdToken(false);
+    }
+  } catch (e) {
+    console.warn("[staff-dashboard] auth", e);
+  }
+
   staffFirestoreUnsubs.push(
     subscribeStaff(
-    function (snap) {
-      staffList = snap.docs.map(docToStaff);
-      refreshAll();
-    },
-    function (err) {
-      console.error(err);
-      setStatus(err.message || String(err), "err");
-    }
-  )
+      function (snap) {
+        try {
+          staffList = dedupeStaffByNameKey(
+            snap.docs.map(function (d) {
+              return docToStaff(d);
+            })
+          );
+        } catch (e) {
+          console.error(e);
+          staffList = [];
+        }
+        refreshAll();
+      },
+      function (err) {
+        console.error(err);
+        staffList = [];
+        setStatus(err.message || String(err), "err");
+        refreshAll();
+      }
+    )
   );
 
   staffFirestoreUnsubs.push(
-    subscribeRecentSales(
-    function (snap) {
-      saleDocs = snap.docs.slice();
-      refreshAll();
-    },
-    function (err) {
-      console.error(err);
-    },
-    450
-  )
+    subscribeStaffActivity(
+      function (snap) {
+        activityRows = snap.docs.map(function (d) {
+          var x = d.data();
+          return {
+            id: d.id,
+            staffId: x.staffId,
+            staffName: x.staffName,
+            kind: x.kind,
+            detail: x.detail,
+            createdAt: x.createdAt
+          };
+        });
+        refreshAll();
+      },
+      function (err) {
+        console.error(err);
+        setStatus(err.message || String(err), "err");
+      },
+      220
+    )
   );
 
-  getStaffSettings()
-    .then(function (s) {
-      settings = s;
-      $("sd-kpi-target").value = String(s.teamMonthlyTargetRm);
-      $("sd-kpi-rate").value = String(s.bonusRateAboveTarget);
-      refreshAll();
-    })
-    .catch(function (e) {
-      console.error(e);
-    });
+  staffFirestoreUnsubs.push(
+    subscribeClosedPosShifts(
+      function (snap) {
+        try {
+          posShiftRows = snap.docs.map(function (d) {
+            return { id: d.id, raw: d.data() };
+          });
+        } catch (e) {
+          console.error(e);
+          posShiftRows = [];
+        }
+        refreshAll();
+      },
+      function (err) {
+        console.error(err);
+        posShiftRows = [];
+        setStatus(err.message || String(err), "err");
+        refreshAll();
+      },
+      220
+    )
+  );
+
+  refreshAll();
 }
 
-main();
+main().catch(function (e) {
+  console.error(e);
+  try {
+    setStatus(e.message || String(e), "err");
+  } catch (e2) {}
+  refreshAll();
+});

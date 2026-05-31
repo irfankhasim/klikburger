@@ -16,7 +16,17 @@
       "firebase-service-account.json",
       "**/*.sqlite",
       "**/*.sqlite-shm",
-      "**/*.sqlite-wal"
+      "**/*.sqlite-wal",
+      "**/*.exe",
+      "**/*.apk",
+      "**/*.msi",
+      "**/*.dll",
+      "**/*.class",
+      "**/*.jar",
+      "**/*.bin",
+      "android/**",
+      "functions/**",
+      "www/**"
     ]
   },
   "emulators": {

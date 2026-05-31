@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <title>Papan pemuka pemilik — TAB KAUNTER</title>
+    <!-- Data papan pemuka: Firestore (pos_receipts, pos_orders, pos_audit_logs) — js/bo-dashboard-app.js -->
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/main-menu.css" />
+    <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <link rel="stylesheet" href="../css/dashboard-bo.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous"></script>
+  </head>
+  <body class="page-main-menu kb-dash-boot">
+    <!-- Dibuka dari main-menu (iframe) — auth dikongsi dengan halaman induk -->
+    <div class="layout">
+      <aside class="sidebar" aria-label="Navigasi pejabat belakang">
+        <a
+          href="main-menu.html"
+          class="sidebar__brand"
+          data-bo-handoff='{"r":"bo-dashboard","module":"bo"}'
+        >
+          <div class="sidebar__titles">
+            <span class="sidebar__name">TAB <span class="sidebar__name-accent">KAUNTER</span></span>
+            <span class="sidebar__tag">Back Office</span>
+          </div>
+          <span class="sidebar__chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+        </a>
+
+        <!-- Struktur sama seperti .js-nav-bo dalam main-menu.html -->
+        <nav class="sidebar__nav sidebar__nav--bo" aria-label="Menu pejabat belakang">
+          <p class="sidebar__section">Ringkasan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a class="sidebar__link is-active" href="dashboard.html" aria-current="page">
+                <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+                <span>Papan pemuka</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Laporan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-monthly-reports","module":"bo"}'
+              >
+                <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+                <span>Laporan penuh</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Produk &amp; kakitangan</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-calc","module":"bo","calcTab":"modifiers","calcCopy":"catalog","calcTopbar":"Menu produk"}'
+              >
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
+                <span>Produk</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link" href="main-menu.html" data-bo-handoff='{"r":"bo-staff","module":"bo"}'>
+                <i class="fa-solid fa-users" aria-hidden="true"></i>
+                <span>Kakitangan</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Inventori</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-calc","module":"bo","calcTab":"ingredients","calcCopy":"","calcTopbar":""}'
+              >
+                <i class="fa-solid fa-carrot" aria-hidden="true"></i>
+                <span>Bahan mentah</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-calc","module":"bo","calcTab":"modifiers","calcCopy":"","calcTopbar":""}'
+              >
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
+                <span>Produk &amp; kos</span>
+              </a>
+            </li>
+          </ul>
+          <p class="sidebar__section">Sistem</p>
+          <ul class="sidebar__list">
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-settings","module":"bo","settingsTab":"database"}'
+              >
+                <i class="fa-solid fa-database" aria-hidden="true"></i>
+                <span>Pangkalan data</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar__link"
+                href="main-menu.html"
+                data-bo-handoff='{"r":"bo-settings","module":"bo","settingsTab":"staff"}'
+              >
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                <span>Tetapan</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        <div class="sidebar__footer">
+          <div id="kb-status-bar" class="kb-status-bar" aria-hidden="true"></div>
+          <a class="sidebar__out" href="main-menu.html" data-bo-handoff='{"r":"bo-dashboard","module":"bo"}'>
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+            <span>Menu utama</span>
+          </a>
+        </div>
+      </aside>
+
+      <div class="layout__main dash-page-shell">
+        <header class="topbar topbar--dashboard">
+          <h1 class="topbar__title">Papan pemuka pemilik</h1>
+          <div class="dash-topbar-meta">
+            <div class="dash-live">
+              <span class="dash-live__dot" aria-hidden="true"></span>
+              <span>Realtime</span>
+            </div>
+            <span class="dash-clock" id="od-clock" aria-live="polite"></span>
+            <div class="dash-user">
+              <div class="dash-user__avatar" aria-hidden="true">—</div>
+              <div class="dash-user__meta">
+                <span class="dash-user__name">—</span>
+                <span class="dash-user__role">—</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <p id="od-dash-error" class="dash-dash-error" hidden role="alert"></p>
+
+        <main class="content dash-content dash-content--enter" id="od-main">
+          <div class="dash-board">
+          <section class="dash-section dash-section--kpis" aria-label="Indikator utama">
+          <div class="dash-kpi-intro">
+            <p class="dash-kpi-intro__line dash-kpi-intro__line--compact" id="od-kpi-period" aria-live="polite"></p>
+            <div class="dash-filter" id="od-dash-filter" role="group" aria-label="Penapis tarikh">
+              <div class="dash-filter__start">
+                <span class="dash-filter__label">Tapis</span>
+                <div class="dash-filter__seg">
+                  <button type="button" class="dash-filter__btn kb-surface-btn is-active" data-dash-mode="today">Hari ini</button>
+                  <button type="button" class="dash-filter__btn kb-surface-btn" data-dash-mode="yesterday">Semalam</button>
+                  <button type="button" class="dash-filter__btn kb-surface-btn" data-dash-mode="pick">Tarikh…</button>
+                </div>
+              </div>
+              <div class="dash-filter__pick" id="od-filter-date-wrap">
+                <input
+                  type="date"
+                  class="dash-filter__date"
+                  id="od-filter-date"
+                  aria-label="Tarikh skop (aktif bila mod Tarikh dipilih)"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="dash-kpi-grid">
+            <article class="dash-kpi dash-kpi--gold">
+              <p class="dash-kpi__label">Jumlah jualan</p>
+              <p class="dash-kpi__value" id="od-kpi-sales">—</p>
+              <p class="dash-kpi__delta dash-kpi__delta--muted" id="od-kpi-sales-delta">Memuatkan…</p>
+            </article>
+            <article class="dash-kpi dash-kpi--green">
+              <p class="dash-kpi__label">Untung kasar</p>
+              <p class="dash-kpi__value" id="od-kpi-profit">—</p>
+              <p class="dash-kpi__delta dash-kpi__delta--muted" id="od-kpi-profit-delta"></p>
+            </article>
+            <article class="dash-kpi dash-kpi--blue">
+              <p class="dash-kpi__label">Kos bahan (COGS)</p>
+              <p class="dash-kpi__value" id="od-kpi-cogs">—</p>
+              <p class="dash-kpi__delta dash-kpi__delta--muted" id="od-kpi-cogs-delta"></p>
+            </article>
+            <article class="dash-kpi dash-kpi--purple">
+              <p class="dash-kpi__label">Jumlah order</p>
+              <p class="dash-kpi__value" id="od-kpi-orders">—</p>
+              <p class="dash-kpi__delta dash-kpi__delta--muted" id="od-kpi-orders-delta"></p>
+            </article>
+          </div>
+          </section>
+
+          <section class="dash-section dash-section--ops-layout" aria-label="Operasi semasa">
+          <div class="dash-split dash-split--2-1">
+            <section class="dash-panel dash-panel--stretch">
+              <div class="dash-panel__head">
+                <h2 class="dash-panel__title">
+                  <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Pesanan
+                  <span class="dash-panel__scope" id="od-orders-scope"></span>
+                </h2>
+              </div>
+              <div id="od-orders-mount" class="dash-panel__body dash-panel__body--orders"></div>
+            </section>
+
+            <div class="dash-stack">
+              <section class="dash-panel dash-panel--alerts-col dash-panel--stretch" aria-label="Amaran dan notis">
+                <div class="dash-panel__head">
+                  <h2 class="dash-panel__title">
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Amaran &amp; notis
+                  </h2>
+                </div>
+                <div class="dash-panel__body dash-panel__body--alerts-scroll">
+                  <div class="dash-alerts" id="od-alerts-mount"></div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <section class="dash-panel dash-panel--stretch dash-panel--drawer-wide" aria-label="Status drawer">
+            <div class="dash-panel__head">
+              <h2 class="dash-panel__title"><i class="fa-solid fa-money-bill-wave" aria-hidden="true"></i> Status drawer</h2>
+            </div>
+            <div id="od-drawer-mount" class="dash-panel__body dash-panel__body--drawer"></div>
+          </section>
+          </section>
+
+          <section class="dash-section" aria-label="Analitik">
+          <div class="dash-split dash-split--1-1">
+            <section class="dash-panel dash-panel--stretch">
+              <div class="dash-panel__head">
+                <h2 class="dash-panel__title"><i class="fa-solid fa-chart-area" aria-hidden="true"></i> Carta jualan setiap jam</h2>
+              </div>
+              <div class="dash-panel__body dash-panel__body--chart">
+              <div class="dash-chart-wrap"><canvas id="od-chart-sales" aria-label="Carta jualan mengikut jam"></canvas></div>
+              </div>
+            </section>
+            <div class="dash-stack dash-stack--analytics">
+              <section class="dash-panel dash-panel--products-side">
+                <div class="dash-panel__head">
+                  <h2 class="dash-panel__title"><i class="fa-solid fa-trophy" aria-hidden="true"></i> Produk terlaris</h2>
+                </div>
+                <div id="od-products-mount" class="dash-panel__body"></div>
+              </section>
+              <section class="dash-panel dash-panel--pay-fill">
+                <div class="dash-panel__head">
+                  <h2 class="dash-panel__title"><i class="fa-solid fa-credit-card" aria-hidden="true"></i> Kaedah pembayaran</h2>
+                </div>
+                <div id="od-pay-mount" class="dash-panel__body dash-panel__body--pay-fill"></div>
+              </section>
+            </div>
+          </div>
+          </section>
+
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="../js/bo-dashboard-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

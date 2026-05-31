@@ -30,6 +30,7 @@ import {
 } from "./firebase/collections.js";
 import { PROTOTYPE_MANAGER_PIN } from "./pos-security-constants.js";
 import { ensurePosCountersDoc } from "./pos-checkout-firestore-writer.js";
+import { varianceCategoryFromVariance } from "./drawer-variance.js";
 
 function defaultShift() {
   return {
@@ -245,6 +246,13 @@ export function subscribePosHub(fn) {
 
 export function getPosHubState() {
   return hubCache;
+}
+
+/** Semak Firestore untuk syif drawer yang masih `open` (contoh: sebelum log keluar dari halaman login). */
+export async function queryOpenShiftExists() {
+  var openShiftQ = query(collection(db, COL_POS_SHIFTS), where("status", "==", "open"), limit(1));
+  var snap = await getDocs(openShiftQ);
+  return !snap.empty;
 }
 
 export async function appendPosAudit(entry) {
@@ -548,6 +556,7 @@ export async function shiftClose(p) {
     expectedDrawer: expected,
     actualDrawer: Math.round(actual * 100) / 100,
     variance: variance,
+    varianceCategory: varianceCategoryFromVariance(variance),
     salesTotal: br.total,
     cashSales: br.cash,
     qrSales: br.duitnow,

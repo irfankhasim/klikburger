@@ -1174,6 +1174,11 @@
         border-color: #999;
       }
 
+      .btn--outline:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.35);
+      }
+
       /** Modal tengah — rekod belian / sejarah */
       .ing-ledger-backdrop {
         position: fixed;

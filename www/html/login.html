@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d97706" />
+    <meta name="description" content="TAB KAUNTER — log masuk POS kaunter." />
+    <title>Log masuk — TAB KAUNTER</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/login.css" />
+  </head>
+  <body class="page-login">
+    <div class="login-bg" aria-hidden="true"></div>
+    <div class="app-wrap">
+      <h1 class="sr-only">Selamat datang — log masuk TAB KAUNTER</h1>
+
+      <div class="login-split">
+        <div class="login-split__brand">
+          <img
+            class="login-hero__logo"
+            src="../assets/tabkaunter.png"
+            alt="TAB KAUNTER — Jual Tanpa Risau, Urus Tanpa Batas!"
+            decoding="async"
+          />
+          <p class="login-hero__trademark">Jual Tanpa Risau, Urus Tanpa Batas!</p>
+        </div>
+
+        <main class="card login-card login-split__main" aria-labelledby="login-heading">
+          <div class="login-card__head">
+            <h2 id="login-heading" class="login-card__title">Selamat datang</h2>
+            <p class="login-card__lead">
+              Gembira melihat anda semula. Log masuk untuk teruskan ke menu utama.
+            </p>
+          </div>
+
+          <form class="login-form" action="main-menu.html" method="get" novalidate>
+            <div class="field field--with-icon">
+              <label class="field__label" for="email">E-mel</label>
+              <div class="field__control">
+                <span class="field__icon" aria-hidden="true"><i class="fa-regular fa-envelope"></i></span>
+                <input
+                  class="field__input field__input--with-icon"
+                  type="email"
+                  id="email"
+                  name="email"
+                  autocomplete="username"
+                  placeholder="nama@restoran.com"
+                  required
+                />
+              </div>
+            </div>
+            <div class="field field--with-icon">
+              <label class="field__label" for="password">Kata laluan</label>
+              <div class="field__control">
+                <span class="field__icon" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
+                <input
+                  class="field__input field__input--with-icon"
+                  type="password"
+                  id="password"
+                  name="password"
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  class="field__toggle"
+                  id="password-toggle"
+                  aria-label="Tunjuk kata laluan"
+                  aria-pressed="false"
+                >
+                  <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn--primary login-submit">
+              <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+              Teruskan ke menu
+            </button>
+          </form>
+
+          <div class="form-footer login-footer">
+            <span>Belum ada akaun?</span>
+            <a href="#">Mohon akses</a>
+            <small class="login-footer__copyright">Copyright &copy; Irfan Khasim</small>
+          </div>
+
+          <script type="module" src="../js/login.js"></script>
+        </main>
+      </div>
+    </div>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

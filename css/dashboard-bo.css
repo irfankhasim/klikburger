@@ -1,0 +1,1069 @@
+/**
+ * Papan pemuka pemilik — selaras base.css + main-menu.css.
+ * Ruang nafas, hierarki & grid untuk paparan kurang padat, lebih profesional.
+ */
+
+/* —— Token ruang (seluruh skrin dashboard: topbar + main) —— */
+.layout__main.dash-page-shell {
+  --dash-r-lg: 12px;
+  --dash-r-md: 8px;
+  --dash-space-1: 0.5rem;
+  --dash-space-2: 0.75rem;
+  --dash-space-3: 1rem;
+  --dash-space-4: 1.25rem;
+  --dash-space-5: 1.5rem;
+  --dash-space-6: 2rem;
+  --dash-space-7: 2.5rem;
+  --dash-max: min(100%, 1320px);
+  --dash-line: rgba(0, 0, 0, 0.06);
+  --dash-section-gap: clamp(1.25rem, 2.5vw, 2rem);
+  --dash-stack-gap: clamp(1rem, 2vw, 1.5rem);
+}
+
+/* Padding kandungan BO dashboard — responsif, elak sentuhan tepi skrin */
+.content.dash-content {
+  padding-left: clamp(0.75rem, 3.5vw, 1.5rem);
+  padding-right: clamp(0.75rem, 3.5vw, 1.5rem);
+  padding-bottom: clamp(1.5rem, 4vw, 2.75rem);
+  box-sizing: border-box;
+}
+
+/* Lalai halaman: layout halus (selari shell menu utama) */
+.page-main-menu.kb-dash-boot .layout {
+  opacity: 0;
+}
+
+@keyframes dashContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+a.sidebar__brand {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sidebar__brand .sidebar__chevron {
+  display: none;
+}
+
+/* —— Skrol: topbar kekal, kandungan dalam <main> sahaja (halaman penuh) —— */
+html:not(.kb-embed) .layout__main.dash-page-shell {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+html:not(.kb-embed) .layout__main.dash-page-shell > main.content.dash-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mudah alih: lajur menegak — elakkan dua blok “100vh”; guna sticky topbar + skrol halaman */
+@media (max-width: 720px) {
+  html:not(.kb-embed) .layout__main.dash-page-shell {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  html:not(.kb-embed) .layout__main.dash-page-shell > main.content.dash-content {
+    overflow: visible;
+  }
+
+  .topbar.topbar--dashboard {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* —— Topbar (paparan penuh sahaja) —— */
+.topbar.topbar--dashboard {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: var(--dash-space-3) var(--dash-space-4);
+  padding-bottom: var(--dash-space-4);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--dash-space-3);
+  background: var(--content-bg);
+}
+
+.topbar--dashboard .topbar__title {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.dash-topbar-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--dash-space-3) var(--dash-space-4);
+  margin-left: auto;
+}
+
+.dash-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.dash-live__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--success);
+  animation: dashPulse 1.5s ease-in-out infinite;
+}
+
+.dash-clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--dash-r-md);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+
+.dash-user {
+  display: flex;
+  align-items: center;
+  gap: var(--dash-space-2);
+  padding: 0.15rem 0.35rem 0.15rem 0.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.dash-user__avatar {
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid rgba(245, 166, 35, 0.4);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-user__meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  padding-right: 0.35rem;
+}
+
+.dash-user__name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dash-user__role {
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+/* —— Skrol lembut kandungan —— */
+.dash-content {
+  padding-top: var(--dash-space-3);
+}
+
+.dash-content--enter {
+  animation: dashContentIn 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.1s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-main-menu.kb-dash-boot .layout {
+    opacity: 1;
+  }
+
+  .dash-content--enter {
+    animation: none;
+    animation-delay: 0;
+  }
+}
+
+/* —— Bingkai utama: had lebar + zon bertindih —— */
+.dash-board {
+  width: 100%;
+  max-width: var(--dash-max);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-section-gap);
+  min-width: 0;
+}
+
+.dash-section {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* KPI: jarak seragam antara penapis & grid kad */
+.dash-section--kpis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-stack-gap);
+}
+
+/* —— Konteks tempoh (KPI) —— */
+.dash-kpi-intro {
+  margin-bottom: 0;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-space-2);
+}
+
+.dash-kpi-intro__line {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.015em;
+  line-height: 1.45;
+}
+
+.dash-kpi-intro__line--compact {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* —— Penapis skop tarikh (ikut kalendar tempatan / jam sistem) —— */
+.dash-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dash-space-2) var(--dash-space-3);
+  margin-top: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--dash-space-2) var(--dash-space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--dash-r-md);
+}
+
+.dash-filter__start {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dash-space-2) var(--dash-space-3);
+  min-width: 0;
+}
+
+.dash-filter__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dash-filter__seg {
+  flex: 1 1 12rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-muted);
+  border-radius: var(--dash-r-md);
+}
+
+.dash-filter__btn {
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: calc(var(--dash-r-md) - 2px);
+  min-width: 0;
+  width: 100%;
+  text-align: center;
+}
+
+.dash-filter__pick {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.dash-filter__date {
+  font: inherit;
+  font-size: 0.875rem;
+  min-width: 10.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--dash-r-md);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.dash-filter__date:disabled {
+  opacity: 0.88;
+  cursor: default;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+@media (max-width: 520px) {
+  .dash-filter__seg {
+    flex: 1 1 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-filter__pick {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .dash-filter__date {
+    width: 100%;
+  }
+}
+
+.dash-panel__scope {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 0.25rem;
+}
+
+/* —— KPI —— */
+.dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--dash-stack-gap);
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .dash-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .dash-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dash-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--dash-r-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  padding: var(--dash-space-4) var(--dash-space-5);
+  min-height: 6.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.dash-kpi:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+}
+
+.dash-kpi::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--dash-r-lg) var(--dash-r-lg) 0 0;
+}
+
+.dash-kpi--gold::before {
+  background: var(--accent);
+}
+.dash-kpi--green::before {
+  background: var(--success);
+}
+.dash-kpi--blue::before {
+  background: #1565c0;
+}
+.dash-kpi--purple::before {
+  background: #6d4ba8;
+}
+
+.dash-kpi__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 var(--dash-space-3);
+  line-height: 1.3;
+}
+
+.dash-kpi__value {
+  font-size: clamp(1.25rem, 2.2vw, 1.5rem);
+  font-weight: 800;
+  margin: 0 0 var(--dash-space-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.dash-kpi__delta {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--success);
+  margin: 0;
+  margin-top: auto;
+  line-height: 1.4;
+}
+
+.dash-kpi__delta--muted {
+  color: var(--text-muted);
+}
+
+/* —— Grid utama —— */
+.dash-split {
+  display: grid;
+  gap: var(--dash-stack-gap);
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+/* Isi sel grid: penuh tinggi lajur tanpa pecahan peratus yang bertindih */
+.dash-split > .dash-panel,
+.dash-split > .dash-stack {
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.dash-split > .dash-panel.dash-panel--stretch {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.dash-split--2-1 {
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+}
+
+.dash-split--1-1 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Analitik: lajur kanan = tinggi carta; petak Kaedah pembayaran regang ke bawah */
+.dash-split--1-1 > .dash-stack--analytics {
+  height: 100%;
+  align-self: stretch;
+}
+
+.dash-split--1-1 > .dash-stack--analytics > .dash-panel--products-side {
+  flex: 0 0 auto;
+}
+
+.dash-split--1-1 > .dash-stack--analytics > .dash-panel--pay-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-split--1-1 > .dash-stack--analytics > .dash-panel--pay-fill .dash-panel__body--pay-fill {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.dash-split--1-1 > .dash-panel.dash-panel--stretch .dash-panel__body--chart {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 1024px) {
+  .dash-split--2-1,
+  .dash-split--1-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-split > .dash-panel.dash-panel--stretch {
+    height: auto;
+    min-height: 0;
+  }
+
+  .dash-split--1-1 > .dash-stack--analytics {
+    height: auto;
+  }
+
+  .dash-split--1-1 > .dash-stack--analytics > .dash-panel--pay-fill {
+    flex: 0 0 auto;
+  }
+
+  .dash-split--1-1 > .dash-stack--analytics > .dash-panel--pay-fill .dash-panel__body--pay-fill {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+  }
+}
+
+.dash-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-stack-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Operasi semasa: Pesanan + Amaran (2:1), kemudian Status drawer lebar penuh */
+.dash-section--ops-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-section-gap);
+  min-width: 0;
+}
+
+.dash-panel--drawer-wide {
+  width: 100%;
+  min-width: 0;
+}
+
+.dash-panel__body--drawer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--dash-space-3);
+  align-content: start;
+}
+
+.dash-panel__body--drawer .dash-empty-state {
+  grid-column: 1 / -1;
+}
+
+.dash-panel__body--drawer .dash-drawer-row {
+  margin: 0;
+  padding: var(--dash-space-3) var(--dash-space-4);
+  border: 1px solid var(--dash-line);
+  border-radius: var(--dash-r-md);
+  background: var(--surface-muted);
+  box-sizing: border-box;
+}
+
+.dash-panel__body--drawer .dash-drawer-row:first-child {
+  padding-top: var(--dash-space-3);
+}
+
+.dash-panel__body--drawer .dash-drawer-row:last-child {
+  padding-bottom: var(--dash-space-3);
+}
+
+/* —— Panel —— */
+.dash-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--dash-r-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dash-panel:hover {
+  border-color: #cfcfcf;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.dash-panel--stretch {
+  /* Jangan guna min-height:100% — boleh pecah di grid/flex & menyebabkan seretan bertindih */
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.dash-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dash-space-3);
+  padding: var(--dash-space-4) var(--dash-space-5);
+  border-bottom: 1px solid var(--dash-line);
+  flex-shrink: 0;
+}
+
+.dash-panel__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.3;
+}
+
+.dash-panel__title i {
+  color: var(--accent);
+  font-size: 1rem;
+  opacity: 0.95;
+}
+
+.dash-panel__body {
+  padding: var(--dash-space-4) var(--dash-space-5) var(--dash-space-5);
+  flex: 1;
+  min-height: 0;
+}
+
+.dash-panel__body--orders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-space-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--dash-space-2);
+}
+
+.dash-panel__body--orders::-webkit-scrollbar {
+  width: 6px;
+}
+.dash-panel__body--orders::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 999px;
+}
+
+.dash-panel__body--chart {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--dash-space-3);
+  padding-block: var(--dash-space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* —— Kad pesanan (satu lapisan) —— */
+.dash-order-card {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--dash-r-md);
+  padding: var(--dash-space-3) var(--dash-space-4);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dash-order-card:hover {
+  border-color: rgba(245, 166, 35, 0.35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.dash-order-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dash-space-2);
+  margin-bottom: var(--dash-space-2);
+}
+
+.dash-order-card__no {
+  font-weight: 800;
+  color: var(--accent);
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.dash-order-card__amt {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.dash-order-card__items {
+  font-size: 0.875rem;
+  color: var(--text);
+  margin: 0 0 var(--dash-space-3);
+  line-height: 1.5;
+}
+
+.dash-order-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dash-space-2);
+}
+
+.dash-order-card__ago {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash-pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dash-pill--waiting {
+  color: var(--warning);
+  background: rgba(183, 119, 13, 0.12);
+  border: 1px solid rgba(183, 119, 13, 0.3);
+}
+
+.dash-pill--preparing {
+  color: #1565c0;
+  background: rgba(21, 101, 192, 0.08);
+  border: 1px solid rgba(21, 101, 192, 0.25);
+}
+
+.dash-pill--ready {
+  color: var(--success);
+  background: rgba(46, 125, 30, 0.1);
+  border: 1px solid rgba(46, 125, 30, 0.28);
+}
+
+.dash-pill--handed {
+  color: var(--text-muted);
+  background: #f0f0f1;
+  border: 1px solid var(--border);
+}
+
+/* —— Drawer —— */
+.dash-drawer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--dash-space-3);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--dash-line);
+  font-size: 0.875rem;
+}
+
+.dash-drawer-row:first-child {
+  padding-top: 0;
+}
+
+.dash-drawer-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dash-drawer-row span:first-child {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash-drawer-row strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.dash-var-pos {
+  color: var(--success);
+}
+
+.dash-progress {
+  height: 9px;
+  border-radius: 999px;
+  background: #ebedf0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.dash-progress--panel {
+  margin: 0 var(--dash-space-5) var(--dash-space-5);
+  flex-shrink: 0;
+}
+
+.dash-progress__fill {
+  height: 100%;
+  width: 92%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2e7d1e, #43a047);
+  transition: width 0.3s ease;
+}
+
+/* —— Carta —— */
+.dash-chart-wrap {
+  width: 100%;
+  min-height: 200px;
+  height: clamp(200px, 32vh, 320px);
+  max-height: 360px;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.dash-chart-wrap canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* —— Bar produk / bayaran —— */
+.dash-bar-row {
+  margin-bottom: var(--dash-space-4);
+}
+
+.dash-bar-row:last-child {
+  margin-bottom: 0;
+}
+
+.dash-bar-row__lbl {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.8125rem;
+  margin-bottom: var(--dash-space-2);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash-bar-track--tight {
+  margin-top: var(--dash-space-2);
+}
+
+.dash-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #ebedf0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.dash-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d4921a, var(--accent));
+}
+
+.dash-bar-fill--blue {
+  background: linear-gradient(90deg, #1565c0, #42a5f5);
+}
+
+.dash-top-item {
+  display: flex;
+  align-items: center;
+  gap: var(--dash-space-3);
+  margin-bottom: var(--dash-space-4);
+}
+
+.dash-top-item:last-child {
+  margin-bottom: 0;
+}
+
+.dash-rank {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dash-top-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-top-name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dash-top-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* —— Amaran —— */
+.dash-panel__body--alerts-scroll {
+  max-height: min(40vh, 22rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dash-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-space-3);
+}
+
+.dash-alert {
+  display: flex;
+  gap: var(--dash-space-3);
+  padding: var(--dash-space-3) var(--dash-space-4);
+  border-radius: var(--dash-r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dash-alert:hover {
+  border-color: var(--border-strong);
+  background: #f5f5f6;
+}
+
+.dash-alert--amber {
+  border-left: 4px solid var(--accent);
+}
+
+.dash-alert--blue {
+  border-left: 4px solid #1565c0;
+}
+
+.dash-alert--green {
+  border-left: 4px solid var(--success);
+}
+
+.dash-alert i {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+}
+
+.dash-alert time {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--dash-space-2);
+  font-weight: 500;
+}
+
+/* —— Dibenam dalam iframe menu utama —— */
+html.kb-embed .sidebar {
+  display: none !important;
+}
+
+html.kb-embed .layout__main {
+  min-height: 100vh;
+}
+
+html.kb-embed .topbar.topbar--dashboard {
+  display: none !important;
+}
+
+html.kb-embed.page-main-menu.kb-dash-boot .layout {
+  opacity: 1 !important;
+}
+
+html.kb-embed .dash-content {
+  padding-top: 0;
+  padding-bottom: var(--dash-space-5);
+}
+
+html.kb-embed .dash-board {
+  gap: var(--dash-section-gap);
+}
+
+html.kb-embed .content.dash-content {
+  padding-left: clamp(0.5rem, 2.5vw, 1.25rem);
+  padding-right: clamp(0.5rem, 2.5vw, 1.25rem);
+}
+
+html.kb-embed .dash-content--enter {
+  animation: none;
+  animation-delay: 0;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kb-embed .dash-content--enter {
+    opacity: 1;
+  }
+
+  .dash-kpi:hover {
+    transform: none;
+  }
+}
+
+/* Keadaan kosong & ralat papan pemuka (data sebenar) */
+.dash-empty-state {
+  margin: 0;
+  padding: var(--dash-space-4);
+  text-align: center;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dash-dash-error {
+  margin: 0 var(--dash-space-4) var(--dash-space-3);
+  padding: var(--dash-space-2) var(--dash-space-3);
+  border-radius: 8px;
+  background: #fff3e0;
+  color: #8a4a00;
+  font-size: 0.875rem;
+}
+
+html.kb-embed .dash-dash-error {
+  margin-inline: 0;
+}

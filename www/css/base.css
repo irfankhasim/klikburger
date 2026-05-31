@@ -1,0 +1,408 @@
+/* Shared tokens — selaras dengan pos-cost-calculator.html */
+:root {
+  --sidebar-bg: #1a1a1a;
+  --sidebar-text: #e8e8e8;
+  --sidebar-muted: #9a9a9a;
+  --sidebar-active: #2a2a2a;
+  --sidebar-accent: #f5a623;
+  --content-bg: #f4f4f5;
+  --surface: #ffffff;
+  --text: #1a1a1a;
+  --text-muted: #5c5c5c;
+  --border: #ddd;
+  --success: #2e7d1e;
+  --danger: #c0392b;
+  --warning: #b7770d;
+  --radius: 10px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Alias untuk komponen sedia ada */
+  --accent: var(--sidebar-accent);
+  --accent-hover: #ffc44d;
+  --accent-active: #d4921a;
+  --accent-soft: rgba(245, 166, 35, 0.18);
+  --accent-ring: rgba(245, 166, 35, 0.35);
+  --bg-page: var(--content-bg);
+  --surface-muted: #fafafa;
+  --border-strong: #ccc;
+  --radius-lg: var(--radius);
+  --radius-md: 6px;
+  --shadow-sm: var(--shadow);
+  --shadow-md: var(--shadow);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+  /* Kawalan permukaan / segmen — seragam dengan .btn--outline & .kb-surface-btn */
+  --kb-control-surface: var(--surface);
+  --kb-control-surface-hover: var(--surface-muted);
+  --kb-control-border: var(--border);
+  --kb-control-border-strong: var(--border-strong);
+  --kb-control-active-bar: var(--sidebar-accent);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  background: var(--content-bg);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.app-wrap {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+}
+
+.brand__name-accent {
+  color: var(--sidebar-accent);
+}
+
+.brand__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--radius);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-accent);
+  font-size: 1.35rem;
+  box-shadow: var(--shadow);
+}
+
+.brand__name {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.brand__tag {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.card {
+  width: 100%;
+  max-width: 26.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 2rem 1.85rem 1.85rem;
+}
+
+.card--wide {
+  max-width: 52rem;
+}
+
+.card__title {
+  margin: 0 0 0.4rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.card__lead {
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.field {
+  margin-bottom: 1.1rem;
+}
+
+.field__label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.field__input {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field__input:hover {
+  border-color: #bbb;
+}
+
+.field__input:focus {
+  border-color: var(--sidebar-accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.field__input::placeholder {
+  color: #888;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s, background 0.15s;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn--primary {
+  background: var(--sidebar-bg);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.btn--primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn--primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Butang putih / sisi — sama corak hover, tekan, fokus seperti utama */
+.btn--outline {
+  background: var(--kb-control-surface);
+  color: var(--text);
+  border: 1px solid var(--kb-control-border-strong);
+  box-shadow: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn--outline:hover:not(:disabled) {
+  background: var(--kb-control-surface-hover);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.btn--outline:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn--outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn--ghost {
+  margin-top: 0.75rem;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--kb-control-border);
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--kb-control-surface-hover);
+  color: var(--text);
+  border-color: var(--kb-control-border-strong);
+}
+
+.btn--ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.btn--ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/**
+ * Butang segmen / tab lebar permukaan (penapis papan pemuka, tab laporan, dll.)
+ * Gabung dengan .is-active atau aria-selected="true" untuk keadaan pilihan.
+ */
+.kb-surface-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.kb-surface-btn:hover:not(:disabled):not(.is-active):not([aria-selected="true"]) {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.045);
+  border-color: transparent;
+}
+
+.kb-surface-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.kb-surface-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.kb-surface-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kb-surface-btn.is-active,
+.kb-surface-btn[aria-selected="true"] {
+  color: var(--text);
+  background: var(--kb-control-surface);
+  border-color: var(--kb-control-border);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 -2px 0 0 var(--kb-control-active-bar);
+}
+
+.form-footer {
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.form-footer a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  border-bottom: 2px solid var(--sidebar-accent);
+}
+
+.form-footer a:hover {
+  color: var(--sidebar-accent);
+}
+
+.hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.45;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tajuk halaman standard — tajuk + pemisah + perihalan ringkas (BO / embed) */
+.kb-page-header {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-page-header__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.kb-page-title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.kb-page-lead {
+  margin: 0;
+  max-width: 46rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.kb-page-lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 1.5rem 1.25rem;
+  }
+}

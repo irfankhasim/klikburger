@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seed data permulaan — Klik Burger</title>
+    <link rel="stylesheet" href="../css/base.css" />
+    <style>
+      body {
+        max-width: 40rem;
+        margin: 2rem auto;
+        padding: 0 1rem 2rem;
+        font-family: var(--font);
+        color: var(--text);
+        background: var(--content-bg);
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      p.lead {
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        margin: 0 0 1rem;
+      }
+      .kb-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.55rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--sidebar-bg);
+        color: #fff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      pre {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.75rem 1rem;
+        font-size: 0.78rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      a {
+        color: var(--sidebar-accent);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Seed data permulaan (bahan + menu)</h1>
+    <p class="lead">
+      Isi <strong>21 bahan mentah</strong> (lot FIFO + lejar harga + rekod belian agregat) dan
+      <strong>15 produk</strong> dalam <code>modifiers</code> dengan resipi. Hanya berjaya jika kedua-dua koleksi
+      <code>ingredients</code> dan <code>modifiers</code> masih kosong.
+    </p>
+    <div class="kb-actions">
+      <button type="button" id="btn-run">Jalankan seed</button>
+    </div>
+    <p id="status" class="lead" style="margin-top:0"></p>
+    <pre id="out" hidden></pre>
+    <p class="lead" style="margin-top:1.25rem">
+      Selepas berjaya, buka <a href="pos-cost-calculator.html#modifiers">Produk &amp; kos</a> atau
+      <a href="pos-order.html">POS Jualan</a>.
+    </p>
+    <script type="module">
+      import { runBurgerStartupSeed } from "../js/cost-calculator/burger-startup-seed.js";
+
+      var btn = document.getElementById("btn-run");
+      var statusEl = document.getElementById("status");
+      var out = document.getElementById("out");
+
+      btn.addEventListener("click", async function () {
+        btn.disabled = true;
+        statusEl.textContent = "Menjalankan…";
+        out.hidden = true;
+        try {
+          var r = await runBurgerStartupSeed();
+          if (r.skipped) {
+            statusEl.textContent = r.reason || "Dilangkau.";
+          } else if (r.ok) {
+            statusEl.textContent = "Berjaya.";
+            out.textContent = JSON.stringify(r.counts, null, 2);
+            out.hidden = false;
+          } else {
+            statusEl.textContent = "Gagal: " + (r.error || "ralat tidak diketahui");
+            if (r.code) out.textContent = String(r.code);
+            out.hidden = !r.code;
+          }
+        } catch (e) {
+          statusEl.textContent = e && e.message ? e.message : String(e);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

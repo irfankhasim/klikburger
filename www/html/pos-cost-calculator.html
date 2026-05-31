@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Klik Burger — Kalkulator kos jualan</title>
+    <link rel="stylesheet" href="../css/pos-cost-calculator.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <aside class="app-sidebar" aria-label="Navigasi">
+      <div class="app-sidebar__brand">TAB <span>KAUNTER</span></div>
+      <nav class="app-sidebar__nav">
+        <button type="button" class="app-sidebar__btn is-active" data-page="ingredients" id="nav-ingredients">
+          Bahan mentah
+        </button>
+        <button type="button" class="app-sidebar__btn" data-page="modifiers" id="nav-modifiers">Produk &amp; kos</button>
+      </nav>
+    </aside>
+
+    <main class="app-main">
+      <p id="app-loading" class="app-loading" aria-live="polite">Memuatkan data…</p>
+
+      <section class="page-panel is-visible ing-page" id="page-ingredients" aria-labelledby="h-ing">
+        <header class="ing-page-header">
+          <h1 class="page-title page-title--ing" id="h-ing">Bahan mentah</h1>
+          <p class="ing-page-lead">Isi borang <strong>Tambah bahan</strong>, simpan, kemudian urus stok melalui <strong>Tambah belian</strong>.</p>
+        </header>
+
+        <p id="ing-firestore-status" class="kb-status kb-status--hidden" role="status" aria-live="polite"></p>
+
+        <div class="ing-toolbar">
+          <button type="button" class="btn btn--primary" id="btn-add-ing">+ Tambah bahan</button>
+        </div>
+
+        <div id="ing-add-draft" class="ing-add-draft" hidden>
+          <form id="ing-add-draft-form" class="ing-add-draft__form" aria-label="Butiran bahan baharu">
+            <p class="ing-add-draft__title">Bahan baharu</p>
+            <div class="ing-add-draft__grid">
+              <div class="field">
+                <label for="ing-draft-name">Nama bahan</label>
+                <input type="text" id="ing-draft-name" name="name" required autocomplete="off" placeholder="cth. Ayam dada" />
+              </div>
+              <div class="field">
+                <label for="ing-draft-unit">Unit pakej</label>
+                <select id="ing-draft-unit" name="unit" aria-label="Unit pakej"></select>
+              </div>
+              <div class="field">
+                <label for="ing-draft-price">Jumlah (RM) pakej</label>
+                <input type="number" id="ing-draft-price" name="price" min="0" step="0.01" value="0" required />
+              </div>
+              <div class="field">
+                <label for="ing-draft-qty">Kuantiti pakej</label>
+                <input type="number" id="ing-draft-qty" name="qty" min="0.001" step="any" value="1" required />
+              </div>
+            </div>
+            <p id="ing-add-draft-err" class="kb-status kb-status--hidden ing-add-draft__err" role="alert"></p>
+            <div class="ing-add-draft__actions">
+              <button type="button" class="btn btn--ghost" id="ing-draft-cancel">Batal</button>
+              <button type="submit" class="btn btn--primary" id="ing-draft-submit">Simpan ke senarai</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card table-wrap ing-table-card">
+          <div class="ing-table-card__head">
+            <h2 class="ing-table-card__title">Senarai bahan</h2>
+          </div>
+          <table class="ing-table ing-table--main" id="ing-table">
+            <thead>
+              <tr>
+                <th scope="col" class="ing-th-ing">Bahan</th>
+                <th scope="col" class="ing-th-pack">Harga pakej<br /><span class="ing-th-sub">(RM)</span></th>
+                <th scope="col" class="ing-th-pack">Baki / asal</th>
+                <th scope="col" class="ing-th-pack ing-th-pack-end">Unit</th>
+                <th scope="col" class="num ing-th-cpu">Kos / unit</th>
+                <th scope="col" class="ing-th-status">Status</th>
+                <th scope="col" class="ing-th-actions">Tindakan</th>
+              </tr>
+            </thead>
+            <tbody id="ing-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="page-panel" id="page-modifiers" aria-labelledby="h-mod" hidden>
+        <h1 class="page-title" id="h-mod">Produk &amp; kos</h1>
+        <p class="page-desc page-desc--compact">
+          <strong>Produk</strong> — resipi &amp; harga. Pakej urus di <strong>Menu Produk</strong>.
+        </p>
+        <p id="mod-firestore-status" class="kb-status kb-status--hidden" role="status" aria-live="polite"></p>
+
+        <div class="product-grid" id="product-grid"></div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" id="product-modal-backdrop" role="presentation" aria-hidden="true">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        id="product-modal"
+      >
+        <div class="modal__head">
+          <h2 class="modal__title" id="modal-title">Sunting produk</h2>
+          <button type="button" class="btn btn--ghost btn--sm" id="modal-close" aria-label="Tutup">✕</button>
+        </div>
+        <div class="modal__body">
+          <div class="field">
+            <label for="modal-name">Nama</label>
+            <input type="text" id="modal-name" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="modal-price">Harga jual (RM)</label>
+            <input type="number" id="modal-price" min="0" step="0.01" />
+          </div>
+          <div id="modal-panel-package" hidden>
+            <p class="modal-package-help">Pilih produk untuk tab pakej di kaunter.</p>
+            <div id="modal-package-lines" class="pkg-member-list" aria-label="Produk"></div>
+          </div>
+          <div id="modal-panel-single">
+            <p class="modal-ing-list-label">Bahan</p>
+            <div id="modal-ing-list"></div>
+            <div id="ing-quick-add" class="ing-quick-add" hidden>
+              <p class="ing-quick-add__title">Bahan baharu</p>
+              <div class="ing-quick-add__grid">
+                <div class="field">
+                  <label for="qa-ing-name">Nama bahan</label>
+                  <input type="text" id="qa-ing-name" autocomplete="off" placeholder="cth. Sos lada hitam" />
+                </div>
+                <div class="field">
+                  <label for="qa-ing-unit">Unit belian</label>
+                  <select id="qa-ing-unit" aria-label="Unit belian"></select>
+                </div>
+                <div class="field">
+                  <label for="qa-ing-price">Harga belian (RM)</label>
+                  <input type="number" id="qa-ing-price" min="0" step="0.01" value="0" />
+                </div>
+                <div class="field">
+                  <label for="qa-ing-qty">Jumlah dibeli</label>
+                  <input type="number" id="qa-ing-qty" min="0.001" step="any" value="1" />
+                </div>
+              </div>
+              <div class="ing-quick-add__actions">
+                <button type="button" class="btn btn--ghost btn--sm" id="qa-ing-cancel">Batal</button>
+                <button type="button" class="btn btn--primary btn--sm" id="qa-ing-save">Tambah</button>
+              </div>
+            </div>
+            <button type="button" class="btn btn--ghost" id="modal-btn-add-ingredient">+ Bahan baharu</button>
+          </div>
+        </div>
+        <div class="modal__foot">
+          <div class="modal-stats" id="modal-stats"></div>
+          <div class="modal__actions">
+            <button type="button" class="btn btn--danger" id="modal-delete">Padam produk</button>
+            <button type="button" class="btn btn--ghost" id="modal-cancel">Batal</button>
+            <button type="button" class="btn btn--primary" id="modal-save">Simpan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ing-ledger-backdrop" id="ing-drawer-backdrop" hidden aria-hidden="true">
+      <div
+        class="ing-ledger-modal"
+        id="ing-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ing-drawer-title"
+        tabindex="-1"
+      >
+      <header class="ing-drawer__head">
+        <div class="ing-drawer__head-main">
+          <h2 class="ing-drawer__title" id="ing-drawer-title">—</h2>
+          <p id="ing-drawer-sub" class="ing-drawer__meta" role="status"></p>
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm ing-drawer__close" id="ing-drawer-close" aria-label="Tutup panel">Tutup</button>
+      </header>
+
+      <div class="ing-drawer__body">
+        <p id="ing-drawer-ledger-err" class="kb-status kb-status--hidden ing-drawer__alert" role="alert"></p>
+
+        <form id="ing-drawer-log-form" class="ing-drawer-form" aria-label="Rekod pakej belian">
+          <div class="ing-drawer-form__fields">
+            <div class="field field--full">
+              <label for="ing-log-name">Nama bahan</label>
+              <input type="text" id="ing-log-name" autocomplete="off" placeholder="Nama bahan" />
+            </div>
+            <div class="ing-drawer-form__row3">
+              <div class="field">
+                <label for="ing-log-qty">Jumlah dibeli</label>
+                <input type="number" id="ing-log-qty" min="0.001" step="any" required />
+              </div>
+              <div class="field">
+                <label for="ing-log-price">Jumlah (RM)</label>
+                <input type="number" id="ing-log-price" min="0" step="0.01" required />
+              </div>
+              <div class="field">
+                <label for="ing-log-unit">Unit</label>
+                <select id="ing-log-unit" aria-label="Unit pakej"></select>
+              </div>
+            </div>
+            <div class="ing-drawer-cpu" aria-live="polite">
+              <span class="ing-drawer-cpu__label">Modal / unit</span>
+              <strong id="ing-log-cpu-preview" class="ing-drawer-cpu__value">—</strong>
+            </div>
+            <div class="field field--full">
+              <label for="ing-log-notes">Nota <span class="label-optional">(pilihan)</span></label>
+              <input type="text" id="ing-log-notes" autocomplete="off" placeholder="Nota" />
+            </div>
+          </div>
+
+          <p id="ing-drawer-log-status" class="kb-status kb-status--hidden ing-drawer-form__status" role="status"></p>
+          <div class="ing-drawer-form__actions">
+            <button type="button" class="btn btn--outline ing-drawer-submit ing-drawer-submit--secondary" id="ing-drawer-save-name-only">
+              Simpan nama
+            </button>
+            <button type="submit" class="btn btn--primary ing-drawer-submit" id="ing-log-submit">Simpan</button>
+          </div>
+        </form>
+
+        <div class="ing-drawer-history" aria-labelledby="ing-drawer-ledger-title">
+          <h3 class="ing-drawer-history__title" id="ing-drawer-ledger-title">Sejarah belian</h3>
+          <div class="ing-drawer-table-wrap">
+            <table class="ing-table ing-ledger-table">
+              <thead>
+                <tr>
+                  <th>Tarikh</th>
+                  <th>Jenis</th>
+                  <th>Pakej</th>
+                  <th class="num">Kos / unit</th>
+                  <th>Nota</th>
+                </tr>
+              </thead>
+              <tbody id="ing-ledger-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <script type="module" src="../js/cost-calculator/main.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

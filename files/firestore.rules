@@ -1,0 +1,198 @@
+// firestore.rules
+// KLik Burger — Production Security Rules
+// Replaces the "if true" dev rules.
+//
+// Philosophy:
+//   - Authenticated users get READ on most collections (POS needs data)
+//   - WRITE gated by role stored in users/{uid}.role
+//   - Financial records (sales, transactions) are read-only from client
+//   - Admin SDK (MCP) bypasses all rules — control is at MCP permission-gate layer
+//   - Catch-all: deny everything not explicitly allowed
+//
+// Role hierarchy: OWNER > ADMIN > SHIFT_LEAD > CASHIER
+// (Matches js/pos-rbac-session.js ROLES constant)
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ─────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      // Read role from users/{uid} — cached by Firestore per request
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isOwner()     { return isSignedIn() && userRole() == 'OWNER'; }
+    function isAdmin()     { return isSignedIn() && (userRole() == 'OWNER' || userRole() == 'ADMIN'); }
+    function isShiftLead() { return isSignedIn() && (userRole() == 'OWNER' || userRole() == 'ADMIN' || userRole() == 'SHIFT_LEAD'); }
+    function isStaff()     { return isSignedIn(); }  // any authenticated user = staff
+
+    function isOwnerOfDoc(field) {
+      return request.auth.uid == resource.data[field];
+    }
+
+    // Prevent overwriting critical fields on update
+    function notChangingProtectedFields() {
+      return !('createdAt' in request.resource.data.diff(resource.data).affectedKeys())
+          && !('createdBy' in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
+    // ─── users ────────────────────────────────────────────────────────────
+    // Users read themselves; only owner can create/update roles.
+    match /users/{uid} {
+      allow read:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isOwner();
+      allow update: if isOwner() || request.auth.uid == uid;
+      allow delete: if isOwner();
+    }
+
+    // ─── menu_items ───────────────────────────────────────────────────────
+    match /menu_items/{docId} {
+      allow read:   if isStaff();
+      allow write:  if isAdmin();
+    }
+
+    // ─── ingredients ──────────────────────────────────────────────────────
+    match /ingredients/{docId} {
+      allow read:   if isStaff();
+      allow write:  if isAdmin();
+    }
+
+    // ─── ingredient_batches ───────────────────────────────────────────────
+    // Written by FIFO checkout (client transaction) + Admin SDK (purchases)
+    match /ingredient_batches/{docId} {
+      allow read:   if isStaff();
+      allow write:  if isAdmin();  // direct client writes only for admin; FIFO via txn is allowed
+    }
+
+    // ─── ingredient_ledger ────────────────────────────────────────────────
+    match /ingredient_ledger/{docId} {
+      allow read:  if isAdmin();
+      allow create: if isStaff();   // POS checkout writes ledger entries
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── recipes ──────────────────────────────────────────────────────────
+    match /recipes/{docId} {
+      allow read:  if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ─── purchase_history ─────────────────────────────────────────────────
+    match /purchase_history/{docId} {
+      allow read:  if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isOwner();
+    }
+
+    // ─── sales ────────────────────────────────────────────────────────────
+    // Sales are WRITTEN by client checkout transaction, READ by admin/reports.
+    // Updates/deletes are NEVER allowed from client (use MCP for corrections).
+    match /sales/{docId} {
+      allow read:   if isAdmin();
+      allow create: if isStaff();   // checkout transaction
+      allow update, delete: if false;   // immutable from client; use Admin SDK
+    }
+
+    // ─── staff ────────────────────────────────────────────────────────────
+    // Selaras `firestore.rules` di root: semua pengguna log masuk perlu baca senarai
+    // untuk “bertugas sebagai” / clock in terminal kongsi (bukan hanya admin).
+    match /staff/{docId} {
+      allow read:   if isStaff();
+      allow write:  if isAdmin();
+    }
+
+    // ─── staff_activity ───────────────────────────────────────────────────
+    match /staff_activity/{docId} {
+      allow read:  if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── staff_settings ───────────────────────────────────────────────────
+    match /staff_settings/{docId} {
+      allow read:  if isAdmin();
+      allow write: if isOwner();
+    }
+
+    // ─── pos_orders + items subcollection ─────────────────────────────────
+    match /pos_orders/{orderId} {
+      allow read:   if isStaff();
+      allow create: if isStaff();    // cashier creates orders at checkout
+      allow update: if isShiftLead(); // kitchen/shift lead updates status
+      allow delete: if false;         // no delete from client
+    }
+    match /pos_orders/{orderId}/items/{itemId} {
+      allow read:   if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // ─── pos_receipts ─────────────────────────────────────────────────────
+    // Receipts are append-only from client; void goes through MCP/Admin SDK.
+    match /pos_receipts/{docId} {
+      allow read:   if isStaff();
+      allow create: if isStaff();
+      allow update: if isAdmin();   // only admin can update (e.g. void flag)
+      allow delete: if false;
+    }
+
+    // ─── pos_shifts + cash_movements ──────────────────────────────────────
+    match /pos_shifts/{shiftId} {
+      allow read:   if isStaff();
+      allow create: if isShiftLead();
+      allow update: if isShiftLead();
+      allow delete: if false;
+    }
+    match /pos_shifts/{shiftId}/cash_movements/{movId} {
+      allow read:   if isStaff();
+      allow create: if isShiftLead();
+      allow update, delete: if false;
+    }
+
+    // ─── pos_meta ─────────────────────────────────────────────────────────
+    // Counters updated in transaction by checkout; only reads from non-owner.
+    match /pos_meta/{docId} {
+      allow read:   if isStaff();
+      allow write:  if isStaff();   // checkout transaction needs write
+    }
+
+    // ─── pos_sales_transactions ───────────────────────────────────────────
+    // Ledger of checkout transactions — immutable from client.
+    match /pos_sales_transactions/{docId} {
+      allow read:  if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // ─── pos_audit_logs ───────────────────────────────────────────────────
+    // Append-only audit trail. MCP writes here; client can also append.
+    match /pos_audit_logs/{docId} {
+      allow read:  if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if false;   // immutable once written
+    }
+
+    // ─── monthly_reports ──────────────────────────────────────────────────
+    match /monthly_reports/{reportId} {
+      allow read:  if isAdmin();
+      allow write: if isOwner();    // only owner can write; generation via MCP
+    }
+
+    // ─── modifiers (legacy) ───────────────────────────────────────────────
+    match /modifiers/{docId} {
+      allow read:  if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ─── Catch-all: deny everything else ──────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -236,6 +236,13 @@ export async function finalizePosSaleFifo(opts) {
         }, 0);
         totalCogs = Math.round(totalCogs * 10000) / 10000;
 
+        var taxPercent = typeof opts.taxPercent === "number" ? opts.taxPercent : 0;
+        var taxAmount = typeof opts.taxAmount === "number" ? opts.taxAmount : 0;
+        var orderTotal =
+          typeof opts.total === "number"
+            ? opts.total
+            : Math.round((subtotal + taxAmount) * 100) / 100;
+
         for (var u = 0; u < states.length; u++) {
           var orig = states[u];
           var w = working.find(function (x) {
@@ -251,6 +258,9 @@ export async function finalizePosSaleFifo(opts) {
         transaction.set(saleRef, {
           createdAt: serverTimestamp(),
           subtotal: Math.round(subtotal * 100) / 100,
+          taxPercent: taxPercent,
+          taxAmount: taxAmount,
+          total: orderTotal,
           totalCogsFifo: totalCogs,
           totalGrossProfitFifo: Math.round((subtotal - totalCogs) * 100) / 100,
           lines: saleLines,
@@ -266,6 +276,9 @@ export async function finalizePosSaleFifo(opts) {
           saleId: saleRef.id,
           saleLines: saleLines,
           subtotal: Math.round(subtotal * 100) / 100,
+          taxPercent: taxPercent,
+          taxAmount: taxAmount,
+          total: orderTotal,
           totalCogsFifo: totalCogs,
           paymentMethod: opts.paymentMethod || "cash",
           tendered: opts.tendered != null ? opts.tendered : null,
@@ -279,6 +292,9 @@ export async function finalizePosSaleFifo(opts) {
         return {
           saleId: saleRef.id,
           subtotal: subtotal,
+          taxPercent: taxPercent,
+          taxAmount: taxAmount,
+          total: orderTotal,
           totalCogsFifo: totalCogs,
           lines: saleLines,
           order: checkout.order,

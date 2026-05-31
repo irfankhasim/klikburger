@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1a1a1a" />
-    <meta name="description" content="Klik Burger — menu utama, navigasi sisi." />
-    <title>Menu utama — Klik Burger</title>
+    <meta name="description" content="TAB KAUNTER — menu utama, navigasi sisi." />
+    <title>Menu utama — TAB KAUNTER</title>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/main-menu.css" />
     <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <!-- Gaya kritikal: elak kilat putih / layout sebelum CSS penuh -->
     <style>
       .page-main-menu.kb-app-boot {
@@ -57,7 +58,7 @@
       </div>
     </div>
     <div class="layout">
-      <aside class="sidebar" aria-label="Menu Klik Burger">
+      <aside class="sidebar" aria-label="Menu TAB KAUNTER">
         <button
           type="button"
           class="sidebar__brand js-module-trigger"
@@ -67,7 +68,7 @@
           aria-haspopup="dialog"
         >
           <div class="sidebar__titles">
-            <span class="sidebar__name">Klik <span class="sidebar__name-accent">Burger</span></span>
+            <span class="sidebar__name">TAB <span class="sidebar__name-accent">KAUNTER</span></span>
             <span class="sidebar__tag js-module-tag">Point Of Sale</span>
           </div>
           <span class="sidebar__chevron" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
@@ -94,7 +95,7 @@
                 data-pos-embed="pos-order.html"
                 data-rbac-lock="clocked"
                 data-pos-topbar="Ambil pesanan"
-                data-pos-title="Ambil pesanan — Klik Burger"
+                data-pos-title="Ambil pesanan — TAB KAUNTER"
                 data-pos-lead="Aliran: troli → semakan → pembayaran → resit &amp; senarai dapur. Disambung dengan <strong>Resit</strong> dan <strong>Senarai pesanan</strong>."
               >
                 <i class="fa-solid fa-cash-register" aria-hidden="true"></i>
@@ -108,7 +109,7 @@
                 data-pos-embed="pos-receipts.html"
                 data-rbac-lock="clocked"
                 data-pos-topbar="Resit"
-                data-pos-title="Resit — Klik Burger"
+                data-pos-title="Resit — TAB KAUNTER"
                 data-pos-lead="Senarai resit — disegerakkan dengan jualan. Drawer tunai &amp; audit: menu <strong>Clock In</strong>."
               >
                 <i class="fa-solid fa-receipt" aria-hidden="true"></i>
@@ -122,7 +123,7 @@
                 data-pos-embed="pos-order-board.html"
                 data-rbac-lock="clocked"
                 data-pos-topbar="Senarai pesanan"
-                data-pos-title="Senarai pesanan — Klik Burger"
+                data-pos-title="Senarai pesanan — TAB KAUNTER"
                 data-pos-lead="Papan dapur (KDS) — status pesanan selepas bayaran."
               >
                 <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
@@ -135,7 +136,7 @@
             <li>
               <a class="sidebar__link" href="#" data-kb-restore="pos-counter-settings">
                 <i class="fa-solid fa-gear" aria-hidden="true"></i>
-                <span>Tetapan kaunter jualan</span>
+                <span>Tetapan</span>
               </a>
             </li>
           </ul>
@@ -146,7 +147,7 @@
           <p class="sidebar__section">Ringkasan</p>
           <ul class="sidebar__list">
             <li>
-              <a class="sidebar__link is-active" href="#" data-bo-link>
+              <a class="sidebar__link is-active js-bo-dashboard" href="#">
                 <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
                 <span>Papan pemuka</span>
               </a>
@@ -200,7 +201,7 @@
           <p class="sidebar__section">Sistem</p>
           <ul class="sidebar__list">
             <li>
-              <a class="sidebar__link" href="#" data-kb-restore="bo-system-settings">
+              <a class="sidebar__link js-bo-settings" href="#">
                 <i class="fa-solid fa-gear" aria-hidden="true"></i>
                 <span>Tetapan</span>
               </a>
@@ -228,12 +229,12 @@
         <main class="content" id="main-content">
           <div class="content__default" id="content-default">
             <div class="content__lead js-content-lead">
-              <strong>Klik Burger</strong> — anda dalam mod <strong>jualan di kaunter</strong>. Menu di sebelah kiri untuk operasi harian.
+              <strong>TAB KAUNTER</strong> — anda dalam mod <strong>jualan di kaunter</strong>. Menu di sebelah kiri untuk operasi harian.
             </div>
             <div class="content__panel">
               <h2 class="content__panel-title js-panel-title">Ringkasan giliran kerja</h2>
               <div class="content__panel-body js-panel-body">
-                Klik Burger — contoh kandungan: jumlah jualan hari ini, pesanan aktif, dan status pencetak resit. Sambungkan ke data sebenar kemudian.
+                TAB KAUNTER — contoh kandungan: jumlah jualan hari ini, pesanan aktif, dan status pencetak resit. Sambungkan ke data sebenar kemudian.
               </div>
             </div>
           </div>
@@ -241,7 +242,7 @@
             <iframe
               class="content__embed"
               id="content-embed"
-              title="Kalkulator kos — Klik Burger"
+              title="Kalkulator kos — TAB KAUNTER"
               src=""
               loading="lazy"
             ></iframe>
@@ -299,5 +300,6 @@
     </div>
 
     <script type="module" src="../js/main-menu.js"></script>
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
   </body>
 </html>

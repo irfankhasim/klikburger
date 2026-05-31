@@ -1,8 +1,30 @@
 import { auth, signInWithEmailAndPassword, signOut } from "./firebase/init.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
-import { loginSession } from "./pos-rbac-session.js";
+import { loginSession, ROLES } from "./pos-rbac-session.js";
 
 var MAIN_MENU_HREF = new URL("../html/main-menu.html", import.meta.url).href;
+
+/** Elak skrin tunggu selama-lamanya jika Firestore `users/{uid}` tidak jawab. */
+async function getPosUserRbacPayloadWithFallback(firebaseUser) {
+  try {
+    return await Promise.race([
+      getPosUserRbacPayload(firebaseUser),
+      new Promise(function (_, rej) {
+        window.setTimeout(function () {
+          rej(new Error("rbac-timeout"));
+        }, 12000);
+      })
+    ]);
+  } catch (e) {
+    return {
+      userId: firebaseUser.uid,
+      displayName: (firebaseUser.displayName || "").trim() ||
+        (firebaseUser.email ? String(firebaseUser.email).split("@")[0] : "Pengguna"),
+      email: firebaseUser.email || "",
+      role: ROLES.CASHIER
+    };
+  }
+}
 
 function bindPasswordToggle() {
   var pw = document.getElementById("password");
@@ -25,7 +47,14 @@ function bindPasswordToggle() {
 async function showResumeSessionIfNeeded() {
   var form = document.querySelector(".login-form");
   if (!form) return;
-  var u = await waitForAuthUser();
+  var u = await Promise.race([
+    waitForAuthUser(),
+    new Promise(function (resolve) {
+      window.setTimeout(function () {
+        resolve(null);
+      }, 12000);
+    })
+  ]);
   if (!u) return;
   var email = u.email || "";
   var emailInput = document.getElementById("email");
@@ -52,7 +81,7 @@ async function showResumeSessionIfNeeded() {
   if (footer) footer.hidden = true;
   wrap.querySelector(".login-resume__menu").addEventListener("click", async function () {
     try {
-      var payload = await getPosUserRbacPayload(u);
+      var payload = await getPosUserRbacPayloadWithFallback(u);
       loginSession(payload);
       window.location.href = MAIN_MENU_HREF;
     } catch (err) {
@@ -61,7 +90,14 @@ async function showResumeSessionIfNeeded() {
   });
   wrap.querySelector(".login-resume__out").addEventListener("click", async function () {
     try {
+      var rbac = await import("./pos-rbac-session.js");
+      var blockReason = await rbac.assertLogoutReady();
+      if (blockReason) {
+        window.alert(blockReason + " Sila kembali ke menu utama untuk menyelesaikan clock out dan tutup drawer.");
+        return;
+      }
       await signOut(auth);
+      rbac.logoutSession();
     } catch (e) {}
     wrap.remove();
     form.hidden = false;
@@ -86,8 +122,15 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     return;
   }
   try {
-    var cred = await signInWithEmailAndPassword(auth, email, password);
-    var payload = await getPosUserRbacPayload(cred.user);
+    var cred = await Promise.race([
+      signInWithEmailAndPassword(auth, email, password),
+      new Promise(function (_, rej) {
+        window.setTimeout(function () {
+          rej(Object.assign(new Error("auth/network-timeout"), { code: "auth/network-timeout" }));
+        }, 25000);
+      })
+    ]);
+    var payload = await getPosUserRbacPayloadWithFallback(cred.user);
     loginSession(payload);
     window.location.href = MAIN_MENU_HREF;
   } catch (err) {
@@ -95,6 +138,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     var msg = "Log masuk gagal.";
     if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
       msg = "E-mel atau kata laluan tidak sah.";
+    } else if (code === "auth/network-timeout") {
+      msg = "Rangkaian terlalu lama tidak menjawab. Cuba lagi.";
     } else if (code === "auth/too-many-requests") {
       msg = "Terlalu banyak percubaan. Cuba lagi kemudian.";
     } else if (err && err.message) {

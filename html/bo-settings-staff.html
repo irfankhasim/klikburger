@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kakitangan — Tetapan</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="staff-dash">
+    <div class="sd-app bs-settings">
+      <header class="kb-page-header">
+        <div class="kb-page-header__row">
+          <h1 class="kb-page-title">Kakitangan</h1>
+          <button type="button" class="btn btn--primary" id="bs-btn-add-staff">
+            <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Tambah kakitangan
+          </button>
+        </div>
+        <p class="kb-page-lead">
+          <strong>Pengurusan rekod</strong> — sunting butiran staf (nama unik). Pasukan operasi dirancang ~23 orang; import tetap:
+          <code>node scripts/seed-staff-23.mjs</code>. <strong>Menu Kakitangan</strong> di sidebar untuk pemantauan clock &amp; drawer.
+        </p>
+      </header>
+
+      <p id="bs-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
+
+      <div class="bs-settings__layout">
+        <section class="sd-panel bs-settings__list-panel" aria-labelledby="bs-list-title">
+          <h2 class="sd-panel__title" id="bs-list-title">Senarai kakitangan</h2>
+          <p class="sd-footnote" style="margin-top: 0">Pilih nama untuk isi borang di sebelah.</p>
+          <div id="bs-staff-list" class="bs-staff-list"></div>
+        </section>
+
+        <section class="sd-panel bs-settings__form-panel" aria-labelledby="bs-form-title">
+          <h2 class="sd-panel__title" id="bs-form-title">Butiran staf</h2>
+          <input type="hidden" id="bs-form-id" value="" />
+          <div class="sd-form-grid">
+            <label class="sd-field sd-field--full">
+              Nama penuh
+              <input type="text" id="bs-form-name" autocomplete="name" required />
+            </label>
+            <label class="sd-field sd-field--full">
+              E-mel
+              <input type="email" id="bs-form-email" autocomplete="email" placeholder="nama@contoh.com" />
+            </label>
+            <label class="sd-field">
+              Jawatan
+              <select id="bs-form-role">
+                <option value="owner">Pemilik</option>
+                <option value="cashier">Kaunter</option>
+                <option value="kitchen">Dapur</option>
+                <option value="runner">Runner</option>
+                <option value="supervisor">Penyelia</option>
+              </select>
+            </label>
+            <label class="sd-field">
+              Status
+              <select id="bs-form-status">
+                <option value="active">Aktif</option>
+                <option value="leave">Cuti</option>
+                <option value="terminated">Berhenti</option>
+              </select>
+            </label>
+            <label class="sd-field">
+              Telefon
+              <input type="tel" id="bs-form-phone" autocomplete="tel" />
+            </label>
+            <label class="sd-field">
+              Tarikh mula bekerja
+              <input type="date" id="bs-form-started" />
+            </label>
+            <div id="bs-payroll-fields">
+            <label class="sd-field">
+              Jenis gaji
+              <select id="bs-form-paytype">
+                <option value="hourly">Sejam</option>
+                <option value="salary">Bulanan</option>
+              </select>
+            </label>
+            <label class="sd-field">
+              Kadar / gaji asas (RM)
+              <input type="number" id="bs-form-pay" min="0" step="0.01" />
+            </label>
+            </div>
+            <label class="sd-field sd-field--full">
+              PIN Clock In (4 digit)
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="password" id="bs-form-pin" maxlength="6" placeholder="Contoh: 1234" autocomplete="off" style="max-width:160px;" />
+                <button type="button" id="bs-btn-show-pin" class="btn btn--ghost btn--sm" title="Tunjuk/Sembunyi PIN">
+                  <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                </button>
+                <button type="button" id="bs-btn-reset-pin" class="btn btn--outline btn--sm">
+                  Reset PIN
+                </button>
+              </div>
+              <span class="sd-footnote" style="margin-top:4px;display:block;">PIN digunakan oleh staf untuk clock in di terminal POS.</span>
+            </label>
+          </div>
+          <div class="bs-settings__actions">
+            <button type="button" class="btn btn--danger" id="bs-form-delete" hidden>Padam</button>
+            <button type="button" class="btn btn--primary" id="bs-form-save">Simpan</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script type="module" src="../js/staff/bo-settings-app.js"></script>
+    <script type="module" src="../js/staff/bo-settings-iframe-autosize.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var pinInput = document.getElementById("bs-form-pin");
+        var showBtn = document.getElementById("bs-btn-show-pin");
+        var resetBtn = document.getElementById("bs-btn-reset-pin");
+        if (showBtn && pinInput) {
+          showBtn.addEventListener("click", function () {
+            var isHidden = pinInput.type === "password";
+            pinInput.type = isHidden ? "text" : "password";
+            showBtn.querySelector("i").className = isHidden ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+          });
+        }
+        if (resetBtn && pinInput) {
+          resetBtn.addEventListener("click", function () {
+            var newPin = Math.floor(1000 + Math.random() * 9000).toString();
+            pinInput.type = "text";
+            pinInput.value = newPin;
+            if (showBtn) showBtn.querySelector("i").className = "fa-solid fa-eye-slash";
+            alert("PIN baharu: " + newPin + "\nSimpan borang untuk kemaskini.");
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -16,6 +16,8 @@ import {
 } from "./cost-calculator/ingredient-batch-repository.js";
 import { finalizePosSaleFifo, aggregateCartConsumption } from "./pos-sale-fifo.js";
 import { getPosHubState } from "./pos-operations-hub.js";
+import { splitOrderAmounts } from "./pos-tax.js";
+import { subscribeCustomerTaxPercent } from "./pos-tax-settings.js";
 import {
   subscribeRbac,
   canBypassStaffRestrictions,
@@ -27,6 +29,8 @@ import {
 } from "./pos-rbac-session.js";
 
 var menuItems = [];
+/** Peratus cukai pelanggan — dari `staff_settings/default.customerTaxPercent`. */
+var customerTaxPercent = 0;
 /** Snapshot mentah modifier (sebelum agregat usage pakej). */
 var posRawProducts = [];
 /** Peta id modifier ??? objek docToProduct (untuk FIFO jualan). */
@@ -362,13 +366,43 @@ function cartTotal() {
   }, 0);
 }
 
+function orderAmountsFromSub(sub) {
+  return splitOrderAmounts(sub, customerTaxPercent);
+}
+
+function formatOrderTotalsHtml(amt) {
+  if (amt.taxPercent > 0 && amt.taxAmount > 0) {
+    return (
+      '<div class="order-total-row"><span>Subjumlah</span><strong>' +
+      formatRM(amt.subtotal) +
+      "</strong></div>" +
+      '<div class="order-total-row"><span>Cukai (' +
+      escapeHtml(String(amt.taxPercent)) +
+      '%)</span><strong>' +
+      formatRM(amt.taxAmount) +
+      "</strong></div>" +
+      '<div class="order-total-row"><span>Jumlah</span><strong>' +
+      formatRM(amt.total) +
+      "</strong></div>"
+    );
+  }
+  return (
+    '<div class="order-total-row"><span>Jumlah</span><strong>' + formatRM(amt.total) + "</strong></div>"
+  );
+}
+
+function renderCartTotals(sub) {
+  var summary = document.getElementById("order-total-summary");
+  if (!summary) return;
+  summary.innerHTML = formatOrderTotalsHtml(orderAmountsFromSub(sub));
+}
+
 function renderCart() {
   var list = document.getElementById("order-cart-list");
-  var totalEl = document.getElementById("order-total");
-  if (!list || !totalEl) return;
+  if (!list) return;
   if (!cart.length) {
     list.innerHTML = '<p class="order-cart__empty">Klik menu untuk tambah.</p>';
-    totalEl.textContent = formatRM(0);
+    renderCartTotals(0);
     updateOrderStockAlert();
     renderGrid();
     updatePosRbacChrome();
@@ -434,7 +468,7 @@ function renderCart() {
       renderCart();
     });
   });
-  totalEl.textContent = formatRM(cartTotal());
+  renderCartTotals(cartTotal());
   updateOrderStockAlert();
   renderGrid();
   updatePosRbacChrome();
@@ -676,7 +710,7 @@ function renderFlowReview() {
   var z = flowEls();
   flowStep = "review";
   z.title.textContent = "Semakan pesanan";
-  var sub = cartSubtotalFromLines(checkoutLines);
+  var amt = orderAmountsFromSub(cartSubtotalFromLines(checkoutLines));
   z.body.innerHTML =
     '<p class="ops-muted" style="margin:0 0 0.65rem">Semak item sebelum pembayaran. Status: <strong>Belum bayar</strong>.</p>' +
     '<div style="margin:0 0 0.75rem">' +
@@ -699,10 +733,9 @@ function renderFlowReview() {
       })
       .join("") +
     "</ul>" +
-    '<p style="margin:0.75rem 0 0;text-align:right;font-weight:800">' +
-    "Jumlah: " +
-    formatRM(sub) +
-    "</p>";
+    '<div style="margin:0.75rem 0 0;text-align:right">' +
+    formatOrderTotalsHtml(amt) +
+    "</div>";
   z.foot.innerHTML =
     '<button type="button" class="btn btn--ghost" id="flow-back-dismiss">Kembali</button>' +
     '<button type="button" class="btn btn--primary" id="flow-to-pay">Teruskan ke pembayaran</button>';
@@ -732,11 +765,12 @@ function renderFlowPayment() {
   var z = flowEls();
   flowStep = "pay";
   z.title.textContent = "Pembayaran";
-  var sub = cartSubtotalFromLines(checkoutLines);
+  var amt = orderAmountsFromSub(cartSubtotalFromLines(checkoutLines));
+  var totalDue = amt.total;
   z.body.innerHTML =
-    '<p class="ops-muted" style="margin:0 0 0.5rem">Jumlah perlu bayar: <strong>' +
-    formatRM(sub) +
-    "</strong></p>" +
+    '<div style="margin:0 0 0.65rem">' +
+    formatOrderTotalsHtml(amt) +
+    "</div>" +
     '<p class="ops-muted" style="margin:0 0 0.65rem;font-size:0.82rem">Pelanggan: <strong>' +
     escapeHtml(flowCustomerName) +
     "</strong></p>" +
@@ -763,7 +797,7 @@ function renderFlowPayment() {
     var el = document.getElementById("flow-balance");
     if (!el) return;
     var t = parseFloat(document.getElementById("flow-tendered") && document.getElementById("flow-tendered").value) || 0;
-    var bal = Math.round((t - sub) * 100) / 100;
+    var bal = Math.round((t - totalDue) * 100) / 100;
     if (!selectedPayment || selectedPayment !== "cash") {
       el.textContent = "";
       return;
@@ -791,7 +825,7 @@ function renderFlowPayment() {
   });
   syncPayOptionStyles();
   var tenderInp = document.getElementById("flow-tendered");
-  tenderInp.value = tenderedInputVal || String(Math.ceil(sub));
+  tenderInp.value = tenderedInputVal || String(Math.ceil(totalDue));
   tenderInp.addEventListener("input", function () {
     tenderedInputVal = tenderInp.value;
     updateBalance();
@@ -800,7 +834,7 @@ function renderFlowPayment() {
   updateBalance();
 
   document.getElementById("flow-confirm-pay").onclick = function () {
-    onConfirmPayment(sub);
+    onConfirmPayment(amt);
   };
 }
 
@@ -828,10 +862,26 @@ function renderFlowSuccess(meta) {
     escapeHtml(meta.orderNo) +
     " dalam <strong>Senarai pesanan</strong> (Menunggu)</li>" +
     "</ul>" +
-    '<p class="ops-muted" style="margin:0.65rem 0 0;font-size:0.82rem">Jumlah: ' +
-    formatRM(meta.subtotal) +
-    (meta.changeDue != null ? " ? Baki tunai: " + formatRM(meta.changeDue) : "") +
-    "</p>";
+    '<div class="ops-muted" style="margin:0.65rem 0 0;font-size:0.82rem;text-align:right">' +
+    formatOrderTotalsHtml({
+      subtotal: meta.subtotal,
+      taxPercent: meta.taxPercent || 0,
+      taxAmount: meta.taxAmount || 0,
+      total: meta.total != null ? meta.total : meta.subtotal
+    }) +
+    "</div>" +
+    (meta.totalCogsFifo != null
+      ? '<p class="ops-muted" style="margin:0.35rem 0 0;font-size:0.82rem">COGS: ' +
+        formatRM(meta.totalCogsFifo) +
+        " · Untung kasar: " +
+        formatRM(meta.grossProfit) +
+        (meta.changeDue != null ? " · Baki tunai: " + formatRM(meta.changeDue) : "") +
+        "</p>"
+      : meta.changeDue != null
+        ? '<p class="ops-muted" style="margin:0.35rem 0 0;font-size:0.82rem">Baki tunai: ' +
+          formatRM(meta.changeDue) +
+          "</p>"
+        : "");
   z.foot.innerHTML =
     '<button type="button" class="btn btn--primary" id="flow-done">Pesanan baharu</button>';
   document.getElementById("flow-done").onclick = function () {
@@ -839,11 +889,12 @@ function renderFlowSuccess(meta) {
   };
 }
 
-async function onConfirmPayment(subtotal) {
+async function onConfirmPayment(amt) {
   if (!posSalesAllowed()) {
     showToast("Bayaran tidak dibenarkan ? sila buka drawer atau semak status clock in / drawer.");
     return;
   }
+  var totalDue = amt.total;
   var custTrim = String(flowCustomerName || "").trim();
   if (!custTrim) {
     showToast("Sila masukkan nama pelanggan — kembali ke semakan pesanan.");
@@ -857,7 +908,7 @@ async function onConfirmPayment(subtotal) {
   }
   var tendered = parseFloat(document.getElementById("flow-tendered") && document.getElementById("flow-tendered").value) || 0;
   if (selectedPayment === "cash") {
-    if (tendered + 1e-9 < subtotal) {
+    if (tendered + 1e-9 < totalDue) {
       showToast("Amaun diberi tidak mencukupi.");
       return;
     }
@@ -873,7 +924,7 @@ async function onConfirmPayment(subtotal) {
   if (btn) btn.disabled = true;
   try {
     var act = getActorForAudit();
-    var changeDue = selectedPayment === "cash" ? Math.round((tendered - subtotal) * 100) / 100 : null;
+    var changeDue = selectedPayment === "cash" ? Math.round((tendered - totalDue) * 100) / 100 : null;
     var hub = getPosHubState();
     var drawerOpen = !!(hub && hub.shift && hub.shift.isOpen);
     var result = await finalizePosSaleFifo({
@@ -890,7 +941,10 @@ async function onConfirmPayment(subtotal) {
       paymentMethod: selectedPayment,
       tendered: selectedPayment === "cash" ? tendered : null,
       changeDue: changeDue,
-      drawerOpenedSimulated: drawerOpen
+      drawerOpenedSimulated: drawerOpen,
+      taxPercent: amt.taxPercent,
+      taxAmount: amt.taxAmount,
+      total: amt.total
     });
     var labels = { cash: "Tunai", duitnow: "QR" };
     if (!result.order || !result.receipt) {
@@ -902,6 +956,11 @@ async function onConfirmPayment(subtotal) {
       orderNo: result.order.orderNo,
       ktId: result.order.kitchenTicketId,
       subtotal: result.subtotal,
+      taxPercent: result.taxPercent || 0,
+      taxAmount: result.taxAmount || 0,
+      total: result.total != null ? result.total : result.subtotal,
+      totalCogsFifo: result.totalCogsFifo,
+      grossProfit: Math.round((result.subtotal - result.totalCogsFifo) * 100) / 100,
       changeDue: changeDue,
       payLabel: labels[selectedPayment] || selectedPayment,
       customerName: custTrim
@@ -999,6 +1058,15 @@ async function init() {
       updatePosRbacChrome();
       renderGrid();
       renderCart();
+    })
+  );
+
+  posOrderFirestoreUnsubs.push(
+    subscribeCustomerTaxPercent(function (pct) {
+      customerTaxPercent = pct;
+      renderCart();
+      if (flowStep === "review" && checkoutLines.length) renderFlowReview();
+      else if (flowStep === "pay" && checkoutLines.length) renderFlowPayment();
     })
   );
 

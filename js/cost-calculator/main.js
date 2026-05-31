@@ -18,6 +18,7 @@ import {
   sortBatchesFifo
 } from "./ingredient-batch-repository.js";
 import { subscribeModifiers, addModifier, persistModifier, deleteModifier } from "./modifiers-repository.js";
+import { recordIngredientPurchaseHistory } from "../menu-costing/purchase-history-repository.js";
 import { enrichProductsWithResolvedUsage } from "./package-resolved-usage.js";
 import {
   formatRM,
@@ -1635,6 +1636,15 @@ async function init() {
             purchaseUnit: unit,
             ledgerEntryId: ledgerRefNewIng.id
           });
+          await recordIngredientPurchaseHistory({
+            ingredientId: ref.id,
+            label: name,
+            qty: qty,
+            unit: unit,
+            costPerUnit: cpu,
+            totalAmountRm: price,
+            notes: "Bahan baharu"
+          });
         } catch (le) {
           console.error(le);
         }
@@ -1840,6 +1850,15 @@ async function init() {
         purchaseUnit: unit,
         ledgerEntryId: ledgerRefPurchase.id
       });
+      await recordIngredientPurchaseHistory({
+        ingredientId: id,
+        label: newName,
+        qty: qty,
+        unit: unit,
+        costPerUnit: cpu,
+        totalAmountRm: price,
+        notes: notes
+      });
       var titleEl = document.getElementById("ing-drawer-title");
       if (titleEl) titleEl.textContent = newName;
       setDrawerLogStatus("Disimpan.", "ok");
@@ -1929,6 +1948,15 @@ async function init() {
         purchaseOccurredAt: Timestamp.now(),
         purchaseUnit: unit,
         ledgerEntryId: ledgerRefQa.id
+      });
+      await recordIngredientPurchaseHistory({
+        ingredientId: ref.id,
+        label: name,
+        qty: qty,
+        unit: unit,
+        costPerUnit: costPerUnit(draftIng),
+        totalAmountRm: price,
+        notes: "Tambah bahan (resipi)"
       });
       if (isMassVolumeUnit(unit)) {
         p.usage[ref.id] = { guna: unit === "kg" || unit === "L" ? 0.05 : 50, gunaUnit: unit };

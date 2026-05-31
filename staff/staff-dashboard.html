@@ -23,150 +23,73 @@
   <body class="staff-dash">
     <div class="sd-app">
       <header class="kb-page-header">
-        <div class="kb-page-header__row">
-          <h1 class="kb-page-title">Kakitangan</h1>
-          <button type="button" class="btn btn--primary" id="sd-btn-add-staff">
-            <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Tambah kakitangan
-          </button>
-        </div>
+        <h1 class="kb-page-title">Kakitangan</h1>
         <p class="kb-page-lead">
-          Urus <strong>rekod staf</strong>, pantau <strong>prestasi</strong> mengikut bulan, dan tetapkan <strong>bonus pasukan</strong> daripada jualan POS.
+          <strong>Pemantauan</strong> — kehadiran (clock in/out dari POS), <strong>penutupan drawer tunai</strong> (shift ditutup
+          dalam <code>pos_shifts</code>: amaun awal/akhir &amp; varians), dan ringkasan staf. Urus butiran penuh rekod staf di
+          <strong>Tetapan → Kakitangan</strong>.
         </p>
       </header>
 
       <p id="sd-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
 
-      <section class="sd-toolbar" aria-label="Penapis bulan dan tahun">
+      <section class="sd-toolbar" aria-label="Penapis bulan">
         <div class="sd-toolbar__row">
           <label class="sd-field">
-            <span>Bulan &amp; tahun</span>
-            <input type="month" id="sd-filter-month" title="Pilih bulan dan tahun untuk prestasi" />
+            <span>Bulan paparan</span>
+            <input type="month" id="sd-filter-month" title="Pilih bulan untuk jadual di bawah" />
           </label>
         </div>
       </section>
 
-      <section class="sd-metrics" id="sd-metrics" aria-label="Ringkasan"></section>
+      <section class="sd-metrics" id="sd-summary" aria-label="Ringkasan pemantauan"></section>
 
-      <section class="sd-panel" aria-labelledby="sd-table-title">
-        <h2 class="sd-panel__title" id="sd-table-title">Prestasi staf</h2>
+      <section class="sd-panel" aria-labelledby="sd-clock-title">
+        <h2 class="sd-panel__title" id="sd-clock-title">Kehadiran — Clock In / Clock Out</h2>
+        <p class="sd-footnote" style="margin-top: 0">
+          Data daripada <code>staff_activity</code> (jenis <code>clock_in</code> / <code>clock_out</code>), dicerminkan dari terminal POS.
+        </p>
         <div class="sd-table-wrap">
-          <table class="sd-table" id="sd-table-performance">
+          <table class="sd-table">
             <thead>
               <tr>
-                <th>Nama</th>
-                <th>Jualan</th>
-                <th>Bil. order</th>
-                <th>Bil jualan</th>
+                <th>Masa</th>
+                <th>Staf</th>
+                <th>Jenis</th>
+                <th>Butiran</th>
               </tr>
             </thead>
-            <tbody id="sd-table-body"></tbody>
+            <tbody id="sd-clock-body"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="sd-panel" aria-labelledby="sd-kpi-title">
-        <h2 class="sd-panel__title" id="sd-kpi-title">Bonus &amp; KPI pasukan</h2>
-        <div class="sd-kpi-grid" id="sd-kpi-body"></div>
-        <form class="sd-kpi-form" id="sd-kpi-form">
-          <div class="sd-kpi-form__row">
-            <label>
-              Sasaran jualan bulanan (RM)
-              <input type="number" id="sd-kpi-target" min="0" step="100" />
-            </label>
-            <label>
-              Kadar bonus atas lebihan (cth. 0.03 = 3%)
-              <input type="number" id="sd-kpi-rate" min="0" max="1" step="0.005" />
-            </label>
-          </div>
-          <button type="submit" class="btn btn--primary">Simpan tetapan</button>
-        </form>
+      <section class="sd-panel sd-panel--drawer" aria-labelledby="sd-drawer-title">
+        <h2 class="sd-panel__title" id="sd-drawer-title">Drawer tunai — penutupan shift</h2>
+        <p class="sd-footnote" style="margin-top: 0">
+          Satu baris = satu shift ditutup. <strong>Amaun awal</strong> ialah tunai pembukaan;
+          <strong>Amaun akhir</strong> ialah kiraan tunai semasa tutup. <strong>Varians</strong> = amaun akhir − jangkaan sistem
+          (dicatat dalam <code>closing.variance</code> &amp; <code>closing.varianceCategory</code> semasa tutup di POS / MCP).
+        </p>
+        <div class="sd-table-wrap sd-table-wrap--drawer">
+          <table class="sd-table sd-table--drawer">
+            <thead>
+              <tr>
+                <th>Masa / tarikh</th>
+                <th>Amaun awal</th>
+                <th>Amaun akhir</th>
+                <th>Varians</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody id="sd-drawer-body"></tbody>
+          </table>
+        </div>
       </section>
     </div>
 
-    <!-- Modal: borang kakitangan -->
-    <div class="sd-modal-backdrop" id="sd-modal-staff-backdrop" hidden aria-hidden="true">
-      <div class="sd-modal" role="dialog" aria-modal="true" aria-labelledby="sd-modal-staff-title">
-        <div class="sd-modal__head">
-          <h2 id="sd-modal-staff-title">Kakitangan</h2>
-          <button type="button" class="btn btn--ghost btn--sm" id="sd-modal-staff-close" aria-label="Tutup">✕</button>
-        </div>
-        <div class="sd-modal__body">
-          <input type="hidden" id="sd-form-id" value="" />
-          <div class="sd-form-grid">
-            <label class="sd-field sd-field--full">
-              Nama penuh
-              <input type="text" id="sd-form-name" autocomplete="name" required />
-            </label>
-            <label class="sd-field">
-              Jawatan
-              <select id="sd-form-role">
-                <option value="cashier">Kaunter</option>
-                <option value="kitchen">Dapur</option>
-                <option value="runner">Runner</option>
-                <option value="supervisor">Penyelia</option>
-              </select>
-            </label>
-            <label class="sd-field">
-              Status
-              <select id="sd-form-status">
-                <option value="active">Aktif</option>
-                <option value="leave">Cuti</option>
-                <option value="terminated">Berhenti</option>
-              </select>
-            </label>
-            <label class="sd-field">
-              Telefon
-              <input type="tel" id="sd-form-phone" autocomplete="tel" />
-            </label>
-            <label class="sd-field">
-              Tarikh mula bekerja
-              <input type="date" id="sd-form-started" />
-            </label>
-            <label class="sd-field">
-              Jenis gaji
-              <select id="sd-form-paytype">
-                <option value="hourly">Sejam</option>
-                <option value="salary">Bulanan</option>
-              </select>
-            </label>
-            <label class="sd-field">
-              Kadar / gaji asas (RM)
-              <input type="number" id="sd-form-pay" min="0" step="0.01" />
-            </label>
-            <label class="sd-field">
-              Syif lalai
-              <select id="sd-form-default-shift">
-                <option value="pagi">Pagi</option>
-                <option value="petang">Petang</option>
-                <option value="penuh">Sepenuh masa</option>
-              </select>
-            </label>
-          </div>
-          <p class="sd-roster-label">Jadual syif mingguan (ikut hari)</p>
-          <div class="sd-roster-grid" id="sd-form-roster"></div>
-        </div>
-        <div class="sd-modal__foot">
-          <button type="button" class="btn btn--danger" id="sd-form-delete" hidden>Padam</button>
-          <button type="button" class="btn btn--ghost" id="sd-form-cancel">Batal</button>
-          <button type="button" class="btn btn--primary" id="sd-form-save">Simpan</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal: butiran prestasi -->
-    <div class="sd-modal-backdrop" id="sd-modal-detail-backdrop" hidden aria-hidden="true">
-      <div class="sd-modal sd-modal--wide" role="dialog" aria-modal="true" aria-labelledby="sd-modal-detail-title">
-        <div class="sd-modal__head">
-          <h2 id="sd-modal-detail-title">Butiran</h2>
-          <button type="button" class="btn btn--ghost btn--sm" id="sd-modal-detail-close" aria-label="Tutup">✕</button>
-        </div>
-        <div class="sd-modal__body" id="sd-modal-detail-body"></div>
-        <div class="sd-modal__foot">
-          <button type="button" class="btn btn--ghost" id="sd-modal-detail-done">Tutup</button>
-        </div>
-      </div>
-    </div>
-
     <script type="module" src="../js/staff/staff-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
   </body>
 </html>

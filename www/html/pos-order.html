@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ambil pesanan �?? Klik Burger</title>
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        background: var(--content-bg);
+        color: var(--text);
+        font-family: var(--font);
+      }
+
+      html.kb-embed body {
+        min-height: 100vh;
+      }
+
+      .order-app {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+        padding: 1rem 1.1rem 1.25rem;
+        box-sizing: border-box;
+      }
+
+      .order-rbac-banner {
+        margin: 0 0 0.65rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: rgba(245, 166, 35, 0.14);
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .order-body {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr min(22rem, 38vw);
+        gap: 1rem;
+        min-height: 0;
+      }
+
+      @media (max-width: 840px) {
+        .order-body {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .order-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .order-cats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+
+      .order-cat {
+        padding: 0.4rem 0.75rem;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s, border-color 0.12s;
+      }
+
+      .order-cat:hover {
+        border-color: #bbb;
+        color: var(--text);
+      }
+
+      .order-cat.is-active {
+        background: var(--sidebar-bg);
+        color: #fff;
+        border-color: var(--sidebar-bg);
+      }
+
+      .order-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0.55rem;
+        flex: 1;
+        min-height: 12rem;
+        overflow-y: auto;
+        padding: 0.15rem;
+        align-content: start;
+      }
+
+      .order-card {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0.65rem 0.7rem;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        transition: border-color 0.12s, box-shadow 0.12s, transform 0.08s;
+      }
+
+      .order-card:hover {
+        border-color: var(--sidebar-accent);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .order-card:active {
+        transform: scale(0.98);
+      }
+
+      .order-card:disabled,
+      .order-card.is-unavailable {
+        opacity: 0.5;
+        cursor: not-allowed;
+        border-style: dashed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .order-card:disabled:hover,
+      .order-card.is-unavailable:hover {
+        border-color: var(--border);
+        box-shadow: var(--shadow);
+      }
+
+      .order-card__name {
+        font-weight: 700;
+        font-size: 0.88rem;
+        margin: 0 0 0.2rem;
+        line-height: 1.25;
+        color: var(--text);
+      }
+
+      .order-card__pkg {
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+      }
+
+      .order-card__meta {
+        margin-top: auto;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+      }
+
+      .order-card__price {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--sidebar-accent);
+      }
+
+      .order-cart {
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        min-height: 14rem;
+        max-height: min(90vh, 820px);
+      }
+
+      @media (max-width: 840px) {
+        .order-cart {
+          max-height: none;
+        }
+      }
+
+      .order-cart__head {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+
+      .order-stock-alert {
+        margin: 0;
+        padding: 0.45rem 0.75rem;
+        font-size: 0.78rem;
+        line-height: 1.35;
+        color: #8a5a00;
+        background: #fff8e6;
+        border-bottom: 1px solid #f0e0b8;
+      }
+
+      .order-stock-alert[hidden] {
+        display: none !important;
+      }
+
+      .order-cart__list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.35rem 0.5rem;
+        min-height: 4rem;
+      }
+
+      .order-cart__empty {
+        margin: 0;
+        padding: 1rem 0.75rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        text-align: center;
+      }
+
+      .order-line {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.35rem 0.5rem;
+        padding: 0.55rem 0.45rem;
+        border-bottom: 1px solid #eee;
+        font-size: 0.85rem;
+      }
+
+      .order-line:last-child {
+        border-bottom: none;
+      }
+
+      .order-line__title {
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .order-line__price {
+        font-variant-numeric: tabular-nums;
+        color: var(--text-muted);
+        text-align: right;
+      }
+
+      .order-line__ctrl {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+      }
+
+      .order-line__qty {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+
+      .order-line__qty button {
+        width: 1.85rem;
+        height: 1.85rem;
+        border: none;
+        background: var(--surface-muted);
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--text);
+      }
+
+      .order-line__qty button:hover {
+        background: #eee;
+      }
+
+      .order-line__qty span {
+        min-width: 1.75rem;
+        text-align: center;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        font-size: 0.85rem;
+      }
+
+      .order-line__remove {
+        margin-left: auto;
+        padding: 0.2rem 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--danger);
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .order-cart__foot {
+        padding: 0.75rem 1rem 1rem;
+        border-top: 1px solid var(--border);
+        background: #fafafa;
+        border-radius: 0 0 var(--radius) var(--radius);
+      }
+
+      .order-total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.88rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .order-total-row strong {
+        font-size: 1.05rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .order-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.55rem 0.9rem;
+        font: inherit;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border-radius: var(--radius-md);
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.12s, transform 0.08s;
+      }
+
+      .btn:active {
+        transform: scale(0.98);
+      }
+
+      .btn--primary {
+        background: var(--sidebar-bg);
+        color: #fff;
+      }
+
+      .btn--primary:hover {
+        opacity: 0.92;
+      }
+
+      .btn--ghost {
+        background: var(--surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+      }
+
+      .btn--ghost:hover {
+        background: #f5f5f5;
+        color: var(--text);
+      }
+
+      .btn--sm {
+        padding: 0.35rem 0.55rem;
+        font-size: 0.8rem;
+      }
+
+      .order-toast {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(120%);
+        max-width: min(90vw, 22rem);
+        padding: 0.65rem 1rem;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #fff;
+        background: var(--sidebar-bg);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+        opacity: 0;
+        transition: transform 0.25s ease, opacity 0.25s ease;
+        z-index: 50;
+        pointer-events: none;
+      }
+
+      .order-toast.is-visible {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+    </style>
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div class="order-app">
+      <h1 class="sr-only">Ambil pesanan</h1>
+      <div id="order-rbac-banner" class="order-rbac-banner" hidden role="status"></div>
+
+      <div class="order-body">
+        <section class="order-menu" aria-labelledby="order-menu-title">
+          <h2 id="order-menu-title" class="sr-only">Menu jualan</h2>
+          <div class="order-cats" id="order-cats" role="tablist" aria-label="Kategori"></div>
+          <div class="order-grid" id="order-grid"></div>
+        </section>
+
+        <aside class="order-cart" aria-labelledby="order-cart-title">
+          <div class="order-cart__head" id="order-cart-title">Pesanan semasa</div>
+          <p id="order-stock-alert" class="order-stock-alert" hidden role="status" aria-live="polite"></p>
+          <div class="order-cart__list" id="order-cart-list"></div>
+          <div class="order-cart__foot">
+            <div id="order-total-summary">
+              <div class="order-total-row">
+                <span>Jumlah</span>
+                <strong id="order-total">RM 0.00</strong>
+              </div>
+            </div>
+            <div class="order-actions">
+              <button type="button" class="btn btn--ghost" id="order-clear">Kosongkan troli</button>
+              <button type="button" class="btn btn--primary" id="order-submit">Hantar pesanan</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="order-flow-overlay" class="order-flow" hidden aria-hidden="true">
+      <div class="order-flow__backdrop" id="order-flow-bd"></div>
+      <div
+        class="order-flow__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-flow-title"
+      >
+        <div class="order-flow__head">
+          <h2 id="order-flow-title" class="order-flow__title">Aliran pesanan</h2>
+          <button type="button" class="btn btn--ghost btn--sm order-flow__close" id="order-flow-x" aria-label="Tutup">
+            �
+          </button>
+        </div>
+        <div class="order-flow__body" id="order-flow-body"></div>
+        <div class="order-flow__foot" id="order-flow-foot"></div>
+      </div>
+    </div>
+
+    <div class="order-toast" id="order-toast" role="status"></div>
+
+    <script type="module" src="../js/pos-order-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+  </body>
+</html>

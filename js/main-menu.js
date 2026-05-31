@@ -1,7 +1,8 @@
-import { auth, signOut } from "./firebase/init.js";
+import { auth, signOut, db, collection, query, limit, onSnapshot } from "./firebase/init.js";
 
 var LOGIN_PAGE_HREF = new URL("../html/login.html", import.meta.url).href;
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
+import { COL_STAFF } from "./firebase/collections.js";
 import { subscribePosHub } from "./pos-operations-hub.js";
 import {
   subscribeRbac,
@@ -15,10 +16,15 @@ import {
   clockIn,
   clockOut,
   logoutSession,
+  assertLogoutReady,
   loginSession,
   staffLockMessage,
   getEffectiveOperationalStatus,
-  OPERATIONAL_STATUS
+  OPERATIONAL_STATUS,
+  isStaffRole,
+  requiresOperationalStaffPicker,
+  loadSession,
+  setPosOperationalStaff
 } from "./pos-rbac-session.js";
 import {
   getShiftPanelHtml,
@@ -27,9 +33,11 @@ import {
   bindShiftPanelDelegation,
   bindShiftModalRoot
 } from "./pos-shift-panel.js";
+
 var STORAGE_KEY = "fyp_klikburger_module";
 var RESTORE_KEY = "fyp_klikburger_restore_v1";
 var RESTORE_KEY_LS = "fyp_klikburger_restore_ls_v1";
+var SETTINGS_TAB_SS = "fyp_bo_settings_tab_v1";
 var shellBootSuppressPersist = false;
 var shellPagehideBound = false;
 /** Rujukan `applyModule` dari dalam `runMainMenuShell` — dipakai semasa restore modul. */
@@ -67,6 +75,23 @@ function escapeCssAttr(s) {
   return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function readBoSettingsSubTab() {
+  try {
+    var st = readRestoreState();
+    if (st && st.r === "bo-ai-assistant") {
+      return "database";
+    }
+    if (st && st.r === "bo-settings" && (st.settingsTab === "database" || st.settingsTab === "staff" || st.settingsTab === "operasi")) {
+      return st.settingsTab;
+    }
+  } catch (e1) {}
+  try {
+    var saved = sessionStorage.getItem(SETTINGS_TAB_SS);
+    if (saved === "database" || saved === "staff" || saved === "operasi") return saved;
+  } catch (e0) {}
+  return "staff";
+}
+
 function captureAndPersistShellRouteFromDom() {
   try {
     var mod = document.body.getAttribute("data-module") === "bo" ? "bo" : "pos";
@@ -95,6 +120,10 @@ function captureAndPersistShellRouteFromDom() {
       });
       return;
     }
+    if (t.classList.contains("js-bo-dashboard")) {
+      persistShellForce({ r: "bo-dashboard", module: "bo" });
+      return;
+    }
     if (t.classList.contains("js-bo-staff")) {
       persistShellForce({ r: "bo-staff", module: "bo" });
       return;
@@ -111,6 +140,15 @@ function captureAndPersistShellRouteFromDom() {
     }
     if (t.classList.contains("js-bo-monthly-reports")) {
       persistShellForce({ r: "bo-monthly-reports", module: "bo" });
+      return;
+    }
+    if (t.classList.contains("js-bo-settings")) {
+      persistShellForce({
+        v: 1,
+        r: "bo-settings",
+        module: "bo",
+        settingsTab: readBoSettingsSubTab()
+      });
       return;
     }
     var rkCap = t.getAttribute("data-kb-restore");
@@ -200,6 +238,12 @@ async function restoreShellRouteFromStorage() {
     return;
   }
 
+  if (st.r === "bo-dashboard") {
+    if (!canAccessBackOfficeModule()) return;
+    safeClick(".js-nav-bo .js-bo-dashboard");
+    return;
+  }
+
   if (st.r === "bo-staff") {
     if (!canAccessBackOfficeModule()) return;
     safeClick(".js-nav-bo .js-bo-staff");
@@ -228,6 +272,29 @@ async function restoreShellRouteFromStorage() {
     return;
   }
 
+  if (st.r === "bo-ai-assistant") {
+    if (!canAccessBackOfficeModule()) return;
+    try {
+      sessionStorage.setItem(SETTINGS_TAB_SS, "database");
+    } catch (eAi) {}
+    persistShellForce({ v: 1, r: "bo-settings", module: "bo", settingsTab: "database" });
+    safeClick(".js-nav-bo .js-bo-settings");
+    return;
+  }
+
+  if (st.r === "bo-settings") {
+    if (!canAccessBackOfficeModule()) return;
+    safeClick(".js-nav-bo .js-bo-settings");
+    return;
+  }
+
+  if (st.r === "generic" && st.restoreKey === "bo-system-settings") {
+    if (!canAccessBackOfficeModule()) return;
+    persistShellForce({ v: 1, r: "bo-settings", module: "bo", settingsTab: "staff" });
+    safeClick(".js-nav-bo .js-bo-settings");
+    return;
+  }
+
   if (st.r === "generic" && st.restoreKey) {
     var navMod = document.body.getAttribute("data-module") === "bo" ? "bo" : "pos";
     if (navMod === "bo" && !canAccessBackOfficeModule()) return;
@@ -251,18 +318,25 @@ function waitForEmbeddedContentIfAny() {
     function fin() {
       if (done) return;
       done = true;
+      try {
+        iframe.removeEventListener("load", onLoad);
+      } catch (e) {}
+      try {
+        iframe.removeEventListener("error", onErr);
+      } catch (e2) {}
       resolve();
     }
-    var t = window.setTimeout(fin, 12000);
-    iframe.addEventListener(
-      "load",
-      function onLoad() {
-        iframe.removeEventListener("load", onLoad);
-        window.clearTimeout(t);
-        fin();
-      },
-      { once: true }
-    );
+    var t = window.setTimeout(fin, 4500);
+    function onLoad() {
+      window.clearTimeout(t);
+      fin();
+    }
+    function onErr() {
+      window.clearTimeout(t);
+      fin();
+    }
+    iframe.addEventListener("load", onLoad, { once: true });
+    iframe.addEventListener("error", onErr, { once: true });
     try {
       if (iframe.contentDocument && iframe.contentDocument.readyState === "complete") {
         window.clearTimeout(t);
@@ -273,37 +347,81 @@ function waitForEmbeddedContentIfAny() {
 }
 
 function finishAppLoader() {
-  document.body.classList.remove("kb-app-boot");
+  try {
+    document.body.classList.remove("kb-app-boot");
+  } catch (e) {}
   var el = document.getElementById("kb-app-loader");
-  if (!el || el.classList.contains("kb-app-loader--out")) return;
-  el.classList.add("kb-app-loader--out");
-  el.style.pointerEvents = "none";
-  el.setAttribute("aria-busy", "false");
+  if (!el) return;
+  if (!el.classList.contains("kb-app-loader--out")) {
+    el.classList.add("kb-app-loader--out");
+    el.style.pointerEvents = "none";
+    el.setAttribute("aria-busy", "false");
+  }
   window.setTimeout(function () {
-    el.setAttribute("hidden", "");
-    el.style.display = "none";
+    try {
+      el.setAttribute("hidden", "");
+      el.style.display = "none";
+    } catch (e2) {}
   }, 420);
 }
 
 async function ensureSessionFromFirebase() {
-  var u = await waitForAuthUser();
-  if (!u) {
-    window.location.replace(LOGIN_PAGE_HREF);
+  try {
+    var u = await waitForAuthUser();
+    if (!u) {
+      window.location.replace(LOGIN_PAGE_HREF);
+      return false;
+    }
+    var payload;
+    try {
+      payload = await Promise.race([
+        getPosUserRbacPayload(u),
+        new Promise(function (_, rej) {
+          window.setTimeout(function () {
+            rej(new Error("rbac-timeout"));
+          }, 12000);
+        })
+      ]);
+    } catch (e) {
+      console.warn("[boot] RBAC Firestore tamat masa / ralat — guna payload minimum.", e);
+      payload = {
+        userId: u.uid,
+        displayName: (u.displayName || "").trim() || (u.email ? String(u.email).split("@")[0] : "Pengguna"),
+        email: u.email || "",
+        role: ROLES.CASHIER
+      };
+    }
+    var need = true;
+    try {
+      var raw = localStorage.getItem("kb_pos_rbac_session_v1");
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && String(o.userId) === String(payload.userId)) need = false;
+      }
+    } catch (e2) {}
+    if (need) {
+      loginSession(payload);
+    }
+    return true;
+  } catch (e) {
+    console.error("[boot] ensureSessionFromFirebase", e);
+    try {
+      var cu = auth && auth.currentUser;
+      if (cu) {
+        loginSession({
+          userId: cu.uid,
+          displayName: (cu.displayName || "").trim() || (cu.email ? String(cu.email).split("@")[0] : "Pengguna"),
+          email: cu.email || "",
+          role: ROLES.CASHIER
+        });
+        return true;
+      }
+    } catch (e3) {}
+    try {
+      window.location.replace(LOGIN_PAGE_HREF);
+    } catch (e4) {}
     return false;
   }
-  var payload = await getPosUserRbacPayload(u);
-  var need = true;
-  try {
-    var raw = localStorage.getItem("kb_pos_rbac_session_v1");
-    if (raw) {
-      var o = JSON.parse(raw);
-      if (o && String(o.userId) === String(payload.userId)) need = false;
-    }
-  } catch (e) {}
-  if (need) {
-    loginSession(payload);
-  }
-  return true;
 }
 
 function runMainMenuShell() {
@@ -345,14 +463,14 @@ var copy = {
   pos: {
     tag: "Point Of Sale",
     topbar: "Laman utama — jualan",
-    lead: "<strong>Klik Burger</strong> — kaunter. Menu kiri untuk operasi harian.",
+    lead: "<strong>TAB KAUNTER</strong> — kaunter. Menu kiri untuk operasi harian.",
     panelTitle: "Ringkasan giliran kerja",
     panelBody: "Contoh: jualan hari ini, pesanan aktif, resit. Sambung data kemudian."
   },
   bo: {
     tag: "Back Office",
     topbar: "Laman utama — pentadbiran",
-    lead: "<strong>Klik Burger</strong> — pejabat belakang. Menu kiri: laporan, produk &amp; kakitangan, tetapan.",
+    lead: "<strong>TAB KAUNTER</strong> — pejabat belakang. Menu kiri: laporan, produk &amp; kakitangan, tetapan.",
     panelTitle: "Ringkasan perniagaan",
     panelBody: "Contoh: carta jualan, stok rendah. Inventori: Bahan mentah / Produk & kos."
   }
@@ -386,6 +504,13 @@ function setActiveNav(navRoot, selector) {
   }
 }
 
+function resetContentEmbedSizing() {
+  var iframe = document.getElementById("content-embed");
+  if (!iframe) return;
+  iframe.classList.remove("content__embed--intrinsic");
+  iframe.style.height = "";
+}
+
 function hideEmbed() {
   var wrap = document.getElementById("content-embed-wrap");
   var iframe = document.getElementById("content-embed");
@@ -394,6 +519,7 @@ function hideEmbed() {
   wrap.hidden = true;
   def.hidden = false;
   if (iframe) {
+    resetContentEmbedSizing();
     iframe.src = "about:blank";
     iframe.removeAttribute("title");
   }
@@ -414,6 +540,7 @@ function showBoCalculator(tab, topbarOverride, copyKind) {
   var iframe = document.getElementById("content-embed");
   var def = document.getElementById("content-default");
   if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
   var page =
     tab === "modifiers"
       ? copyKind === "catalog"
@@ -424,7 +551,7 @@ function showBoCalculator(tab, topbarOverride, copyKind) {
   wrap.hidden = false;
   iframe.src = "pos-cost-calculator.html#" + page;
   iframe.title =
-    copyKind === "catalog" ? "Menu produk — Klik Burger" : "Kalkulator kos — Klik Burger";
+    copyKind === "catalog" ? "Menu produk — TAB KAUNTER" : "Kalkulator kos — TAB KAUNTER";
   if (topbarTitle) {
     topbarTitle.textContent =
       topbarOverride ||
@@ -463,17 +590,65 @@ function showBoStaff() {
   var iframe = document.getElementById("content-embed");
   var def = document.getElementById("content-default");
   if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
   def.hidden = true;
   wrap.hidden = false;
   iframe.src = "staff-dashboard.html";
-  iframe.title = "Kakitangan — Klik Burger";
+  iframe.title = "Kakitangan — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Kakitangan";
   setTopbarEmbedLead(
-    "Urus <strong>rekod staf</strong>, pantau <strong>prestasi</strong> mengikut bulan, dan tetapkan <strong>bonus pasukan</strong> daripada jualan POS."
+    "<strong>Pemantauan</strong> — clock in/out, drawer tunai (audit POS), log aktiviti. <strong>Tetapan → Kakitangan</strong> untuk urus rekod staf (cth. 23 orang pasukan)."
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
   persistShell({ r: "bo-staff", module: "bo" });
+}
+
+function showBoSettings() {
+  var wrap = document.getElementById("content-embed-wrap");
+  var iframe = document.getElementById("content-embed");
+  var def = document.getElementById("content-default");
+  if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
+  def.hidden = true;
+  wrap.hidden = false;
+  var tab = readBoSettingsSubTab();
+  iframe.src = "bo-settings.html#" + tab;
+  iframe.title = "Tetapan — TAB KAUNTER";
+  if (topbarTitle) topbarTitle.textContent = "Tetapan";
+  setTopbarEmbedLead(
+    "<strong>Kakitangan</strong> — sunting rekod staf. <strong>Operasi</strong> — peratus cukai pelanggan. <strong>Pangkalan data</strong> — pengetahuan AI."
+  );
+  if (panelTitle) panelTitle.textContent = "";
+  if (panelBody) panelBody.textContent = "";
+  persistShell({ r: "bo-settings", module: "bo", settingsTab: tab });
+}
+
+function wireContentEmbedChildMessages() {
+  window.addEventListener("message", function (ev) {
+    try {
+      var embed = document.getElementById("content-embed");
+      if (!embed || ev.source !== embed.contentWindow) return;
+      var d = ev.data;
+      if (!d || typeof d !== "object") return;
+
+      if (d.type === "fyp-bo-settings-tab") {
+        var tab = d.tab === "database" ? "database" : d.tab === "operasi" ? "operasi" : "staff";
+        try {
+          sessionStorage.setItem(SETTINGS_TAB_SS, tab);
+        } catch (e1) {}
+        persistShellForce({ v: 1, r: "bo-settings", module: "bo", settingsTab: tab });
+        return;
+      }
+
+      if (d.type === "fyp-bo-embed-height") {
+        var h = +d.height;
+        if (!h || h < 240) return;
+        embed.classList.add("content__embed--intrinsic");
+        embed.style.height = Math.ceil(h + 20) + "px";
+      }
+    } catch (e) {}
+  });
 }
 
 function showBoMonthlyReports() {
@@ -481,10 +656,11 @@ function showBoMonthlyReports() {
   var iframe = document.getElementById("content-embed");
   var def = document.getElementById("content-default");
   if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
   def.hidden = true;
   wrap.hidden = false;
   iframe.src = "bo-monthly-reports.html";
-  iframe.title = "Laporan penuh — Klik Burger";
+  iframe.title = "Laporan penuh — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Laporan penuh";
   setTopbarEmbedLead(
     '<strong>Paparan</strong> — mengikut <strong>tahun &amp; bulan</strong> kalendar. Sambungan data penuh boleh diaktifkan kemudian; gunakan <code class="topbar__embed-code">?demo=1</code> pada URL untuk <strong>pratonton UI</strong> tanpa Firestore.'
@@ -494,15 +670,35 @@ function showBoMonthlyReports() {
   persistShell({ r: "bo-monthly-reports", module: "bo" });
 }
 
+function showBoDashboard() {
+  var wrap = document.getElementById("content-embed-wrap");
+  var iframe = document.getElementById("content-embed");
+  var def = document.getElementById("content-default");
+  if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
+  def.hidden = true;
+  wrap.hidden = false;
+  iframe.src = "dashboard.html";
+  iframe.title = "Papan pemuka — TAB KAUNTER";
+  if (topbarTitle) topbarTitle.textContent = "Papan pemuka";
+  setTopbarEmbedLead(
+    "<strong>Ringkasan pemilik</strong> — KPI, pesanan terkini, kakitangan &amp; drawer. <em>Fasa 1:</em> data pratonton; sambungan MCP pada fasa berikut."
+  );
+  if (panelTitle) panelTitle.textContent = "";
+  if (panelBody) panelBody.textContent = "";
+  persistShell({ r: "bo-dashboard", module: "bo" });
+}
+
 function showPosEmbedPage(file, iframeTitle, leadHtml, topbarText) {
   var wrap = document.getElementById("content-embed-wrap");
   var iframe = document.getElementById("content-embed");
   var def = document.getElementById("content-default");
   if (!wrap || !iframe || !def) return;
+  resetContentEmbedSizing();
   def.hidden = true;
   wrap.hidden = false;
   iframe.src = file;
-  iframe.title = iframeTitle || "Klik Burger";
+  iframe.title = iframeTitle || "TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = topbarText || iframeTitle || "Point Of Sale";
   setTopbarEmbedLead(leadHtml || "");
   if (panelTitle) panelTitle.textContent = "";
@@ -561,7 +757,10 @@ function applyModule(mode) {
       navPos.classList.add("is-hidden");
       navBo.hidden = false;
       navBo.classList.remove("is-hidden");
-      setActiveNav(navBo, "[data-bo-link]");
+      setActiveNav(navBo, ".js-bo-dashboard");
+      if (canAccessBackOfficeModule()) {
+        showBoDashboard();
+      }
     }
   }
   syncModuleChoiceIndicator();
@@ -610,10 +809,8 @@ function renderStatusBar() {
   var pinRow = pinWarn ? '<span class="kb-status-bar__item">' + pinWarn + "</span>" : "";
   statusBar.innerHTML =
     '<span class="kb-status-bar__item"><strong>' +
-    escapeHtml(String(s.displayName || "—").toLowerCase()) +
-    "</strong> . " +
     escapeHtml(roleLabel) +
-    "</span>" +
+    "</strong></span>" +
     pinRow +
     '<span class="kb-status-bar__item kb-status-bar__shift ' +
     (isOnline ? "kb-status-bar__shift--online" : "kb-status-bar__shift--offline") +
@@ -628,6 +825,145 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Ayat ringkas untuk ralat baca koleksi `staff` (modal / sidebar). */
+function staffFetchErrorHint(e) {
+  var code = String((e && e.code) || "");
+  if (code === "auth/no-user") return "Sesi tidak ditemui — sila log masuk semula.";
+  if (code === "permission-denied")
+    return "Akses dinafikan — semak Firestore rules untuk koleksi staff dan akaun anda.";
+  if (code === "unavailable" || code === "deadline-exceeded")
+    return "Rangkaian terganggu — cuba semula.";
+  return "Gagal memuat senarai.";
+}
+
+/** Cache senarai `staff` — dikemas kini masa nyata; satu pilihan per nama (nyahpendua). */
+var staffRowsCache = [];
+var staffRowsLastError = null;
+var staffRowsRealtimeReady = false;
+var staffRowsRealtimeUnsub = null;
+var staffRowsUpdateListeners = [];
+
+function normalizeStaffRowNameKey(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function mapDedupeSortStaffRowsFromDocs(docs) {
+  var docsSorted = docs.slice().sort(function (a, b) {
+    return String(a.id).localeCompare(String(b.id));
+  });
+  var seen = {};
+  var rows = [];
+  for (var i = 0; i < docsSorted.length; i++) {
+    var d = docsSorted[i];
+    var x = d.data();
+    var name = String(x.name || "").trim() || d.id;
+    var key = normalizeStaffRowNameKey(name);
+    if (seen[key]) continue;
+    seen[key] = true;
+    rows.push({ id: d.id, name: name });
+  }
+  rows.sort(function (a, b) {
+    return a.name.localeCompare(b.name, "ms");
+  });
+  return rows;
+}
+
+function notifyStaffRowsListeners() {
+  staffRowsUpdateListeners.forEach(function (fn) {
+    try {
+      fn();
+    } catch (e) {}
+  });
+}
+
+function subscribeStaffRowsListener(fn) {
+  staffRowsUpdateListeners.push(fn);
+  return function () {
+    staffRowsUpdateListeners = staffRowsUpdateListeners.filter(function (x) {
+      return x !== fn;
+    });
+  };
+}
+
+function getStaffRowsCached() {
+  return staffRowsCache.slice();
+}
+
+function staffRowsBuildOptionsHtml(rows, curSelectedId, emptyOptionLabel) {
+  var cur = String(curSelectedId || "").trim();
+  var opts = '<option value="">' + escapeHtml(emptyOptionLabel) + "</option>";
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var idEsc = escapeHtml(r.id);
+    opts +=
+      '<option value="' +
+      idEsc +
+      '"' +
+      (cur === r.id ? " selected" : "") +
+      ">" +
+      escapeHtml(r.name) +
+      "</option>";
+  }
+  return opts;
+}
+
+function ensureStaffCollectionRealtimeSub() {
+  if (staffRowsRealtimeUnsub) return;
+  staffRowsLastError = null;
+  staffRowsRealtimeReady = false;
+  waitForAuthUser()
+    .then(function (u) {
+      if (!u) {
+        var err = new Error("AUTH_REQUIRED");
+        err.code = "auth/no-user";
+        staffRowsLastError = err;
+        staffRowsRealtimeReady = true;
+        staffRowsCache = [];
+        notifyStaffRowsListeners();
+        return;
+      }
+      return u.getIdToken(false).then(function () {
+        staffRowsRealtimeUnsub = onSnapshot(
+          query(collection(db, COL_STAFF), limit(200)),
+          function (snap) {
+            staffRowsLastError = null;
+            staffRowsRealtimeReady = true;
+            staffRowsCache = mapDedupeSortStaffRowsFromDocs(snap.docs);
+            notifyStaffRowsListeners();
+          },
+          function (err) {
+            console.warn("[staff collection realtime]", err);
+            staffRowsLastError = err;
+            staffRowsRealtimeReady = true;
+            staffRowsCache = [];
+            notifyStaffRowsListeners();
+          }
+        );
+      });
+    })
+    .catch(function (e) {
+      staffRowsLastError = e;
+      staffRowsRealtimeReady = true;
+      staffRowsCache = [];
+      notifyStaffRowsListeners();
+    });
+}
+
+function stopStaffRowsRealtimeSync() {
+  try {
+    if (typeof staffRowsRealtimeUnsub === "function") {
+      staffRowsRealtimeUnsub();
+    }
+  } catch (e) {}
+  staffRowsRealtimeUnsub = null;
+  staffRowsRealtimeReady = false;
+  staffRowsCache = [];
+  staffRowsLastError = null;
 }
 
 /** Masa clock in dalam locale Malaysia */
@@ -768,6 +1104,239 @@ function tryConsumePosEmbedClick(t, navRoot, e) {
   return false;
 }
 
+/**
+ * Modal: pilih rekod `staff` — dipaparkan selepas tekan Clock in (akaun kongsi).
+ * @param {(picked: { id: string, name: string } | null) => void} onClose — null jika batal
+ */
+function showClockInStaffPickerModal(onClose) {
+  var backdrop = document.createElement("div");
+  backdrop.className = "kb-clock-in-staff-modal__backdrop";
+  backdrop.setAttribute("aria-hidden", "false");
+
+  var dialog = document.createElement("div");
+  dialog.className = "kb-clock-in-staff-modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "kb-clock-in-staff-title");
+
+  dialog.innerHTML =
+    '<h2 id="kb-clock-in-staff-title" class="kb-clock-in-staff-modal__title">Pilih nama anda</h2>' +
+    '<p class="kb-clock-in-staff-modal__lead">Pilih siapa yang sedang clock in. Rekod ini untuk kehadiran dan jualan.</p>' +
+    '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-staff-sel">Kakitangan</label>' +
+    '<select id="kb-clock-in-staff-sel" class="kb-clock-in-staff-modal__select" aria-label="Pilih kakitangan">' +
+    '<option value="">' + escapeHtml("Memuat senarai…") + "</option></select>" +
+    '<div id="kb-pin-section" style="margin-top:1rem;display:none;">' +
+    '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-pin-input">PIN Clock In</label>' +
+    '<div style="display:flex;gap:8px;align-items:center;">' +
+    '<input type="password" id="kb-clock-in-pin-input" maxlength="6" placeholder="Masukkan PIN" autocomplete="off" style="flex:1;padding:0.5rem;font-size:1rem;border:1px solid var(--border);border-radius:6px;" />' +
+    '<button type="button" id="kb-pin-toggle" style="padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;" aria-label="Tunjuk PIN"><i class="fa-solid fa-eye"></i></button>' +
+    "</div>" +
+    '<p id="kb-pin-error" style="color:var(--color-danger,#c0392b);font-size:0.82rem;margin-top:0.35rem;display:none;">PIN tidak betul. Sila cuba lagi.</p>' +
+    "</div>" +
+    '<div class="kb-clock-in-staff-modal__actions">' +
+    '<button type="button" class="btn btn--ghost" id="kb-clock-in-staff-cancel">Batal</button>' +
+    '<button type="button" class="btn btn--primary" id="kb-clock-in-staff-ok">Sahkan clock in</button>' +
+    "</div>";
+
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  var sel = dialog.querySelector("#kb-clock-in-staff-sel");
+  var btnOk = dialog.querySelector("#kb-clock-in-staff-ok");
+  var btnCancel = dialog.querySelector("#kb-clock-in-staff-cancel");
+  var actionsRow = dialog.querySelector(".kb-clock-in-staff-modal__actions");
+  var pinSection = dialog.querySelector("#kb-pin-section");
+  var pinInput = dialog.querySelector("#kb-clock-in-pin-input");
+  var pinToggle = dialog.querySelector("#kb-pin-toggle");
+  var pinError = dialog.querySelector("#kb-pin-error");
+
+  // Show/hide PIN section when staff is selected
+  sel.addEventListener("change", function () {
+    var v = String(sel.value || "").trim();
+    if (v) {
+      pinSection.style.display = "block";
+      pinInput.value = "";
+      pinError.style.display = "none";
+      pinInput.focus();
+    } else {
+      pinSection.style.display = "none";
+    }
+  });
+
+  // Toggle PIN visibility
+  pinToggle.addEventListener("click", function () {
+    var isHidden = pinInput.type === "password";
+    pinInput.type = isHidden ? "text" : "password";
+    pinToggle.querySelector("i").className = isHidden ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+  });
+
+  // Allow Enter key in PIN input to submit
+  pinInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      btnOk.click();
+    }
+  });
+
+  var retryWrap = document.createElement("p");
+  retryWrap.className = "kb-clock-in-staff-modal__retry";
+  retryWrap.hidden = true;
+  retryWrap.innerHTML =
+    '<button type="button" class="btn btn--ghost" id="kb-clock-in-staff-retry">Cuba semula</button>';
+  dialog.insertBefore(retryWrap, actionsRow);
+  var btnRetry = dialog.querySelector("#kb-clock-in-staff-retry");
+
+  var unsubModalStaff = null;
+  var modalStaffFocusOnce = false;
+
+  function paintClockInModalStaffSelect() {
+    if (staffRowsLastError) {
+      modalStaffFocusOnce = false;
+      retryWrap.hidden = false;
+      sel.innerHTML =
+        '<option value="">' + escapeHtml("— " + staffFetchErrorHint(staffRowsLastError) + " —") + "</option>";
+      try {
+        btnRetry.focus();
+      } catch (e) {}
+      return;
+    }
+    if (!staffRowsRealtimeReady) {
+      retryWrap.hidden = true;
+      sel.innerHTML = '<option value="">' + escapeHtml("Memuat senarai…") + "</option>";
+      return;
+    }
+    retryWrap.hidden = true;
+    var rows = getStaffRowsCached();
+    if (!rows.length) {
+      modalStaffFocusOnce = false;
+      sel.innerHTML =
+        '<option value="">' +
+        escapeHtml("— Tiada rekod kakitangan — tambah di Back Office —") +
+        "</option>";
+      try {
+        sel.focus();
+      } catch (e2) {}
+      return;
+    }
+    var cur = String(loadSession().operationalStaffId || "").trim();
+    sel.innerHTML = staffRowsBuildOptionsHtml(rows, cur, "— Pilih nama —");
+    if (!modalStaffFocusOnce) {
+      modalStaffFocusOnce = true;
+      try {
+        sel.focus();
+      } catch (e2) {}
+    }
+  }
+
+  function loadStaffIntoSelect() {
+    if (unsubModalStaff) {
+      unsubModalStaff();
+      unsubModalStaff = null;
+    }
+    modalStaffFocusOnce = false;
+    retryWrap.hidden = true;
+    ensureStaffCollectionRealtimeSub();
+    paintClockInModalStaffSelect();
+    unsubModalStaff = subscribeStaffRowsListener(function () {
+      if (!backdrop.parentNode) return;
+      paintClockInModalStaffSelect();
+    });
+  }
+
+  btnRetry.onclick = function () {
+    stopStaffRowsRealtimeSync();
+    loadStaffIntoSelect();
+  };
+
+  function cleanup(result) {
+    if (unsubModalStaff) {
+      unsubModalStaff();
+      unsubModalStaff = null;
+    }
+    try {
+      document.removeEventListener("keydown", onKey);
+    } catch (e) {}
+    try {
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    } catch (e2) {}
+    try {
+      if (typeof onClose === "function") onClose(result);
+    } catch (e3) {}
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cleanup(null);
+    }
+  }
+  document.addEventListener("keydown", onKey);
+
+  backdrop.addEventListener("click", function (e) {
+    if (e.target === backdrop) cleanup(null);
+  });
+
+  btnCancel.onclick = function () {
+    cleanup(null);
+  };
+
+  btnOk.onclick = async function () {
+    var v = String(sel.value || "").trim();
+    if (!v) {
+      window.alert("Sila pilih nama dari senarai.");
+      try {
+        sel.focus();
+      } catch (e) {}
+      return;
+    }
+
+    var enteredPin = String(pinInput ? pinInput.value || "" : "").trim();
+
+    btnOk.disabled = true;
+    btnOk.textContent = "Mengesahkan…";
+
+    try {
+      var { db, doc, getDoc } = await import("./firebase/init.js");
+      var pinSnap = await getDoc(doc(db, "staff_pins", v));
+
+      if (pinSnap.exists()) {
+        var storedPin = String(pinSnap.data().pin || "").trim();
+
+        if (storedPin && enteredPin !== storedPin) {
+          if (pinError) {
+            pinError.textContent = "PIN tidak betul. Sila cuba lagi.";
+            pinError.style.display = "block";
+          }
+          if (pinInput) {
+            pinInput.value = "";
+            pinInput.focus();
+          }
+          btnOk.disabled = false;
+          btnOk.textContent = "Sahkan clock in";
+          return;
+        }
+      }
+      // PIN verified or no PIN set — proceed
+      var opt = sel.options[sel.selectedIndex];
+      var name = opt ? String(opt.text || "").trim() : "";
+      cleanup({ id: v, name: name });
+    } catch (err) {
+      console.warn("[clock-in] PIN check error:", err);
+      // Graceful degradation — allow clock-in if Firestore unreachable
+      var opt2 = sel.options[sel.selectedIndex];
+      var name2 = opt2 ? String(opt2.text || "").trim() : "";
+      cleanup({ id: v, name: name2 });
+    } finally {
+      try {
+        btnOk.disabled = false;
+        btnOk.textContent = "Sahkan clock in";
+      } catch (e) {}
+    }
+  };
+
+  loadStaffIntoSelect();
+}
+
 function renderClockPanel() {
   hideEmbed();
   var snap = getSnapshot();
@@ -784,13 +1353,14 @@ function renderClockPanel() {
     var shiftOpen = !!(hub.shift && hub.shift.isOpen);
     var clockInBlocked = !s.clockedIn && shiftOpen;
     var clockInBtn = clockInBlocked
-      ? '<button type="button" class="btn btn--primary" id="kb-clock-in" disabled aria-disabled="true" title="Tutup drawer tunai dahulu">' +
+      ? '<button type="button" class="btn btn--primary" id="kb-clock-in" disabled aria-disabled="true" data-clock-blocked="1" title="Tutup drawer tunai dahulu">' +
         "Clock in" +
         "</button>" +
         '<p class="kb-clock-in-blocked" style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--text-muted);max-width:28rem">' +
         "Drawer tunai masih <strong>dibuka</strong>. Tutup drawer di bawah dahulu, kemudian anda boleh clock in." +
         "</p>"
       : '<button type="button" class="btn btn--primary" id="kb-clock-in">Clock in</button>';
+
     panelBody.innerHTML =
       '<div class="kb-clock-summary">' +
       (s.clockedIn
@@ -819,20 +1389,36 @@ function renderClockPanel() {
       getShiftPanelHtml();
 
     var ci = document.getElementById("kb-clock-in");
-    if (ci && !ci.disabled) {
+    if (ci && !clockInBlocked) {
       ci.onclick = function () {
+        function afterClockInOk() {
+          renderClockPanel();
+          renderStatusBar();
+          applyPosLinkLocks();
+          if (window.confirm("Clock in berjaya. Buka drawer sekarang?")) {
+            var openBtn = document.getElementById("btn-shift-open");
+            if (openBtn && !openBtn.hidden) openBtn.focus();
+          }
+        }
+        if (requiresOperationalStaffPicker()) {
+          showClockInStaffPickerModal(function (picked) {
+            if (!picked || !picked.id) return;
+            setPosOperationalStaff(picked.id, picked.name);
+            var r = clockIn();
+            if (!r.ok) {
+              window.alert(r.error);
+              return;
+            }
+            afterClockInOk();
+          });
+          return;
+        }
         var r = clockIn();
         if (!r.ok) {
           window.alert(r.error);
           return;
         }
-        renderClockPanel();
-        renderStatusBar();
-        applyPosLinkLocks();
-        if (window.confirm("Clock in berjaya. Buka drawer sekarang?")) {
-          var openBtn = document.getElementById("btn-shift-open");
-          if (openBtn && !openBtn.hidden) openBtn.focus();
-        }
+        afterClockInOk();
       };
     }
     var co = document.getElementById("kb-clock-out");
@@ -848,7 +1434,7 @@ function renderClockPanel() {
         applyPosLinkLocks();
       };
     }
-    renderShiftPanelUI(getPosHubState());
+    renderShiftPanelUI(hub);
   }
   setActiveNav(navPos, ".js-nav-clock");
   persistShell({ r: "pos-clock", module: "pos" });
@@ -869,6 +1455,23 @@ function wireNavClicks(navRoot) {
       t.classList.add("is-active");
       t.setAttribute("aria-current", "page");
       renderClockPanel();
+      return;
+    }
+
+    if (navRoot.classList.contains("js-nav-bo") && t.classList.contains("js-bo-dashboard")) {
+      if (!canAccessBackOfficeModule()) {
+        e.preventDefault();
+        window.alert("Akses pejabat belakang tidak dibenarkan untuk peranan ini.");
+        return;
+      }
+      e.preventDefault();
+      navRoot.querySelectorAll(".sidebar__link").forEach(function (a) {
+        a.classList.remove("is-active");
+        a.removeAttribute("aria-current");
+      });
+      t.classList.add("is-active");
+      t.setAttribute("aria-current", "page");
+      showBoDashboard();
       return;
     }
 
@@ -927,6 +1530,23 @@ function wireNavClicks(navRoot) {
       return;
     }
 
+    if (navRoot.classList.contains("js-nav-bo") && t.classList.contains("js-bo-settings")) {
+      if (!canAccessBackOfficeModule()) {
+        e.preventDefault();
+        window.alert("Akses pejabat belakang tidak dibenarkan untuk peranan ini.");
+        return;
+      }
+      e.preventDefault();
+      navRoot.querySelectorAll(".sidebar__link").forEach(function (a) {
+        a.classList.remove("is-active");
+        a.removeAttribute("aria-current");
+      });
+      t.classList.add("is-active");
+      t.setAttribute("aria-current", "page");
+      showBoSettings();
+      return;
+    }
+
     if (navRoot.classList.contains("js-nav-pos") && t.hasAttribute("data-pos-embed")) {
       if (tryConsumePosEmbedClick(t, navRoot, e)) return;
       e.preventDefault();
@@ -938,7 +1558,7 @@ function wireNavClicks(navRoot) {
       t.setAttribute("aria-current", "page");
       showPosEmbedPage(
         t.getAttribute("data-pos-embed"),
-        t.getAttribute("data-pos-title") || "Klik Burger",
+        t.getAttribute("data-pos-title") || "TAB KAUNTER",
         t.getAttribute("data-pos-lead") || "",
         t.getAttribute("data-pos-topbar")
       );
@@ -982,11 +1602,27 @@ function wireNavClicks(navRoot) {
   });
 }
 
+function openClockPanelForLogout() {
+  try {
+    if (shellApplyModule) shellApplyModule("pos");
+    persistShellForce({ r: "pos-clock", module: "pos" });
+    var clockNav = document.querySelector(".js-nav-pos .js-nav-clock");
+    if (clockNav) clockNav.click();
+    else if (typeof renderClockPanel === "function") renderClockPanel();
+  } catch (e) {}
+}
+
 function wireLogout() {
   var out = document.querySelector(".sidebar__out");
   if (!out) return;
   out.addEventListener("click", async function (e) {
     e.preventDefault();
+    var blockReason = await assertLogoutReady();
+    if (blockReason) {
+      window.alert(blockReason);
+      openClockPanelForLogout();
+      return;
+    }
     try {
       await signOut(auth);
     } catch (err) {
@@ -996,6 +1632,7 @@ function wireLogout() {
     try {
       sessionStorage.removeItem(RESTORE_KEY);
       localStorage.removeItem(RESTORE_KEY_LS);
+      sessionStorage.removeItem(SETTINGS_TAB_SS);
     } catch (e) {}
     window.location.href = LOGIN_PAGE_HREF;
   });
@@ -1055,6 +1692,7 @@ if (trigger && layer) {
 
 wireNavClicks(navPos);
 wireNavClicks(navBo);
+wireContentEmbedChildMessages();
 
 var contentDefaultEl = document.getElementById("content-default");
 if (contentDefaultEl) {
@@ -1062,7 +1700,6 @@ if (contentDefaultEl) {
 }
 bindShiftModalRoot();
 ensureShiftPanelHubSync();
-
 function refreshClockPanelIfVisible() {
   var clockNav = document.querySelector(".js-nav-pos .js-nav-clock");
   if (clockNav && clockNav.classList.contains("is-active")) {
@@ -1088,11 +1725,16 @@ if (!shellPagehideBound) {
   shellPagehideBound = true;
   window.addEventListener("pagehide", function () {
     captureAndPersistShellRouteFromDom();
+    stopStaffRowsRealtimeSync();
   });
 }
 }
 
 async function bootMainMenu() {
+  var forceLoaderDown = window.setTimeout(function () {
+    console.warn("[boot] Paksa tutup loader (keselamatan 8s).");
+    finishAppLoader();
+  }, 8000);
   var safetyDismiss = window.setTimeout(function () {
     if (document.body && document.body.classList.contains("kb-app-boot")) {
       console.warn("[boot] Loader tamat masa — semak rangkaian / Firebase.");
@@ -1102,7 +1744,13 @@ async function bootMainMenu() {
   }, 15000);
   shellBootSuppressPersist = true;
   try {
-    var ok = await ensureSessionFromFirebase();
+    var ok = false;
+    try {
+      ok = await ensureSessionFromFirebase();
+    } catch (sessErr) {
+      console.error("[boot] ensureSession", sessErr);
+      ok = false;
+    }
     if (!ok) {
       return;
     }
@@ -1111,6 +1759,7 @@ async function bootMainMenu() {
     } catch (shellErr) {
       console.error("[boot] runMainMenuShell", shellErr);
     }
+    finishAppLoader();
     sanitizeRestoreForRbac();
     try {
       await restoreShellRouteFromStorage();
@@ -1130,6 +1779,9 @@ async function bootMainMenu() {
   } catch (e) {
     console.error("[boot]", e);
   } finally {
+    try {
+      window.clearTimeout(forceLoaderDown);
+    } catch (e0) {}
     try {
       window.clearTimeout(safetyDismiss);
     } catch (e2) {}

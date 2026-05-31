@@ -1,0 +1,8 @@
+{
+  "appId": "com.klikburger.pos",
+  "appName": "Klik Burger POS",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

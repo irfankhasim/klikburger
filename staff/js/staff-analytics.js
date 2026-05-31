@@ -15,6 +15,17 @@ function saleCreatedAtDate(data) {
 
 export function parseSaleDoc(d) {
   var data = d.data();
+  if (!data || typeof data !== "object") {
+    return {
+      id: d.id,
+      staffId: "",
+      staffName: "",
+      subtotal: 0,
+      lineCount: 0,
+      orderQty: 0,
+      createdAt: null
+    };
+  }
   var dt = saleCreatedAtDate(data);
   var lines = Array.isArray(data.lines) ? data.lines : [];
   return {
@@ -56,34 +67,38 @@ export function aggregateStaffSales(staffList, saleDocs, y, m0) {
     };
   });
   saleDocs.forEach(function (doc) {
-    var row = parseSaleDoc(doc);
-    if (!row.staffId || !inMonth(row.createdAt, y, m0)) return;
-    var b = byId[row.staffId];
-    if (!b) {
-      byId[row.staffId] = b = {
-        staffId: row.staffId,
-        name: row.staffName || "(Tidak dalam senarai)",
-        role: "",
-        defaultShift: "",
-        weeklyRoster: [],
-        employmentStatus: "active",
-        revenue: 0,
-        orders: 0,
-        lineItems: 0,
-        saleDates: {}
-      };
-    }
-    b.revenue += row.subtotal;
-    b.orders += 1;
-    b.lineItems += row.lineCount || 1;
-    if (row.createdAt) {
-      var key =
-        row.createdAt.getFullYear() +
-        "-" +
-        pad2(row.createdAt.getMonth() + 1) +
-        "-" +
-        pad2(row.createdAt.getDate());
-      b.saleDates[key] = true;
+    try {
+      var row = parseSaleDoc(doc);
+      if (!row.staffId || !inMonth(row.createdAt, y, m0)) return;
+      var b = byId[row.staffId];
+      if (!b) {
+        byId[row.staffId] = b = {
+          staffId: row.staffId,
+          name: row.staffName || "(Tidak dalam senarai)",
+          role: "",
+          defaultShift: "",
+          weeklyRoster: [],
+          employmentStatus: "active",
+          revenue: 0,
+          orders: 0,
+          lineItems: 0,
+          saleDates: {}
+        };
+      }
+      b.revenue += row.subtotal;
+      b.orders += 1;
+      b.lineItems += row.lineCount || 1;
+      if (row.createdAt) {
+        var key =
+          row.createdAt.getFullYear() +
+          "-" +
+          pad2(row.createdAt.getMonth() + 1) +
+          "-" +
+          pad2(row.createdAt.getDate());
+        b.saleDates[key] = true;
+      }
+    } catch (e) {
+      console.warn("[staff-analytics] langkau dokumen jualan", doc && doc.id, e);
     }
   });
   return Object.keys(byId).map(function (k) {
@@ -184,6 +199,7 @@ export function rankStats(stats) {
 }
 
 export function teamRevenue(stats) {
+  if (!Array.isArray(stats) || !stats.length) return 0;
   return stats.reduce(function (s, x) {
     return s + (x.revenue || 0);
   }, 0);

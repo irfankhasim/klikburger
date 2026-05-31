@@ -1,0 +1,132 @@
+/* Tetapan BO — shell sub-menu + iframe / sunting staf */
+.bs-settings--shell .kb-page-header {
+  margin-bottom: 0.75rem;
+}
+
+.bs-settings-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.bs-settings-subnav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+}
+
+.bs-settings-subnav__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex: 1 1 auto;
+  min-width: min(12rem, 100%);
+  text-align: center;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bs-settings-subnav__btn:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.05));
+}
+
+.bs-settings-subnav__btn.is-active {
+  border-color: var(--sidebar-accent, #c9a227);
+  background: var(--surface, #fff);
+  box-shadow: 0 0 0 1px var(--accent-ring, rgba(201, 162, 39, 0.35));
+}
+
+.bs-settings-shell__frame-wrap {
+  min-height: 0;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--border);
+  overflow: visible;
+  background: var(--surface, #fff);
+}
+
+.bs-settings-shell__frame {
+  display: block;
+  width: 100%;
+  min-height: 20rem;
+  height: 28rem;
+  border: 0;
+  background: var(--surface-muted, #fafafa);
+}
+
+.bs-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 52rem) {
+  .bs-settings__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bs-staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.bs-staff-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+}
+
+.bs-staff-pick.is-active {
+  border-color: var(--sidebar-accent);
+  box-shadow: 0 0 0 1px var(--accent-ring);
+}
+
+.bs-staff-pick .sd-muted {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.bs-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.bs-settings__actions .btn--danger {
+  margin-right: auto;
+}
+
+/* Medan payroll dalam grid borang staf — sembunyi untuk jawatan Pemilik */
+#bs-payroll-fields {
+  display: contents;
+}
+
+#bs-payroll-fields[hidden] {
+  display: none;
+}

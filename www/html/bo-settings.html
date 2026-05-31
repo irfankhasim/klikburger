@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tetapan — TAB KAUNTER</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="staff-dash">
+    <div class="sd-app bs-settings bs-settings--shell">
+      <header class="kb-page-header">
+        <h1 class="kb-page-title">Tetapan</h1>
+        <p class="kb-page-lead">
+          Gunakan tab mendatar di bawah tajuk ini untuk beralih antara skrin. Lebih banyak sub-tetapan boleh ditambah kemudian.
+        </p>
+      </header>
+
+      <div class="bs-settings-shell">
+        <nav class="bs-settings-subnav" aria-label="Sub-tetapan">
+          <button type="button" class="bs-settings-subnav__btn is-active" data-tab="staff" aria-current="page">
+            <i class="fa-solid fa-users" aria-hidden="true"></i> Kakitangan
+          </button>
+          <button type="button" class="bs-settings-subnav__btn" data-tab="operasi">
+            <i class="fa-solid fa-percent" aria-hidden="true"></i> Operasi
+          </button>
+          <button type="button" class="bs-settings-subnav__btn" data-tab="database">
+            <i class="fa-solid fa-database" aria-hidden="true"></i> Pangkalan data
+          </button>
+        </nav>
+        <div class="bs-settings-shell__frame-wrap">
+          <iframe
+            id="bs-sub-iframe"
+            class="bs-settings-shell__frame"
+            title="Kakitangan — Tetapan"
+            src="about:blank"
+          ></iframe>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="../js/staff/bo-settings-shell.js"></script>
+  </body>
+</html>

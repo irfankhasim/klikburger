@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Cipta pengguna demo Auth + dokumen Firestore `users/{uid}`.
- * Jalankan dengan credential (SA / ADC) atau semasa emulator (FIREBASE_AUTH_EMULATOR_HOST).
+ * Dua akaun demo Auth sahaja (Owner + Staff kongsi) + dokumen users/{uid}.
+ * Pekeja individu tidak wujud di Auth — rekod mereka dalam koleksi `staff` (seed berasingan).
  */
 import { pathToFileURL } from "url";
 import { ensureAdminInitialized, getAdminAuth, getAdminFirestore, isEmulatorEnv } from "./lib/admin-init.mjs";

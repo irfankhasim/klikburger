@@ -1,0 +1,802 @@
+================================================================================
+TAB KAUNTER — DOKUMENTASI PROJEK FYP (A HINGGA Z)
+Repo: c:\fyp | Nama dalaman: fyp-klik-burger
+Dijana untuk laporan Final Year Project (FYP)
+================================================================================
+
+NOTA: Dokumen ini diterbitkan berdasarkan kod sumber sebenar dalam repositori.
+Item yang TIADA dalam kod dinyatakan secara eksplisit.
+
+
+================================================================================
+A. PENGENALAN — APA ITU PROJEK INI?
+================================================================================
+
+TAB KAUNTER ialah sistem Point of Sale (POS) dan pejabat belakang (Back Office)
+untuk restoran burger / makanan segera. Sistem ini direka untuk mengendalikan
+operasi harian restoran dalam SATU platform bersepadu:
+
+  - Jualan di kaunter
+  - Paparan pesanan dapur (kitchen display)
+  - Pengurusan resit
+  - Drawer tunai & syif kerja (shift management)
+  - Pengiraan kos bahan mentah (FIFO — First In, First Out)
+  - Menu costing (harga jual vs kos sebenar)
+  - Pengurusan staf & kehadiran
+  - Laporan bulanan automatik
+  - Pembantu AI untuk SOP dan panduan operasi
+  - MCP Server untuk integrasi AI agent (Cursor, Claude, dll.)
+
+Projek ini dibina sebagai aplikasi web statik (HTML + CSS + JavaScript ES Modules)
+dengan Google Firebase sebagai backend. TIADA server REST tersendiri (Express,
+FastAPI, dll.) dalam repositori ini.
+
+
+================================================================================
+B. LATAR BELAKANG & MASALAH
+================================================================================
+
+Restoran kecil dan sederhana sering bergantung pada:
+
+  1. Kalkulator manual atau POS asing yang tidak integrasi dengan stok
+  2. Rekod stok yang tidak tepat (tiada kaedah FIFO)
+  3. Laporan jualan dan kos yang lambat disediakan
+  4. Tiada sistem terpusat untuk staf, syif kerja, dan audit
+  5. Staf baru sukar dapat jawapan SOP tanpa ganggu pengurus
+
+TAB KAUNTER menyelesaikan masalah ini dengan:
+
+  1. POS yang TERUS menolak stok mengikut kaedah FIFO
+  2. COGS (Cost of Goods Sold) dikira automatik setiap jualan
+  3. Semua data disimpan dalam Cloud Firestore secara masa nyata
+  4. Owner/Admin boleh pantau operasi melalui dashboard dan laporan bulanan
+  5. AI assistant membantu staf jawab soalan SOP tanpa ganggu pengurus
+  6. MCP Server membolehkan AI agent akses data operasi secara terkawal
+
+
+================================================================================
+C. OBJEKTIF PROJEK
+================================================================================
+
+  1. Membina sistem POS web untuk jualan kaunter restoran
+  2. Mengintegrasikan pengurusan stok bahan dengan kaedah FIFO
+  3. Menyediakan modul Back Office untuk owner/admin
+  4. Membina sistem RBAC (Role-Based Access Control)
+  5. Menjana laporan bulanan automatik
+  6. Menyediakan MCP Server untuk integrasi AI/agent
+  7. Menambah Pembantu AI berasaskan pangkalan pengetahuan (knowledge base)
+
+
+================================================================================
+D. SKOP PROJEK
+================================================================================
+
+DALAM SKOP:
+  - Login Firebase Auth (email/kata laluan)
+  - Modul POS: jualan, resit, papan pesanan dapur
+  - Shift/drawer tunai dengan variance (short/over/balanced)
+  - Kalkulator kos & menu costing
+  - Pengurusan staf (data operasi, bukan akaun login individu)
+  - Laporan bulanan
+  - MCP Server (baca/tulis Firestore via Admin SDK)
+  - Pembantu AI (OpenRouter + Firestore knowledge base)
+  - Firebase Hosting + Emulator Suite untuk pembangunan
+
+LUAR SKOP (tiada dalam repo):
+  - Cloud Functions
+  - Firebase Storage (imej/PDF resit)
+  - Realtime Database (hanya config URL wujud, tidak digunakan)
+  - Aplikasi mobile native (Android/iOS)
+  - Payment gateway dalam talian (hanya tunai/kaunter)
+  - Server REST tersendiri
+
+
+================================================================================
+E. SENI BINA SISTEM (SYSTEM ARCHITECTURE)
+================================================================================
+
+LAPISAN SISTEM:
+  +------------------------------------------------------------------+
+  | Lapisan     | Teknologi              | Fungsi                    |
+  +------------------------------------------------------------------+
+  | UI          | HTML5, CSS3, JS ES Mod | Antara muka pengguna      |
+  | Client SDK  | Firebase Web SDK 10.14 | Auth, Firestore, realtime |
+  | Backend     | Cloud Firestore        | Pangkalan data utama      |
+  | Auth        | Firebase Authentication| Log masuk email/password  |
+  | Hosting     | Firebase Hosting       | Deploy aplikasi statik    |
+  | Admin/AI    | Node.js + firebase-admin| Seed, MCP, laporan admin |
+  | AI LLM      | OpenRouter (Llama 3.1) | Chat assistant            |
+  +------------------------------------------------------------------+
+
+ALIRAN DATA RINGKAS:
+
+  [Pelayar Web] <---> [Firebase Auth]
+       |
+       v
+  [Cloud Firestore] <--- [Node.js Admin SDK / MCP Server / Seed Scripts]
+
+  [Pembantu AI] ---> [OpenRouter API]
+       |
+       v
+  [Firestore knowledge_base]
+
+TIADA server aplikasi tersendiri. Logik perniagaan berjalan di:
+  (a) Pelayar — checkout, RBAC, UI, real-time listeners
+  (b) Skrip Node — seed data, MCP tools, generate laporan admin
+
+
+================================================================================
+F. STRUKTUR FOLDER PROJEK
+================================================================================
+
+c:\fyp\
+  index.html                  → Redirect ke landing page
+  html/                       → Halaman utama aplikasi
+    landing.html              → Laman pemasaran TAB KAUNTER
+    login.html                → Log masuk
+    main-menu.html            → Shell navigasi (POS + Back Office)
+    pos-order.html            → Jualan kaunter
+    pos-receipts.html         → Senarai resit
+    pos-order-board.html      → Paparan dapur (kitchen display)
+    dashboard.html            → Papan pemuka owner
+    bo-monthly-reports.html   → Laporan bulanan
+    bo-settings.html          → Tetapan staf & pangkalan data
+    bo-ai-assistant.html      → Urus pangkalan pengetahuan AI
+    staff-dashboard.html      → Dashboard staf
+    menu-costing.html         → Menu costing
+    pos-cost-calculator.html  → Kalkulator kos
+  js/                         → Logik teras aplikasi
+    firebase/                 → Init Firebase + nama koleksi
+    pos-*.js                  → POS, checkout, shift, RBAC
+    cost-calculator/          → Bahan, batch FIFO, resipi
+    staff/                    → CRUD staf, analytics, tetapan
+    monthly-reports/          → Agregat laporan bulanan
+    ai-assistant/             → Chat AI + knowledge base
+    main-menu.js              → Shell navigasi utama
+    login.js                  → Log masuk
+    bo-dashboard-app.js       → Dashboard owner
+  css/                        → Gaya global & modul
+  mcp/                        → MCP Server v2 (modular)
+    tools/read/               → Alat baca Firestore
+    tools/write/              → Alat tulis (create/update)
+    tools/admin/              → Void, shift, staf, delete
+    tools/report/             → Laporan & analytics
+    lib/                      → Admin init, validators, audit
+    middleware/               → Permission gate
+  scripts/                    → Seed & setup Node.js
+  assets/                     → Aset statik (logo, imej)
+  firebase.json               → Config hosting + emulator
+  firestore.rules             → Peraturan keselamatan Firestore
+  firestore.indexes.json      → Indeks Firestore
+  mcp-server.mjs              → Entry point MCP Server
+  package.json                → Dependencies & npm scripts
+
+NOTA: Terdapat salinan path legacy (pos/, menu/, staff/) untuk hosting lama.
+Struktur utama moden ada di html/ + js/.
+
+
+================================================================================
+G. MODUL-MODUL UTAMA (FEATURE BREAKDOWN)
+================================================================================
+
+--------------------------------------------------------------------------------
+G.1 LANDING PAGE (html/landing.html)
+--------------------------------------------------------------------------------
+  - Laman pemasaran TAB KAUNTER
+  - Hero section dengan tagline "Satu sistem untuk kaunter dan dapur"
+  - Tiga tonggak: Kaunter, Dapur, Stok & Kos
+  - Butang "Minta demo" dan "Log masuk"
+  - Bahasa Melayu (lang="ms")
+
+--------------------------------------------------------------------------------
+G.2 AUTHENTIKASI (html/login.html, js/login.js)
+--------------------------------------------------------------------------------
+Aliran log masuk:
+  1. Pengguna masukkan email + kata laluan
+  2. signInWithEmailAndPassword via Firebase Auth
+  3. Sistem baca profil RBAC dari Firestore users/{uid}
+  4. Sesi disimpan dalam localStorage (pos-rbac-session.js)
+  5. Redirect ke main-menu.html
+
+Fail berkaitan:
+  - js/firebase/init.js          → Init Firebase + emulator
+  - js/pos-firebase-auth-bridge.js → Baca payload RBAC dari Firestore
+  - js/pos-rbac-session.js       → Simpan/muat sesi client
+
+--------------------------------------------------------------------------------
+G.3 MENU UTAMA SHELL (html/main-menu.html, js/main-menu.js)
+--------------------------------------------------------------------------------
+Shell navigasi dengan sidebar — dua modul besar:
+
+MODUL POS (Point of Sale):
+  +----------------------+------------------------------------------+
+  | Halaman              | Fungsi                                   |
+  +----------------------+------------------------------------------+
+  | Clock In/Out         | Kehadiran pekerja                        |
+  | Jualan               | Cart, checkout, bayar (pos-order.html)   |
+  | Resit                | Senarai & void resit (pos-receipts.html) |
+  | Papan Dapur          | Pesanan real-time (pos-order-board.html) |
+  +----------------------+------------------------------------------+
+
+MODUL BACK OFFICE (Owner/Admin sahaja):
+  +----------------------+------------------------------------------+
+  | Halaman              | Fungsi                                   |
+  +----------------------+------------------------------------------+
+  | Dashboard            | Jualan hari ini, trend, audit log        |
+  | Laporan Bulanan      | Agregat YYYY-MM                          |
+  | Kalkulator Kos       | Bahan, resipi, menu                      |
+  | Staf                 | Analytics & KPI pekerja                  |
+  | Tetapan              | Urus staf & pangkalan data AI            |
+  +----------------------+------------------------------------------+
+
+Ciri shell:
+  - Halaman dimuatkan dalam iframe embed
+  - Route disimpan dalam sessionStorage/localStorage (refresh tidak hilang)
+  - BroadcastChannel untuk selaraskan sesi RBAC antara parent & iframe
+  - Loader boot untuk elak kilat putih semasa muat
+
+--------------------------------------------------------------------------------
+G.4 POS JUALAN & CHECKOUT FIFO
+--------------------------------------------------------------------------------
+Modul TERAS projek.
+
+Aliran jualan:
+  Pilih menu → Tambah cart → Semak stok → Bayar → Transaction Firestore
+
+Dalam SATU transaksi Firestore (finalizePosSaleFifo):
+  1. Baca batch bahan (ingredient_batches) — susunan FIFO
+  2. Tolak kuantiti stok dari batch tertua dahulu
+  3. Kira COGS per barisan jualan
+  4. Tulis dokumen sales
+  5. Tulis pos_orders + subkoleksi items
+  6. Tulis pos_receipts
+  7. Tulis pos_sales_transactions
+  8. Kemas kini counter (pos_meta/counters: seqOrder, seqReceipt)
+
+FIFO (First In, First Out):
+  - Setiap pembelian bahan → batch baru dalam ingredient_batches
+  - Batch disusun mengikut openedAt (lot lama habis dulu)
+  - COGS = kos batch sebenar yang digunakan, bukan harga purata
+
+Fail berkaitan:
+  - js/pos-order-app.js                  → UI jualan
+  - js/pos-sale-fifo.js                  → Logik FIFO & COGS
+  - js/pos-checkout-firestore-writer.js  → Tulis dokumen POS dalam transaksi
+  - js/cost-calculator/ingredient-batch-repository.js → Urus batch
+
+--------------------------------------------------------------------------------
+G.5 SHIFT & DRAWER TUNAI
+--------------------------------------------------------------------------------
+  +-------------------+------------------------------------------------+
+  | Ciri              | Penerangan                                     |
+  +-------------------+------------------------------------------------+
+  | Buka syif         | Rekod openingCash, openedBy, masa buka         |
+  | Tutup syif        | Rekod actualDrawer, kira variance              |
+  | Cash movements    | Subkoleksi dalam pos_shifts                    |
+  | Active shift      | pos_meta/counters.activeShiftDocId             |
+  | Audit log         | Setiap tindakan dalam pos_audit_logs           |
+  | Variance          | balanced | short | over                        |
+  +-------------------+------------------------------------------------+
+
+Selepas syif ditutup, staf biasa masuk MOD BACA SAHAJA sehingga clock out
+atau syif baru dibuka.
+
+Fail berkaitan:
+  - js/pos-firestore-hub.js   → Hub operasi POS (shift, orders, audit)
+  - js/pos-shift-panel.js     → UI panel syif
+  - js/drawer-variance.js     → Kategori variance drawer
+
+--------------------------------------------------------------------------------
+G.6 KALKULATOR KOS & MENU COSTING
+--------------------------------------------------------------------------------
+Koleksi berkaitan:
+  - ingredients         → Senarai bahan mentah
+  - ingredient_batches  → Stok FIFO per lot belian
+  - ingredient_ledger   → Sejarah harga/pembelian
+  - recipes             → Bill of Materials (BOM)
+  - menu_items          → SKU menu + harga jual
+  - modifiers           → Legacy (produk + resipi dalam satu dokumen)
+  - purchase_history    → Rekod pembelian bulk
+
+Owner boleh:
+  - Tambah/edit bahan mentah
+  - Rekod pembelian → cipta batch FIFO automatik
+  - Susun resipi → kira kos per hidangan
+  - Tetapkan harga jual menu
+  - Lihat margin keuntungan (harga jual - COGS)
+
+Fail berkaitan:
+  - js/cost-calculator/           → Modul kalkulator
+  - html/pos-cost-calculator.html → UI kalkulator
+  - html/menu-costing.html        → UI menu costing
+
+--------------------------------------------------------------------------------
+G.7 PENGURUSAN STAF
+--------------------------------------------------------------------------------
+MODEL OPERASI PENTING:
+
+  Firebase Auth:
+    - Hanya 2 jenis akaun utama: Owner + Staff kongsi (satu akaun untuk semua
+      pekerja kaunter)
+    - BUKAN satu akaun Auth per pekerja
+
+  Firestore staff:
+    - Data operasi pekerja (nama, peranan, jadual, aktiviti)
+    - BUKAN akaun log masuk individu
+
+  Pemilihan nama:
+    - Pekerja pilih nama sendiri di menu utama
+    - operationalStaffId / operationalStaffName disimpan dalam sesi RBAC
+    - ID staf dicatat pada setiap jualan
+
+Data staf termasuk:
+  - Nama, peranan kerja (cashier, kitchen, runner, supervisor)
+  - Jadual mingguan (weeklyRoster)
+  - Aktiviti (staff_activity) — clock in/out, jualan
+  - Tetapan KPI/bonus (staff_settings)
+
+Fail berkaitan:
+  - js/staff/staff-repository.js    → CRUD Firestore
+  - js/staff/staff-mappers.js       → Pemetaan data
+  - js/staff/staff-analytics.js     → Analytics KPI
+  - js/staff/bo-settings-app.js     → UI tetapan staf
+  - js/staff/clock-attendance-firestore.js → Rekod kehadiran
+
+--------------------------------------------------------------------------------
+G.8 DASHBOARD OWNER (js/bo-dashboard-app.js)
+--------------------------------------------------------------------------------
+Papan pemuka real-time dengan data Firestore sebenar:
+  - Jumlah jualan hari ini / semalam / pilih tarikh
+  - Bilangan pesanan & resit
+  - Perbandingan dengan hari sebelumnya (% perubahan)
+  - Log audit terkini
+  - Listener onSnapshot untuk kemas kini masa nyata
+  - Tiada data contoh — keadaan kosong jika tiada rekod
+
+--------------------------------------------------------------------------------
+G.9 LAPORAN BULANAN (js/monthly-reports/generate-monthly-report.js)
+--------------------------------------------------------------------------------
+Dijana untuk setiap bulan kalendar → dokumen monthly_reports/{YYYY-MM}
+
+Sumber data yang diagregat:
+  - pos_receipts       → Jualan & hasil
+  - purchase_history   → Pembelian stok
+  - ingredient_ledger  → Perubahan harga bahan
+  - pos_shifts (closed)→ Variance drawer
+  - staff              → Data pekerja
+  - sales (legacy)     → Transaksi lama
+
+Agregat menggunakan pagination (400 dokumen/halaman) untuk elak had Firestore.
+
+Boleh dijana dari:
+  - UI Back Office (bo-monthly-reports.html)
+  - MCP tool generate_monthly_report
+
+--------------------------------------------------------------------------------
+G.10 PEMBANTU AI (js/ai-assistant/)
+--------------------------------------------------------------------------------
+Komponen:
+  +-------------------------+------------------------------------------+
+  | Fail                    | Fungsi                                   |
+  +-------------------------+------------------------------------------+
+  | ai-service.js           | Hubungi OpenRouter + baca KB Firestore   |
+  | staff-chat-widget.js    | Widget floating chat (semua halaman)     |
+  | owner-app.js            | Editor pangkalan pengetahuan (Back Office) |
+  | knowledge-format.js     | Format teks pangkalan pengetahuan        |
+  | global-widget-bootstrap | Bootstrap widget di halaman              |
+  +-------------------------+------------------------------------------+
+
+Aliran AI:
+  1. Owner sunting teks pangkalan pengetahuan → simpan ke knowledge_base/owner_master
+  2. Staf tanya soalan via widget chat (floating button)
+  3. Sistem hantar konteks KB + soalan ke Llama 3.1 8B (OpenRouter)
+  4. Jawapan dipaparkan — jika tiada dalam KB, AI jawab "rujuk Owner"
+
+Model LLM:
+  - Primary: meta-llama/llama-3.1-8b-instruct
+  - Fallback: google/gemini-flash-1.5, mistralai/mistral-7b-instruct
+
+Koleksi Firestore: knowledge_base (dokumen owner_master)
+
+--------------------------------------------------------------------------------
+G.11 MCP SERVER v2 (mcp-server.mjs)
+--------------------------------------------------------------------------------
+Model Context Protocol — server stdio untuk AI agent (Cursor, Claude, dll.)
+akses data Firestore.
+
+4 PERINGKAT KEBENARAN (MCP_PERMISSION_LEVEL):
+
+  +--------+--------------------------------------------------+
+  | Level  | Kebenaran                                        |
+  +--------+--------------------------------------------------+
+  | read   | Baca sahaja (DEFAULT)                            |
+  | write  | Baca + cipta/kemas kini                          |
+  | admin  | + void resit, tutup syif, urus staf, delete      |
+  | owner  | Semua alat                                       |
+  +--------+--------------------------------------------------+
+
+ALAT BACA (read):
+  get_menu_items, get_orders, get_staff_list, get_sales_summary,
+  get_ingredients, get_shifts, get_receipts, get_audit_logs,
+  get_monthly_report, get_inventory_status, get_staff_by_id,
+  get_order_by_id, get_dashboard_summary
+
+ALAT TULIS (write):
+  update_menu_item, update_ingredient, add_purchase,
+  update_order_status, create_document, update_document
+
+ALAT ADMIN:
+  manage_staff, delete_document, void_receipt, close_shift,
+  manage_inventory
+
+ALAT LAPORAN:
+  generate_monthly_report, get_sales_analytics,
+  get_staff_performance, get_cogs_report
+
+Setiap operasi tulis DIAUDIT via mcp/lib/audit-logger.mjs.
+Input disahkan via mcp/lib/validators.mjs (zod).
+
+Struktur modular:
+  mcp/tools/read/index.mjs
+  mcp/tools/write/index.mjs
+  mcp/tools/admin/index.mjs
+  mcp/tools/report/index.mjs
+  mcp/middleware/permission-gate.mjs
+  mcp/lib/admin-init.mjs
+
+
+================================================================================
+H. PANGKALAN DATA FIRESTORE (SCHEMA)
+================================================================================
+
+Sumber tunggal nama koleksi: js/firebase/collections.js
+
+INVENTORI & MENU:
+  +---------------------+-----------------------------------------------+
+  | Koleksi             | Kandungan                                     |
+  +---------------------+-----------------------------------------------+
+  | ingredients         | Bahan mentah (nama, harga, unit, sortIndex)   |
+  | ingredient_batches  | Stok FIFO per lot (qtyRemaining, costPerUnit) |
+  | ingredient_ledger   | Sejarah harga/pembelian per bahan             |
+  | recipes             | Resipi/BOM (usage: ingredientId → qty)        |
+  | menu_items          | SKU + harga jual + recipeId                   |
+  | modifiers           | Legacy produk+resipi dalam satu dokumen       |
+  | purchase_history    | Rekod pembelian bulk                          |
+  | sales               | Ringkasan transaksi jualan + COGS             |
+  +---------------------+-----------------------------------------------+
+
+POS:
+  +-------------------------+-------------------------------------------+
+  | Koleksi                 | Kandungan                                 |
+  +-------------------------+-------------------------------------------+
+  | users                   | Profil Auth + peranan RBAC                |
+  | pos_meta/counters       | Counter order/resit + active shift ID     |
+  | pos_orders              | Pesanan (+ subkoleksi items)              |
+  | pos_receipts            | Resit                                     |
+  | pos_shifts              | Syif drawer (+ subkoleksi cash_movements) |
+  | pos_sales_transactions  | Transaksi jualan                          |
+  | pos_audit_logs          | Log audit semua tindakan                  |
+  +-------------------------+-------------------------------------------+
+
+STAF & LAPORAN:
+  +---------------------+-----------------------------------------------+
+  | Koleksi             | Kandungan                                     |
+  +---------------------+-----------------------------------------------+
+  | staff               | Data operasi pekerja                          |
+  | staff_activity      | Log aktiviti (clock, jualan, dll.)            |
+  | staff_settings      | Tetapan KPI/bonus (satu dokumen)              |
+  | monthly_reports     | Laporan agregat YYYY-MM                       |
+  | knowledge_base      | Pangkalan pengetahuan AI                      |
+  +---------------------+-----------------------------------------------+
+
+STRUKTUR DOKUMEN PENTING (ringkas):
+
+  sales:
+    createdAt, lines[], subtotal, totalCogsFifo, totalGrossProfitFifo,
+    table, customerName, notes, staffId, staffName,
+    posOrderId, posReceiptNo, posReceiptDocId
+
+  pos_orders:
+    orderNo, receiptNo, saleId, lifecycle, kitchenStage, timestamps,
+    lines[], subtotal, totalCogsFifo, paymentMethod, tendered, changeDue,
+    staffId, staffName, customerName, shiftDocId
+    Subkoleksi items: productId, qty, prices, cogsFifo
+
+  pos_shifts:
+    shiftCode, status (open|closed), openedAt, openingCash, openedBy*,
+    closing { expectedDrawer, actualDrawer, variance, varianceCategory }
+
+  users/{uid}:
+    displayName, role, email
+
+
+================================================================================
+I. AUTHENTIKASI & RBAC (ROLE-BASED ACCESS CONTROL)
+================================================================================
+
+PERANAN SISTEM (js/pos-rbac-constants.js):
+
+  +-------------+--------------------------------------------------+
+  | Peranan     | Akses                                            |
+  +-------------+--------------------------------------------------+
+  | OWNER       | Semua modul POS + Back Office                    |
+  | ADMIN       | Semua modul POS + Back Office                    |
+  | SHIFT_LEAD  | POS + kawalan kewangan (void, dll.)              |
+  | CASHIER     | POS asas (jualan, resit)                         |
+  +-------------+--------------------------------------------------+
+
+STATUS OPERASI:
+  NOT_CLOCKED_IN → CLOCKED_IN → SHIFT_OPEN → SHIFT_CLOSED
+
+GATE KAWALAN:
+  - Clock in wajib sebelum jualan
+  - Buka syif wajib untuk transaksi tunai
+  - Back Office hanya OWNER/ADMIN (canAccessBackOfficeModule)
+  - Void resit perlukan PIN pengurus (prototype)
+  - BroadcastChannel — sesi RBAC diselaraskan antara parent menu & iframe
+  - Selepas syif ditutup: mod baca sahaja untuk staf biasa
+
+SIMPANAN SESI:
+  - localStorage key: kb_pos_rbac_session_v1
+  - Medan: userId, displayName, email, role, clockedIn, operationalStaffId, dll.
+
+
+================================================================================
+J. ALIRAN KERJA PENGGUNA (USER FLOWS)
+================================================================================
+
+FLOW 1: STAF KAUNTER (CASHIER)
+  Landing → Login → Menu Utama (POS)
+    → Pilih nama staf operasi
+    → Clock In
+    → (Syif dibuka oleh SHIFT_LEAD/OWNER)
+    → Jualan → Checkout → Resit
+    → (Syif ditutup) → Mod baca sahaja
+    → Clock Out → Logout
+
+FLOW 2: OWNER/ADMIN
+  Login → Menu Utama → Tukar ke Back Office
+    → Dashboard (pantau jualan)
+    → Laporan Bulanan (jana/regenerate)
+    → Kalkulator Kos (urus bahan/menu)
+    → Staf (analytics KPI)
+    → Tetapan (urus staf + KB AI)
+    → Pembantu AI (sunting SOP)
+
+FLOW 3: DAPUR (KITCHEN)
+  Login → POS → Papan Pesanan
+    → Lihat pesanan real-time (onSnapshot)
+    → Kemas kini kitchen stage
+
+FLOW 4: CHECKOUT (TEKNIKAL)
+  Cart finalized
+    → aggregateCartConsumption() — kira bahan diperlukan
+    → Semak batch stok mencukupi
+    → runTransaction:
+        ├── Tolak ingredient_batches (FIFO)
+        ├── Tulis sales + COGS
+        ├── Tulis pos_orders + items
+        ├── Tulis pos_receipts
+        ├── Tulis pos_sales_transactions
+        └── Increment counters (seqOrder, seqReceipt)
+
+
+================================================================================
+K. TEKNOLOGI & DEPENDENCIES
+================================================================================
+
+FRONTEND:
+  - HTML5, CSS3 (custom, bukan framework React/Vue/Next)
+  - JavaScript ES Modules
+  - Font Awesome 6.5.1 (CDN)
+  - Firebase Web SDK 10.14.1 (CDN — BUKAN npm)
+
+BACKEND / DEV:
+  - Firebase Auth — authentikasi
+  - Cloud Firestore — database NoSQL
+  - Firebase Hosting — deploy
+  - Firebase Emulator Suite — dev local
+  - Node.js ESM — scripts
+  - firebase-admin ^13.0.0 — Admin SDK
+  - @modelcontextprotocol/sdk ^1.29.0 — MCP Server
+  - zod ^3.24.0 — validasi input MCP
+  - concurrently ^9.1.2 — jalankan emulator + seed serentak
+  - firebase-tools ^13.29.1 — CLI
+
+AI:
+  - OpenRouter API — Llama 3.1 8B Instruct
+  - Fallback: Gemini Flash 1.5, Mistral 7B
+
+FIREBASE PROJECT:
+  - Project ID: possystem-6907d
+  - Hosting site: possystem-6907d-d94e2
+  - Auth domain: possystem-6907d.firebaseapp.com
+
+PERKHIDMATAN FIREBASE YANG DIGUNAKAN:
+  +-------------------+--------+
+  | Perkhidmatan      | Status |
+  +-------------------+--------+
+  | Firestore         | Ya     |
+  | Auth              | Ya     |
+  | Hosting           | Ya     |
+  | Emulator Suite    | Ya     |
+  | Cloud Functions   | Tidak  |
+  | Storage           | Tidak  |
+  | Realtime Database | Tidak  |
+  +-------------------+--------+
+
+
+================================================================================
+L. PEMBANGUNAN & DEPLOYMENT
+================================================================================
+
+SETUP DEV:
+  npm install
+  npm run dev              # Emulator + auto seed
+  npm run dev:emulators    # Emulator sahaja
+
+EMULATOR PORTS:
+  +----------------+------+
+  | Perkhidmatan   | Port |
+  +----------------+------+
+  | Auth           | 9099 |
+  | Firestore      | 8080 |
+  | Hosting        | 5000 |
+  | Emulator UI    | 4000 |
+  +----------------+------+
+
+SEED DATA:
+  npm run seed:demo-users  # Akaun Auth demo (Owner + Staff)
+  npm run seed:staff       # Data staf penuh
+  npm run seed:burger      # Menu & bahan burger
+  npm run seed:pos         # Bootstrap POS
+  npm run setup            # Install + setup penuh
+  npm run setup:seed-only  # Seed sahaja
+
+DEPLOY:
+  npm run deploy:firestore  # Rules + indexes
+  firebase deploy --only hosting
+
+MCP SERVER:
+  node mcp-server.mjs
+  # Env: GOOGLE_APPLICATION_CREDENTIALS atau firebase-service-account.json
+  # Atau FIRESTORE_EMULATOR_HOST untuk emulator
+  # MCP_PERMISSION_LEVEL=read|write|admin|owner
+
+REAL-TIME LISTENERS:
+  onSnapshot digunakan untuk:
+  - Pesanan POS (js/pos-firestore-hub.js)
+  - Resit
+  - Audit log
+  - Shift meta & cash movements
+  - Staf repository
+  - Cost calculator repositories
+
+
+================================================================================
+M. KESELAMATAN (SECURITY REVIEW)
+================================================================================
+
+  +---------------------+---------------------------+---------------------------+
+  | Isu                 | Status Semasa             | Cadangan                  |
+  +---------------------+---------------------------+---------------------------+
+  | Firestore rules     | allow read,write: if true | request.auth + role check |
+  | RBAC                | Client-side (localStorage)| Sahkan server-side        |
+  | PIN pengurus        | Hardcoded prototype       | Ganti server-side auth    |
+  | API key Firebase    | Dalam js/firebase/config  | Hadkan domain GCP Console |
+  | MCP Server          | Stdio, tiada auth network | Mesin admin sahaja        |
+  | OpenRouter API key  | Hardcoded ai-service.js   | Pindah ke env variable    |
+  | Service account     | .gitignore (betul)        | Least-privilege IAM       |
+  +---------------------+---------------------------+---------------------------+
+
+NOTA FYP: Peraturan Firestore sengaja dibuka (if true) untuk memudahkan
+pembangunan dan demo. Untuk production, peraturan mesti diperketatkan.
+
+
+================================================================================
+N. KELEBIHAN & INOVASI PROJEK
+================================================================================
+
+  1. FIFO automatik — COGS tepat tanpa kira manual
+  2. Real-time — onSnapshot untuk pesanan, resit, dashboard
+  3. Satu transaksi atomik — checkout tidak separuh jadi (all-or-nothing)
+  4. MCP integration — AI agent boleh baca/tulis data operasi terkawal
+  5. Pembantu AI — staf dapat jawapan SOP tanpa ganggu owner
+  6. Modular MCP v2 — read/write/admin/report dengan permission gate
+  7. Shell iframe — navigasi lancar tanpa reload penuh
+  8. Route persistence — refresh tidak hilang halaman semasa
+  9. Audit trail — setiap tindakan POS & MCP dicatat
+  10. Laporan bulanan automatik — agregat dari pelbagai koleksi
+
+
+================================================================================
+O. HAD & KETERBATASAN
+================================================================================
+
+  - Tiada Cloud Functions — logik perniagaan di client browser
+  - Firestore rules terbuka (FYP/dev mode)
+  - RBAC tidak disahkan server-side
+  - Tiada offline mode / PWA
+  - Tiada payment gateway (tunai sahaja)
+  - Akaun staf kongsi (bukan login individu per pekerja)
+  - Duplikasi path legacy (pos/, menu/, staff/)
+  - Tiada Firebase Storage untuk resit PDF/imej
+  - PIN pengurus masih prototype (hardcoded)
+
+
+================================================================================
+P. CADANGAN MASA DEPAN
+================================================================================
+
+  Phase 1: Ketatkan Firestore rules + auth checks
+  Phase 2: Cloud Functions untuk void/refund/stock dengan idempotency
+  Phase 3: Firebase Storage untuk resit PDF/imej
+  Phase 4: PWA + offline cache untuk POS
+  Phase 5: Akaun Auth individu per pekerja
+  Phase 6: Integrasi payment gateway (Touch 'n Go, GrabPay, dll.)
+  Phase 7: Notifikasi push untuk pesanan dapur
+  Phase 8: Multi-outlet / multi-branch support
+
+
+================================================================================
+Q. RUMUSAN (CONCLUSION)
+================================================================================
+
+TAB KAUNTER ialah sistem POS dan Back Office yang lengkap untuk restoran
+burger, dibina dengan teknologi web moden dan Firebase. Projek ini menyelesaikan
+masalah operasi harian restoran — dari jualan kaunter, pengurusan stok FIFO,
+syif tunai, pengurusan staf, laporan bulanan, sehingga integrasi AI untuk
+bantuan operasi.
+
+Sistem ini sesuai sebagai Final Year Project kerana merangkumi:
+  - Pembangunan full-stack (frontend + backend-as-a-service)
+  - Rekaan pangkalan data NoSQL (Firestore)
+  - Algoritma perniagaan (FIFO, COGS)
+  - Kawalan akses (RBAC)
+  - Integrasi AI (MCP + LLM)
+  - Real-time data synchronization
+  - Deployment cloud (Firebase Hosting)
+
+
+================================================================================
+R. RUJUKAN FAIL PENTING (QUICK REFERENCE)
+================================================================================
+
+  +---------------------------+------------------------------------------+
+  | Topik                       | Fail                                     |
+  +---------------------------+------------------------------------------+
+  | Nama koleksi Firestore      | js/firebase/collections.js               |
+  | Init Firebase + emulator    | js/firebase/init.js, config.js           |
+  | Auth + RBAC payload         | js/pos-firebase-auth-bridge.js           |
+  | Login                       | js/login.js                              |
+  | Sesi RBAC client            | js/pos-rbac-session.js                   |
+  | Pemalar RBAC                | js/pos-rbac-constants.js                 |
+  | POS hub + shift + audit     | js/pos-firestore-hub.js                  |
+  | Checkout transaksi          | js/pos-checkout-firestore-writer.js      |
+  | FIFO jualan                 | js/pos-sale-fifo.js                      |
+  | UI jualan POS               | js/pos-order-app.js                      |
+  | Menu shell                  | js/main-menu.js, html/main-menu.html     |
+  | Laporan bulanan             | js/monthly-reports/generate-monthly-report |
+  | Dashboard owner             | js/bo-dashboard-app.js                   |
+  | Pembantu AI                 | js/ai-assistant/ai-service.js            |
+  | MCP Server                  | mcp-server.mjs, mcp/tools/               |
+  | Seed & setup                | scripts/setup.mjs, scripts/lib/          |
+  | Firestore rules             | firestore.rules                          |
+  | Firestore indexes           | firestore.indexes.json                   |
+  | Hosting config              | firebase.json                            |
+  | Dokumentasi MCP context     | SYSTEM-DOCUMENTATION-MCP-CONTEXT.txt     |
+  +---------------------------+------------------------------------------+
+
+
+================================================================================
+S. ONE-LINE SUMMARY
+================================================================================
+
+Static Firebase Hosting app + Firestore + Auth; POS/FIFO/reports in ES modules;
+Node firebase-admin for seeds; MCP (stdio) with permission tiers; AI assistant
+via OpenRouter; no Cloud Functions, Storage SDK, or custom REST backend in repo.
+
+
+================================================================================
+TAMAT DOKUMEN
+================================================================================

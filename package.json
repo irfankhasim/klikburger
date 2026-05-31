@@ -9,6 +9,7 @@
     "seed:burger": "node scripts/seed-burger-firestore.mjs",
     "seed:local": "node scripts/seed-local.mjs",
     "seed:demo-users": "node scripts/seed-demo-auth-users.mjs",
+    "seed:staff": "node scripts/seed-staff-full.mjs",
     "seed:pos": "node scripts/seed-pos-bootstrap.mjs",
     "dev": "concurrently -n emu,seed -c blue,green \"npx firebase emulators:start --only firestore,auth,hosting\" \"node scripts/wait-and-seed-emulators.mjs\"",
     "dev:emulators": "npx firebase emulators:start --only firestore,auth,hosting",
@@ -20,6 +21,12 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "concurrently": "^9.1.2",
     "firebase-admin": "^13.0.0",
-    "firebase-tools": "^13.29.1"
+    "firebase-tools": "^13.29.1",
+    "zod": "^3.24.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4"
   }
 }

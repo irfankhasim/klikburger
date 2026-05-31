@@ -9,6 +9,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -20,6 +21,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   Timestamp,
   serverTimestamp,
   increment
@@ -40,13 +42,23 @@ import {
  */
 var EMULATOR_HOSTING_PORTS = { "5000": true, "5001": true };
 
+/** Elak paksa emulator pada domain production — jika tidak, Auth cuba 127.0.0.1:9099 & boleh “loading” lama. */
+function isLocalBrowserHost() {
+  try {
+    var h = String(window.location.hostname || "");
+    return !h || h === "localhost" || h === "127.0.0.1";
+  } catch (e) {
+    return false;
+  }
+}
+
 function shouldUseFirebaseEmulators() {
   if (typeof window === "undefined") return false;
   try {
-    if (new URLSearchParams(window.location.search).get("fbEmu") === "1") return true;
-    if (window.localStorage && window.localStorage.getItem("kb_fb_emu") === "1") return true;
     var p = window.location.port || "";
     if (EMULATOR_HOSTING_PORTS[p]) return true;
+    if (new URLSearchParams(window.location.search).get("fbEmu") === "1") return isLocalBrowserHost();
+    if (window.localStorage && window.localStorage.getItem("kb_fb_emu") === "1") return isLocalBrowserHost();
   } catch (e) {}
   return false;
 }
@@ -75,6 +87,7 @@ export {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -86,6 +99,7 @@ export {
   where,
   orderBy,
   limit,
+  startAfter,
   Timestamp,
   serverTimestamp,
   increment
