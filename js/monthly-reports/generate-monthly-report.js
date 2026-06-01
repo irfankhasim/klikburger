@@ -66,6 +66,10 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
+function round4(n) {
+  return Math.round(n * 10000) / 10000;
+}
+
 async function fetchPagedByRange(colName, field, tsStart, tsEnd) {
   var out = [];
   var lastSnap = null;
@@ -267,33 +271,111 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
 
   var ledgerPurchaseRm = 0;
   var ledgerByIngredient = {};
+  var ledgerConsumptionByIngredient = {};
   var ledgerKinds = {};
+
   ledgerDocs.forEach(function (d) {
     var x = d.data();
     var kind = String(x.kind || "");
     ledgerKinds[kind] = (ledgerKinds[kind] || 0) + 1;
-    if (kind !== "purchase" && kind !== "initial" && kind !== "price_adjust") return;
-    var price = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
-    ledgerPurchaseRm += price;
     var iid = String(x.ingredientId || "");
-    if (!iid) return;
-    if (!ledgerByIngredient[iid]) {
-      ledgerByIngredient[iid] = { ingredientId: iid, name: ingNameById[iid] || iid, ledgerSpendRm: 0, entryCount: 0 };
+    var ingName = ingNameById[iid] || String(x.nameSnapshot || iid);
+    var unit = String(x.unit || "unit");
+
+    // Rekod pembelian
+    if (kind === "purchase" || kind === "initial" || kind === "price_adjust") {
+      var price = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
+      var qty = typeof x.purchaseQty === "number" ? x.purchaseQty : parseFloat(x.purchaseQty) || 0;
+      ledgerPurchaseRm += price;
+      if (!iid) return;
+      if (!ledgerByIngredient[iid]) {
+        ledgerByIngredient[iid] = {
+          ingredientId: iid,
+          name: ingName,
+          unit: unit,
+          ledgerSpendRm: 0,
+          totalQtyPurchased: 0,
+          entryCount: 0
+        };
+      }
+      ledgerByIngredient[iid].ledgerSpendRm += price;
+      ledgerByIngredient[iid].totalQtyPurchased += qty;
+      ledgerByIngredient[iid].entryCount += 1;
     }
-    ledgerByIngredient[iid].ledgerSpendRm += price;
-    ledgerByIngredient[iid].entryCount += 1;
+
+    // Rekod penggunaan dari jualan
+    if (kind === "sale_consumption") {
+      if (!iid) return;
+      var consumedQty = typeof x.purchaseQty === "number" ? Math.abs(x.purchaseQty) : parseFloat(x.purchaseQty) || 0;
+      var consumedCost = typeof x.purchasePrice === "number" ? Math.abs(x.purchasePrice) : parseFloat(x.purchasePrice) || 0;
+      var cpu = typeof x.costPerUnit === "number" ? x.costPerUnit : parseFloat(x.costPerUnit) || 0;
+      if (!ledgerConsumptionByIngredient[iid]) {
+        ledgerConsumptionByIngredient[iid] = {
+          ingredientId: iid,
+          name: ingName,
+          unit: unit,
+          totalQtyConsumed: 0,
+          totalCostConsumed: 0,
+          costPerUnit: cpu
+        };
+      }
+      ledgerConsumptionByIngredient[iid].totalQtyConsumed += consumedQty;
+      ledgerConsumptionByIngredient[iid].totalCostConsumed += consumedCost;
+    }
   });
+
   ledgerPurchaseRm = round2(ledgerPurchaseRm);
+
   var ledgerAgg = Object.keys(ledgerByIngredient)
     .map(function (k) {
       var row = ledgerByIngredient[k];
       row.ledgerSpendRm = round2(row.ledgerSpendRm);
+      row.totalQtyPurchased = round4(row.totalQtyPurchased);
       return row;
     })
-    .sort(function (a, b) {
-      return b.ledgerSpendRm - a.ledgerSpendRm;
-    })
+    .sort(function (a, b) { return b.ledgerSpendRm - a.ledgerSpendRm; })
     .slice(0, 40);
+
+  var consumptionAgg = Object.keys(ledgerConsumptionByIngredient)
+    .map(function (k) {
+      var row = ledgerConsumptionByIngredient[k];
+      row.totalQtyConsumed = round4(row.totalQtyConsumed);
+      row.totalCostConsumed = round2(row.totalCostConsumed);
+      return row;
+    })
+    .sort(function (a, b) { return b.totalCostConsumed - a.totalCostConsumed; });
+
+  // Gabungkan pembelian dan penggunaan dalam satu senarai
+  var allIngredientIds = new Set([
+    ...Object.keys(ledgerByIngredient),
+    ...Object.keys(ledgerConsumptionByIngredient)
+  ]);
+
+  var combinedIngredientSummary = Array.from(allIngredientIds).map(function(iid) {
+    var purchase = ledgerByIngredient[iid] || {};
+    var consumption = ledgerConsumptionByIngredient[iid] || {};
+    var name = purchase.name || consumption.name || ingNameById[iid] || iid;
+    var unit = purchase.unit || consumption.unit || "unit";
+    var qtyBought = round4(purchase.totalQtyPurchased || 0);
+    var qtyUsed = round4(consumption.totalQtyConsumed || 0);
+    var qtyRemaining = round4(Math.max(0, qtyBought - qtyUsed));
+    var costUsed = round2(consumption.totalCostConsumed || 0);
+    var costBought = round2(purchase.ledgerSpendRm || 0);
+    return {
+      ingredientId: iid,
+      name: name,
+      unit: unit,
+      qtyBought: qtyBought,
+      qtyUsed: qtyUsed,
+      qtyRemaining: qtyRemaining,
+      costBought: costBought,
+      costUsed: costUsed
+    };
+  }).filter(function(x) {
+    return x.qtyBought > 0 || x.qtyUsed > 0;
+  }).sort(function(a, b) {
+    return b.costBought - a.costBought;
+  });
 
   var salesLegacySnap = await fetchPagedByRange(COL_SALES, "createdAt", tsStart, tsEnd);
   var legacySalesTotal = 0;
@@ -329,6 +411,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       ledgerSpendInitialPurchaseAdjustRm: ledgerPurchaseRm,
       ledgerKindCounts: ledgerKinds,
       topIngredientsByLedgerSpendRm: ledgerAgg,
+      consumptionByIngredient: consumptionAgg,
+      ingredientSummary: combinedIngredientSummary,
       ingredientsCatalogCount: ingSnap.size
     },
     sales: {

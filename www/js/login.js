@@ -1,6 +1,13 @@
 import { auth, signInWithEmailAndPassword, signOut } from "./firebase/init.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
 import { loginSession, ROLES } from "./pos-rbac-session.js";
+import {
+  getLoginLockState,
+  recordLoginFailure,
+  recordLoginSuccess,
+  isCredentialLoginFailure,
+  lockoutMessageForState
+} from "./login-lockout.js";
 
 var MAIN_MENU_HREF = new URL("../html/main-menu.html", import.meta.url).href;
 
@@ -108,8 +115,71 @@ async function showResumeSessionIfNeeded() {
   });
 }
 
+var lockoutBanner = null;
+var lockoutTimerId = null;
+var loginSubmitBtn = null;
+
+function ensureLockoutBanner() {
+  var form = document.querySelector(".login-form");
+  if (!form) return null;
+  if (!lockoutBanner) {
+    lockoutBanner = document.createElement("p");
+    lockoutBanner.className = "login-lockout-banner";
+    lockoutBanner.setAttribute("role", "alert");
+    lockoutBanner.hidden = true;
+    form.insertBefore(lockoutBanner, form.firstChild);
+  }
+  if (!loginSubmitBtn) {
+    loginSubmitBtn = form.querySelector('button[type="submit"]');
+  }
+  return lockoutBanner;
+}
+
+function applyLoginLockUi(email) {
+  var banner = ensureLockoutBanner();
+  if (!banner) return;
+  var state = getLoginLockState(email);
+  if (state.locked) {
+    banner.hidden = false;
+    banner.textContent = lockoutMessageForState(state);
+    if (loginSubmitBtn) loginSubmitBtn.disabled = true;
+    if (lockoutTimerId) window.clearInterval(lockoutTimerId);
+    lockoutTimerId = window.setInterval(function () {
+      var s = getLoginLockState(email);
+      if (!s.locked) {
+        window.clearInterval(lockoutTimerId);
+        lockoutTimerId = null;
+        banner.hidden = true;
+        if (loginSubmitBtn) loginSubmitBtn.disabled = false;
+        return;
+      }
+      banner.textContent = lockoutMessageForState(s);
+    }, 1000);
+  } else {
+    banner.hidden = true;
+    if (loginSubmitBtn) loginSubmitBtn.disabled = false;
+    if (lockoutTimerId) {
+      window.clearInterval(lockoutTimerId);
+      lockoutTimerId = null;
+    }
+  }
+}
+
+function bindLoginLockoutWatch() {
+  var emailEl = document.getElementById("email");
+  if (!emailEl) return;
+  emailEl.addEventListener("input", function () {
+    applyLoginLockUi(emailEl.value.trim());
+  });
+  emailEl.addEventListener("blur", function () {
+    applyLoginLockUi(emailEl.value.trim());
+  });
+  applyLoginLockUi(emailEl.value.trim());
+}
+
 showResumeSessionIfNeeded();
 bindPasswordToggle();
+bindLoginLockoutWatch();
 
 document.querySelector(".login-form").addEventListener("submit", async function (e) {
   e.preventDefault();
@@ -121,6 +191,14 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     window.alert("Sila isi e-mel dan kata laluan.");
     return;
   }
+
+  var lockState = getLoginLockState(email);
+  if (lockState.locked) {
+    applyLoginLockUi(email);
+    window.alert(lockoutMessageForState(lockState));
+    return;
+  }
+
   try {
     var cred = await Promise.race([
       signInWithEmailAndPassword(auth, email, password),
@@ -130,14 +208,17 @@ document.querySelector(".login-form").addEventListener("submit", async function 
         }, 25000);
       })
     ]);
+    recordLoginSuccess(email);
     var payload = await getPosUserRbacPayloadWithFallback(cred.user);
     loginSession(payload);
     window.location.href = MAIN_MENU_HREF;
   } catch (err) {
     var code = err && err.code;
     var msg = "Log masuk gagal.";
-    if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
-      msg = "E-mel atau kata laluan tidak sah.";
+    if (isCredentialLoginFailure(err)) {
+      var fail = recordLoginFailure(email);
+      msg = fail.message;
+      applyLoginLockUi(email);
     } else if (code === "auth/network-timeout") {
       msg = "Rangkaian terlalu lama tidak menjawab. Cuba lagi.";
     } else if (code === "auth/too-many-requests") {

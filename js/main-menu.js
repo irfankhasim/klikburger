@@ -1296,33 +1296,28 @@ function showClockInStaffPickerModal(onClose) {
     btnOk.textContent = "Mengesahkan…";
 
     try {
-      var { db, doc, getDoc } = await import("./firebase/init.js");
-      var pinSnap = await getDoc(doc(db, "staff_pins", v));
+      var { verifyStaffPinCallable } = await import("./staff/verify-staff-pin-callable.js");
+      var pinResult = await verifyStaffPinCallable(v, enteredPin);
 
-      if (pinSnap.exists()) {
-        var storedPin = String(pinSnap.data().pin || "").trim();
-
-        if (storedPin && enteredPin !== storedPin) {
-          if (pinError) {
-            pinError.textContent = "PIN tidak betul. Sila cuba lagi.";
-            pinError.style.display = "block";
-          }
-          if (pinInput) {
-            pinInput.value = "";
-            pinInput.focus();
-          }
-          btnOk.disabled = false;
-          btnOk.textContent = "Sahkan clock in";
-          return;
+      if (!pinResult.verified) {
+        if (pinError) {
+          pinError.textContent = pinResult.error || "PIN tidak betul. Sila cuba lagi.";
+          pinError.style.display = "block";
         }
+        if (pinInput) {
+          pinInput.value = "";
+          pinInput.focus();
+        }
+        btnOk.disabled = false;
+        btnOk.textContent = "Sahkan clock in";
+        return;
       }
-      // PIN verified or no PIN set — proceed
       var opt = sel.options[sel.selectedIndex];
       var name = opt ? String(opt.text || "").trim() : "";
       cleanup({ id: v, name: name });
     } catch (err) {
       console.warn("[clock-in] PIN check error:", err);
-      // Graceful degradation — allow clock-in if Firestore unreachable
+      // Log masuk ialah lapisan keselamatan utama — jika semakan PIN tidak tersedia, benarkan clock-in.
       var opt2 = sel.options[sel.selectedIndex];
       var name2 = opt2 ? String(opt2.text || "").trim() : "";
       cleanup({ id: v, name: name2 });

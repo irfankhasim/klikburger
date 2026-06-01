@@ -34,6 +34,11 @@ import {
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {
+  getFunctions,
+  httpsCallable,
+  connectFunctionsEmulator
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
 
 /**
  * Hanya port Hosting emulator Firebase (npm run dev).
@@ -66,6 +71,8 @@ function shouldUseFirebaseEmulators() {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+/** Sama dengan region `verifyStaffPin` dalam functions/index.js */
+export const functions = getFunctions(app, "asia-southeast1");
 
 if (shouldUseFirebaseEmulators()) {
   try {
@@ -78,12 +85,18 @@ if (shouldUseFirebaseEmulators()) {
   } catch (e) {
     /* sudah disambung */
   }
+  try {
+    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  } catch (e) {
+    /* sudah disambung */
+  }
 }
 
 export {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  httpsCallable,
   collection,
   doc,
   addDoc,

@@ -27,15 +27,17 @@ exports.verifyStaffPin = onCall({ region: "asia-southeast1" }, async (request) =
   const db = getFirestore();
 
   try {
-    const staffRef = db.collection("staff").doc(staffId);
-    const staffSnap = await staffRef.get();
-
+    const staffSnap = await db.collection("staff").doc(staffId).get();
     if (!staffSnap.exists) {
       throw new HttpsError("not-found", "Rekod staf tidak dijumpai.");
     }
 
-    const staffData = staffSnap.data();
-    const storedPin = String(staffData.pin || "").trim();
+    const pinSnap = await db.collection("staff_pins").doc(staffId).get();
+    if (!pinSnap.exists) {
+      return { verified: true, noPin: true };
+    }
+
+    const storedPin = String(pinSnap.data().pin || "").trim();
 
     // If no PIN set, allow clock-in (backward compatible)
     if (!storedPin) {

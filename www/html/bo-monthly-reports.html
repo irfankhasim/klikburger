@@ -3,60 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Laporan penuh — Tab Kaunter</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    />
+    <title>Laporan Perniagaan — Tab Kaunter</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/bo-monthly-reports.css" />
     <script>
-      try {
-        if (window.self !== window.parent) {
-          document.documentElement.classList.add("kb-embed");
-        }
-      } catch (e) {}
+      try { if (window.self !== window.parent) { document.documentElement.classList.add("kb-embed"); } } catch (e) {}
     </script>
   </head>
   <body class="staff-dash">
     <div class="mr-app" id="mr-root">
+
       <header class="mr-header kb-page-header">
-        <h1 class="sr-only">Laporan penuh</h1>
-        <div class="mr-page-desc">
-          <p class="mr-page-desc__text">
-            <strong>Laporan penuh</strong> — data dan pengiraan diambil daripada <strong>Firestore</strong>.
-            Pilih tempoh, kemudian jana atau muat turun laporan sebagai PDF.
-          </p>
-        </div>
+        <h1 class="sr-only">Laporan Perniagaan</h1>
       </header>
 
-      <section class="mr-toolbar" aria-label="Penapis dan tindakan">
+      <section class="mr-toolbar" aria-label="Penapis laporan">
         <div class="mr-toolbar__row">
           <div class="mr-field">
-            <span class="mr-field__label" id="mr-lbl-period">Tempoh</span>
-            <select id="mr-period" class="mr-select" aria-labelledby="mr-lbl-period">
-              <option value="month">Bulanan</option>
-              <option value="year">Tahunan</option>
-            </select>
+            <span class="mr-field__label">Tahun</span>
+            <select id="mr-year" class="mr-select"></select>
           </div>
           <div class="mr-field">
-            <span class="mr-field__label" id="mr-lbl-year">Tahun</span>
-            <select id="mr-year" class="mr-select" aria-labelledby="mr-lbl-year"></select>
-          </div>
-          <div class="mr-field" id="mr-month-wrap">
-            <span class="mr-field__label" id="mr-lbl-month">Bulan</span>
-            <select id="mr-month" class="mr-select" aria-labelledby="mr-lbl-month"></select>
+            <span class="mr-field__label">Bulan</span>
+            <select id="mr-month" class="mr-select"></select>
           </div>
           <div class="mr-toolbar__actions">
-            <button type="button" class="btn btn--outline" id="mr-load" title="Muat laporan dari Firestore">
-              <i class="fa-solid fa-rotate" aria-hidden="true"></i> Muat laporan
-            </button>
-            <button type="button" class="btn btn--outline" id="mr-generate" title="Jana laporan baru">
+            <button type="button" class="btn btn--primary" id="mr-generate">
               <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i> Jana laporan
             </button>
-            <button type="button" class="btn btn--primary" id="mr-download-pdf" title="Muat turun PDF" disabled>
+            <button type="button" class="btn btn--primary" id="mr-download-pdf" disabled>
               <i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Muat turun PDF
             </button>
           </div>
@@ -70,19 +46,19 @@
           var cy = now.getFullYear();
           var yEl = document.getElementById("mr-year");
           var mEl = document.getElementById("mr-month");
-          if (yEl && !yEl.options.length) {
-            for (var y = cy; y >= cy - 6; y -= 1) {
-              var oy = document.createElement("option");
-              oy.value = String(y); oy.textContent = String(y);
-              yEl.appendChild(oy);
+          if (yEl) {
+            for (var y = cy; y >= cy - 6; y--) {
+              var o = document.createElement("option");
+              o.value = String(y); o.textContent = String(y);
+              yEl.appendChild(o);
             }
             yEl.value = String(cy);
           }
-          if (mEl && !mEl.options.length) {
-            for (var mi = 1; mi <= 12; mi += 1) {
+          if (mEl) {
+            for (var mi = 1; mi <= 12; mi++) {
               var om = document.createElement("option");
               om.value = String(mi);
-              om.textContent = labels[mi - 1] + " (" + mi + ")";
+              om.textContent = labels[mi-1] + " (" + mi + ")";
               mEl.appendChild(om);
             }
             mEl.value = String(now.getMonth() + 1);
@@ -92,63 +68,9 @@
 
       <p id="mr-status" class="mr-status mr-status--hidden" role="status" aria-live="polite"></p>
 
-      <div class="mr-layout">
-        <!-- Sidebar: sejarah laporan -->
-        <aside class="mr-history-sidebar" aria-label="Sejarah laporan">
-          <h2 class="mr-history-title"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Sejarah</h2>
-          <div id="mr-history-list" class="mr-history-list">
-            <p class="mr-note">Tiada sejarah.</p>
-          </div>
-        </aside>
+      <div id="mr-report-body"></div>
 
-        <!-- Main report content -->
-        <div class="mr-main" id="mr-report-main">
-          <div class="mr-tabs-wrap">
-            <div class="mr-tabs" role="tablist" aria-label="Jenis laporan">
-              <button type="button" class="mr-tab kb-surface-btn is-active" role="tab"
-                id="mr-tab-sales" aria-selected="true" aria-controls="mr-panel-sales" tabindex="0" data-tab="sales">
-                <i class="fa-solid fa-chart-line" aria-hidden="true"></i> Jualan
-              </button>
-              <button type="button" class="mr-tab kb-surface-btn" role="tab"
-                id="mr-tab-raw" aria-selected="false" aria-controls="mr-panel-raw" tabindex="-1" data-tab="raw">
-                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Bahan mentah
-              </button>
-              <button type="button" class="mr-tab kb-surface-btn" role="tab"
-                id="mr-tab-staff" aria-selected="false" aria-controls="mr-panel-staff" tabindex="-1" data-tab="staff">
-                <i class="fa-solid fa-users" aria-hidden="true"></i> Gaji kakitangan
-              </button>
-              <button type="button" class="mr-tab kb-surface-btn" role="tab"
-                id="mr-tab-company" aria-selected="false" aria-controls="mr-panel-company" tabindex="-1" data-tab="company">
-                <i class="fa-solid fa-building" aria-hidden="true"></i> Keseluruhan (P&amp;L)
-              </button>
-            </div>
-          </div>
-
-          <section class="mr-panel" id="mr-panel-sales" role="tabpanel" aria-labelledby="mr-tab-sales"></section>
-          <section class="mr-panel" id="mr-panel-raw" role="tabpanel" aria-labelledby="mr-tab-raw" hidden></section>
-          <section class="mr-panel" id="mr-panel-staff" role="tabpanel" aria-labelledby="mr-tab-staff" hidden></section>
-          <section class="mr-panel" id="mr-panel-company" role="tabpanel" aria-labelledby="mr-tab-company" hidden></section>
-
-          <section class="mr-ai-section" id="mr-ai-section" aria-labelledby="mr-ai-heading">
-            <div class="mr-ai-section__head">
-              <h2 class="mr-ai-section__title" id="mr-ai-heading">
-                <i class="fa-solid fa-robot" aria-hidden="true"></i> Analisis AI Perniagaan
-              </h2>
-              <p class="mr-ai-section__desc">
-                Rumusan dan cadangan tindakan berdasarkan laporan di atas. Analisis dijana hanya apabila anda memintanya — tiada pemprosesan automatik.
-              </p>
-              <button type="button" class="btn btn--outline" id="mr-ai-generate" disabled>
-                <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Jana Analisis
-              </button>
-            </div>
-            <div id="mr-ai-insights" class="mr-ai-section__body">
-              <p class="mr-note">Muat atau jana laporan terlebih dahulu sebelum analisis AI.</p>
-            </div>
-          </section>
-        </div>
-      </div>
     </div>
-
     <script type="module" src="../js/bo-monthly-reports-app.js"></script>
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>

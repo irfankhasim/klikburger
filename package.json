@@ -11,8 +11,9 @@
     "seed:demo-users": "node scripts/seed-demo-auth-users.mjs",
     "seed:staff": "node scripts/seed-staff-full.mjs",
     "seed:pos": "node scripts/seed-pos-bootstrap.mjs",
-    "dev": "concurrently -n emu,seed -c blue,green \"npx firebase emulators:start --only firestore,auth,hosting\" \"node scripts/wait-and-seed-emulators.mjs\"",
-    "dev:emulators": "npx firebase emulators:start --only firestore,auth,hosting",
+    "dev": "concurrently -n emu,seed -c blue,green \"npx firebase emulators:start --only firestore,auth,functions,hosting\" \"node scripts/wait-and-seed-emulators.mjs\"",
+    "dev:emulators": "npx firebase emulators:start --only firestore,auth,functions,hosting",
+    "deploy:functions": "npx firebase deploy --only functions",
     "cleanup": "node scripts/cleanup-legacy.mjs",
     "deploy:firestore": "npx firebase deploy --only firestore:rules,firestore:indexes",
     "sync:webconfig": "node scripts/sync-firebase-web-config.mjs"
