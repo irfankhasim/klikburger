@@ -17,7 +17,8 @@ import {
 import {
   COL_POS_RECEIPTS,
   COL_POS_ORDERS,
-  COL_POS_AUDIT
+  COL_POS_AUDIT,
+  COL_POS_SHIFTS
 } from "./firebase/collections.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
 
@@ -221,26 +222,6 @@ function receiptQuery(bounds) {
   );
 }
 
-function ordersQuery(bounds) {
-  return query(
-    collection(db, COL_POS_ORDERS),
-    where("paidAt", ">=", bounds.startTs),
-    where("paidAt", "<", bounds.endTs),
-    orderBy("paidAt", "desc"),
-    limit(800)
-  );
-}
-
-function auditQuery(bounds) {
-  return query(
-    collection(db, COL_POS_AUDIT),
-    where("at", ">=", bounds.startTs),
-    where("at", "<", bounds.endTs),
-    orderBy("at", "desc"),
-    limit(400)
-  );
-}
-
 function filterVoidedReceiptDocs(docs) {
   return docs.filter(function (d) {
     var x = d.data();
@@ -363,90 +344,59 @@ function aggregatePayment(receiptDocs, bounds) {
   };
 }
 
-function buildDrawerRowsFromAudit(auditDocs, bounds) {
-  var cashIn = 0;
-  var cashOut = 0;
-  auditDocs.forEach(function (d) {
-    var x = d.data();
-    var ms = toMillis(x.at);
-    if (ms < bounds.startMs || ms >= bounds.endMs) return;
-    var t = String(x.type || "");
-    var meta = x.meta && typeof x.meta === "object" ? x.meta : {};
-    var amt = typeof meta.amount === "number" ? meta.amount : parseFloat(meta.amount) || 0;
-    if (t === "cash_in") cashIn += amt;
-    if (t === "cash_out") cashOut += amt;
-  });
-  cashIn = Math.round(cashIn * 100) / 100;
-  cashOut = Math.round(cashOut * 100) / 100;
-  if (cashIn <= 0 && cashOut <= 0) return [];
-  return [
-    { label: "Tunai masuk (audit)", value: "+RM " + cashIn.toLocaleString("ms-MY") },
-    { label: "Tunai keluar (audit)", value: "−RM " + cashOut.toLocaleString("ms-MY") }
-  ];
-}
-
-function buildAlertsFromOrders(orderDocs, bounds, nowMs) {
-  var out = [];
-  orderDocs.forEach(function (d) {
-    var x = d.data();
-    if (String(x.lifecycle || "") === "cancelled") return;
-    var stage = String(x.kitchenStage || "");
-    if (stage !== "waiting") return;
-    var ms = toMillis(x.paidAt || x.createdAt);
-    if (ms < bounds.startMs || ms >= bounds.endMs) return;
-    if (nowMs - ms > 10 * 60 * 1000) {
-      var agoMin = Math.floor((nowMs - ms) / 60000);
-      var no = String(x.orderNo || d.id).slice(0, 32);
-      out.push({
-        type: "amber",
-        icon: "fa-solid fa-clock",
-        msg: "Order " + no + " masih menunggu dapur — " + agoMin + " min",
-        time: "Semak dapur"
+async function buildDrawerRowsFromShifts(bounds) {
+  try {
+    var q = query(
+      collection(db, COL_POS_SHIFTS),
+      where("openedAt", ">=", bounds.startTs),
+      where("openedAt", "<", bounds.endTs)
+    );
+    var snap = await getDocs(q);
+    if (snap.empty) return [];
+    var rows = [];
+    snap.docs.forEach(function(d) {
+      var x = d.data();
+      var closing = x.closing || {};
+      var variance = typeof closing.variance === "number" ? closing.variance : 0;
+      var expected = typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : 0;
+      var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : 0;
+      var status = closing.varianceCategory || "unknown";
+      rows.push({
+        label: "Shift — " + (x.openedByDisplayName || "Kakitangan"),
+        value: status === "balanced" ? "Seimbang ✓" : variance > 0 ? "+RM " + Math.abs(variance).toFixed(2) + " (Lebih)" : "-RM " + Math.abs(variance).toFixed(2) + " (Kurang)",
+        valueClass: status === "balanced" ? "dash-val--ok" : status === "over" ? "dash-val--over" : "dash-val--short"
       });
-    }
-  });
-  return out;
+    });
+    return rows;
+  } catch(e) {
+    return [];
+  }
 }
 
-function orderLineSummary(x) {
-  var lines = Array.isArray(x.lines) ? x.lines : [];
-  if (!lines.length) return "—";
-  return lines
-    .map(function (ln) {
-      var n = (ln && ln.name) || "Item";
-      var q = typeof ln.qty === "number" ? ln.qty : parseFloat(ln.qty) || 0;
-      return n + " ×" + q;
-    })
-    .join(", ");
-}
-
-function buildOrderCards(orderDocs, bounds) {
-  var dayShort = parseCalendarKeyLocal(bounds.dateKey).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
-  return orderDocs
+function buildOrderCards(receiptDocs, bounds) {
+  var dayShort = parseCalendarKeyLocal(bounds.dateKey || effectiveCalendarKey()).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
+  return receiptDocs
     .filter(function (d) {
       var x = d.data();
-      if (String(x.lifecycle || "") === "cancelled") return false;
-      var ms = toMillis(x.paidAt || x.createdAt);
+      if (x.voided) return false;
+      var ms = toMillis(x.createdAt);
       return ms >= bounds.startMs && ms < bounds.endMs;
     })
     .map(function (d) {
       var x = d.data();
-      var ms = toMillis(x.paidAt || x.createdAt);
+      var ms = toMillis(x.createdAt);
       var tstr = "—";
       try {
-        tstr = new Date(ms).toLocaleString("ms-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
+        tstr = new Date(ms).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
       } catch (e) {}
-      var ui = mapKitchenUiStage(x);
-      if (ui === "cancelled") return null;
       return {
-        no: String(x.orderNo || d.id).slice(0, 24),
-        items: orderLineSummary(x),
-        metaLine: tstr + " · " + dayShort,
-        status: ui,
-        amt: formatRM(receiptCustomerTotal(x))
+        no: String(x.receiptNo || d.id).slice(0, 24),
+        items: (Array.isArray(x.lines) ? x.lines : []).map(function(l){ return l.name + " ×" + (l.qty||1); }).join(", ") || "—",
+        metaLine: tstr + " · " + dayShort + " · " + String(x.staffName || "—"),
+        status: "handed",
+        amt: formatRM(x.subtotal || 0)
       };
-    })
-    .filter(Boolean);
+    });
 }
 
 function computeKpiDeltas(sales, orderCount, cogs, profit, prev) {
@@ -619,30 +569,6 @@ function renderPayment(pay) {
     '%"></div></div></div>';
 }
 
-function renderAlerts(alerts) {
-  var el = $("od-alerts-mount");
-  if (!el) return;
-  if (!alerts || !alerts.length) {
-    el.innerHTML = emptyBlock("Tiada amaran atau notis untuk paparan ini.");
-    return;
-  }
-  el.innerHTML = alerts
-    .map(function (a) {
-      return (
-        '<div class="dash-alert dash-alert--' +
-        escapeHtml(a.type) +
-        '"><i class="' +
-        escapeHtml(a.icon) +
-        '" aria-hidden="true"></i><div><div>' +
-        escapeHtml(a.msg) +
-        "</div><time>" +
-        escapeHtml(a.time) +
-        "</time></div></div>"
-      );
-    })
-    .join("");
-}
-
 function applyKpi(payload) {
   var s = $("od-kpi-sales");
   var o = $("od-kpi-orders");
@@ -750,22 +676,26 @@ function renderKpiPeriod() {
   }
 }
 
-function renderFromBundle() {
+async function renderFromBundle() {
   if (!latestBundle) return;
   var b = latestBundle;
   var bounds = b.bounds;
   var receiptDocs = b.receiptDocs;
-  var orderDocs = b.orderDocs;
-  var auditDocs = b.auditDocs;
-  var goodReceipts = filterVoidedReceiptDocs(receiptDocs);
-  var sales = sumReceiptSubtotals(goodReceipts);
-  var cogs = sumReceiptCogs(goodReceipts);
-  var profit = sumReceiptGrossProfit(goodReceipts);
-  var orderCount = goodReceipts.length;
+
+  // Filter: bukan void DAN dalam julat tarikh
+  var nonVoidedReceipts = filterVoidedReceiptDocs(receiptDocs).filter(function(d) {
+    var ms = toMillis(d.data().createdAt);
+    return ms >= bounds.startMs && ms < bounds.endMs;
+  });
+
+  var sales = sumReceiptSubtotals(nonVoidedReceipts);
+  var cogs = sumReceiptCogs(nonVoidedReceipts);
+  var profit = sumReceiptGrossProfit(nonVoidedReceipts);
+  var orderCount = nonVoidedReceipts.length;
   var deltas = computeKpiDeltas(sales, orderCount, cogs, profit, prevDayTotals);
   applyKpi({
     jumlahJualan: formatRM(sales),
-    jumlahOrder: orderCount + " order",
+    jumlahOrder: orderCount + " transaksi",
     kosBahan: formatRM(cogs),
     untungKasar: formatRM(profit),
     jumlahJualanDelta: deltas.jumlahJualanDelta,
@@ -773,14 +703,14 @@ function renderFromBundle() {
     cogsDelta: deltas.cogsDelta,
     profitDelta: deltas.profitDelta
   });
-  var hourly = buildHourlySeries(goodReceipts, bounds);
+  var hourly = buildHourlySeries(nonVoidedReceipts, bounds);
   renderChart(hourly);
-  renderProducts(aggregateTopProducts(goodReceipts, bounds));
-  renderPayment(aggregatePayment(goodReceipts, bounds));
-  renderDrawer(buildDrawerRowsFromAudit(auditDocs, bounds));
-  renderAlerts(buildAlertsFromOrders(orderDocs, bounds, Date.now()));
+  renderProducts(aggregateTopProducts(nonVoidedReceipts, bounds));
+  renderPayment(aggregatePayment(nonVoidedReceipts, bounds));
+  var drawerRows = await buildDrawerRowsFromShifts(bounds);
+  renderDrawer(drawerRows);
   renderOrdersScope();
-  renderOrders(buildOrderCards(orderDocs, bounds));
+  renderOrders(buildOrderCards(nonVoidedReceipts, bounds));
   renderKpiPeriod();
   updateFilterDateUi();
 }
@@ -790,7 +720,10 @@ async function fetchPrevDayTotals(prevKey) {
   try {
     var rq = receiptQuery(bounds);
     var snap = await getDocs(rq);
-    var good = filterVoidedReceiptDocs(snap.docs);
+    var good = filterVoidedReceiptDocs(snap.docs).filter(function(d) {
+      var ms = toMillis(d.data().createdAt);
+      return ms >= bounds.startMs && ms < bounds.endMs;
+    });
     return {
       sales: sumReceiptSubtotals(good),
       cogs: sumReceiptCogs(good),
@@ -810,20 +743,22 @@ function schedulePrevDayFetch(scopeKey) {
   fetchPrevDayTotals(prevKey).then(function (tot) {
     if (pendingPrevFetch !== prevKey) return;
     prevDayTotals = tot;
-    renderFromBundle();
+    renderFromBundle().catch(function (err) {
+      setDashError(err.message || String(err));
+    });
   });
 }
 
-function processSnapshotDocs(receiptDocs, orderDocs, auditDocs, dateKey) {
+function processSnapshotDocs(receiptDocs, dateKey) {
   var bounds = Object.assign({ dateKey: dateKey }, dayBoundsForKey(dateKey));
   latestBundle = {
     bounds: bounds,
-    receiptDocs: receiptDocs,
-    orderDocs: orderDocs,
-    auditDocs: auditDocs
+    receiptDocs: receiptDocs
   };
   setDashError("");
-  renderFromBundle();
+  renderFromBundle().catch(function (err) {
+    setDashError(err.message || String(err));
+  });
   schedulePrevDayFetch(dateKey);
 }
 
@@ -832,43 +767,15 @@ function attachDayListeners(dateKey) {
   activeCalendarKey = dateKey;
   var bounds = dayBoundsForKey(dateKey);
   var rQ = receiptQuery(bounds);
-  var oQ = ordersQuery(bounds);
-  var aQ = auditQuery(bounds);
   var rec = [];
-  var ord = [];
-  var aud = [];
   function merge() {
-    processSnapshotDocs(rec, ord, aud, dateKey);
+    processSnapshotDocs(rec, dateKey);
   }
   dayUnsubs.push(
     onSnapshot(
       rQ,
       function (snap) {
         rec = snap.docs;
-        merge();
-      },
-      function (err) {
-        setDashError(err.message || String(err));
-      }
-    )
-  );
-  dayUnsubs.push(
-    onSnapshot(
-      oQ,
-      function (snap) {
-        ord = snap.docs;
-        merge();
-      },
-      function (err) {
-        setDashError(err.message || String(err));
-      }
-    )
-  );
-  dayUnsubs.push(
-    onSnapshot(
-      aQ,
-      function (snap) {
-        aud = snap.docs;
         merge();
       },
       function (err) {
@@ -883,17 +790,15 @@ async function loadDayOnce(dateKey) {
   activeCalendarKey = dateKey;
   var bounds = dayBoundsForKey(dateKey);
   try {
-    var results = await Promise.all([getDocs(receiptQuery(bounds)), getDocs(ordersQuery(bounds)), getDocs(auditQuery(bounds))]);
-    processSnapshotDocs(results[0].docs, results[1].docs, results[2].docs, dateKey);
+    var snap = await getDocs(receiptQuery(bounds));
+    processSnapshotDocs(snap.docs, dateKey);
   } catch (err) {
     setDashError(err.message || String(err));
     latestBundle = {
       bounds: Object.assign({ dateKey: dateKey }, bounds),
-      receiptDocs: [],
-      orderDocs: [],
-      auditDocs: []
+      receiptDocs: []
     };
-    renderFromBundle();
+    renderFromBundle().catch(function () {});
   }
 }
 
@@ -901,7 +806,6 @@ function clearInsightPanels() {
   renderProducts([]);
   renderDrawer([]);
   renderPayment({ empty: true });
-  renderAlerts([]);
   var canvas = $("od-chart-sales");
   if (canvas && typeof Chart !== "undefined" && typeof Chart.getChart === "function") {
     var existing = Chart.getChart(canvas);
