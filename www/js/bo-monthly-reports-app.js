@@ -81,9 +81,9 @@ function renderReport(d, key) {
   }
 
   // Stock status
-  var summary = r.ingredientSummary || [];
-  var habis = summary.filter(function(x) { return x.qtyRemaining === 0; });
-  var rendah = summary.filter(function(x) { return x.qtyRemaining > 0 && x.qtyRemaining <= 5; });
+  var summary = r.ingredientStockSummary || r.ingredientSummary || [];
+  var habis = summary.filter(function(x) { return x.status === "habis" || x.qtyRemaining === 0; });
+  var rendah = summary.filter(function(x) { return x.status === "rendah" || (x.qtyRemaining > 0 && x.qtyRemaining <= 5); });
   var stockHtml = "";
   if (habis.length === 0 && rendah.length === 0) {
     stockHtml = '<div class="rp-row"><span class="rp-row-label">Status stok</span><span class="rp-badge rp-badge-ok">Semua stok mencukupi</span></div>';
@@ -92,7 +92,17 @@ function renderReport(d, key) {
       stockHtml += '<div class="rp-row"><span class="rp-row-label">' + escapeHtml(x.name) + '</span><span class="rp-badge rp-badge-red">Habis</span></div>';
     });
     rendah.slice(0,4).forEach(function(x) {
-      stockHtml += '<div class="rp-row"><span class="rp-row-label">' + escapeHtml(x.name) + '</span><span class="rp-badge" style="background:#fffbeb;color:#854F0B">Rendah — ' + x.qtyRemaining + ' ' + escapeHtml(x.unit||"") + '</span></div>';
+      stockHtml += '<div class="rp-row"><span class="rp-row-label">' + escapeHtml(x.name) + '</span><span class="rp-badge" style="background:#fffbeb;color:#854F0B">Rendah — ' + (Math.round(x.qtyRemaining * 100) / 100) + ' ' + escapeHtml(x.unit||"") + '</span></div>';
+    });
+    // Tunjuk beberapa stok ok juga
+    var ok = summary.filter(function(x) { return x.status === "ok" && x.qtyRemaining > 0; });
+    ok.forEach(function(x) {
+      var used = x.qtyUsedThisMonth || 0;
+      stockHtml += '<div class="rp-row">' +
+        '<span class="rp-row-label">' + escapeHtml(x.name) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-muted)">guna ' + (Math.round(used * 100) / 100) + ' ' + escapeHtml(x.unit||"") + '</span>' +
+        '<span class="rp-badge rp-badge-ok">' + (Math.round(x.qtyRemaining * 100) / 100) + ' ' + escapeHtml(x.unit||"") + ' berbaki</span>' +
+        '</div>';
     });
   }
 
@@ -149,7 +159,7 @@ function renderReport(d, key) {
     '<div class="rp-row"><span class="rp-row-label">Keuntungan kasar</span><span class="rp-row-val rp-green">' + escapeHtml(rm(s.grossProfitRm)) + ' (' + pct(s.grossProfitRm, grossSales) + ')</span></div>' +
     '<div class="rp-row"><span class="rp-row-label">Kos bahan digunakan</span><span class="rp-row-val">' + escapeHtml(rm(s.totalCogsFifoRm)) + '</span></div>' +
     '<div class="rp-row"><span class="rp-row-label">Kos gaji pekerja</span><span class="rp-row-val">' + escapeHtml(rm(payrollTotal)) + '</span></div>' +
-    '<div class="rp-row-total"><span>' + (netOp >= 0 ? "Anggaran untung bersih" : "Anggaran rugi bersih") + '</span><span class="' + (netOp >= 0 ? "rp-green" : "rp-red") + '">' + (netOp >= 0 ? "" : "- ") + escapeHtml(rm(Math.abs(netOp))) + '</span></div>' +
+    '<div class="rp-row-total"><span>untung/rugi</span><span class="' + (netOp >= 0 ? "rp-green" : "rp-red") + '">' + (netOp >= 0 ? "" : "- ") + escapeHtml(rm(Math.abs(netOp))) + '</span></div>' +
     '</div>' +
 
     // Section 2 — Menu
@@ -168,8 +178,8 @@ function renderReport(d, key) {
     '<div class="rp-section">' +
     '<div class="rp-section-head"><div class="rp-section-num">4</div><p class="rp-section-title">Perbelanjaan bulan ini</p></div>' +
     '<div class="rp-row"><span class="rp-row-label">Gaji pekerja</span><span class="rp-row-val">' + escapeHtml(rm(payrollTotal)) + '</span></div>' +
-    '<div class="rp-row"><span class="rp-row-label">Pembelian stok bahan</span><span class="rp-row-val">' + escapeHtml(rm(r.purchaseHistoryTotalRm)) + '</span></div>' +
-    '<div class="rp-row"><span class="rp-row-label">Kos bahan (FIFO)</span><span class="rp-row-val">' + escapeHtml(rm(s.totalCogsFifoRm)) + '</span></div>' +
+    '<div class="rp-row"><span class="rp-row-label">Pembelian stok bulan ini</span><span class="rp-row-val">' + escapeHtml(rm(r.purchaseHistoryTotalRm)) + '</span></div>' +
+    '<p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;padding:0 0 6px">* Kos bahan yang digunakan untuk jualan sudah dikira dalam Keuntungan Kasar di atas.</p>' +
     '</div>' +
 
     // Section 5 — Pembayaran
@@ -315,27 +325,34 @@ async function downloadPdf() {
     pdf.rect(ml, y, cw, 10, "F");
     pdf.setFontSize(10); pdf.setFont("helvetica","bold");
     pdf.setTextColor(netOp >= 0 ? 16 : 192, netOp >= 0 ? 120 : 57, netOp >= 0 ? 60 : 43);
-    pdf.text((netOp >= 0 ? "Anggaran untung bersih" : "Anggaran rugi bersih"), ml+3, y+7);
+    pdf.text("untung/rugi", ml+3, y+7);
     pdf.text((netOp >= 0 ? "" : "- ") + rm(Math.abs(netOp)), W-mr-3, y+7, { align: "right" });
     y += 16;
 
     // Section 2 — Stok
     sectionHead("2", "Status Stok Bahan");
-    var summary = r.ingredientSummary || [];
-    var habis = summary.filter(function(x){ return x.qtyRemaining === 0; });
-    var rendah = summary.filter(function(x){ return x.qtyRemaining > 0 && x.qtyRemaining <= 5; });
+    var summary = r.ingredientStockSummary || r.ingredientSummary || [];
+    var habis = summary.filter(function(x){ return x.status === "habis" || x.qtyRemaining === 0; });
+    var rendah = summary.filter(function(x){ return x.status === "rendah" || (x.qtyRemaining > 0 && x.qtyRemaining <= 5); });
     if (habis.length === 0 && rendah.length === 0) {
-      row("Status", "Semua stok mencukupi", [16,120,60]);
+      row("Semua stok mencukupi", "✓", [16,120,60]);
     } else {
       habis.slice(0,8).forEach(function(x){ row(x.name, "Habis", [192,57,43]); });
-      rendah.slice(0,4).forEach(function(x){ row(x.name, "Rendah — " + x.qtyRemaining + " " + (x.unit||""), [183,119,13]); });
+      rendah.slice(0,4).forEach(function(x){ row(x.name, "Rendah — " + (Math.round(x.qtyRemaining*100)/100) + " " + (x.unit||""), [183,119,13]); });
+    }
+    // Tunjuk beberapa stok ok
+    var okStock = summary.filter(function(x){ return x.status === "ok" && x.qtyRemaining > 0; }).slice(0,5);
+    if (okStock.length > 0) {
+      y += 3;
+      okStock.forEach(function(x){
+        row(x.name, (Math.round(x.qtyRemaining*100)/100) + " " + (x.unit||"") + " berbaki", [16,120,60]);
+      });
     }
 
     // Section 3 — Perbelanjaan
     sectionHead("3", "Perbelanjaan Bulan Ini");
     row("Gaji pekerja", rm(payrollTotal));
     row("Pembelian stok bahan", rm(r.purchaseHistoryTotalRm));
-    row("Kos bahan (FIFO)", rm(s.totalCogsFifoRm));
 
     // Section 4 — Pembayaran
     sectionHead("4", "Cara Pembayaran Pelanggan");
@@ -399,15 +416,12 @@ if (genBtn) genBtn.addEventListener("click", onGenerate);
 var pdfBtn = $("mr-download-pdf");
 if (pdfBtn) pdfBtn.addEventListener("click", downloadPdf);
 
-["mr-year", "mr-month"].forEach(function (id) {
-  var el = $(id);
-  if (el) el.addEventListener("change", loadReport);
-});
-
-// Init
+// Init — no auto-fetch on filter change; report loads only via "Jana laporan"
 async function init() {
   try { await waitForAuthUser(); } catch(e) {}
+  currentReport = null;
+  currentKey = "";
   renderEmpty();
-  await loadReport();
+  setStatus("Pilih tahun dan bulan, kemudian klik Jana laporan.", null);
 }
 init();

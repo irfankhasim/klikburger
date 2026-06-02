@@ -22,6 +22,7 @@ import {
   COL_PURCHASE_HISTORY,
   COL_INGREDIENT_LEDGER,
   COL_INGREDIENTS,
+  COL_INGREDIENT_BATCHES,
   COL_STAFF,
   COL_SALES,
   COL_MONTHLY_REPORTS
@@ -166,10 +167,30 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var shiftDocs = await fetchClosedShiftsInRange(tsStart, tsEnd);
 
   var ingSnap = await getDocs(collection(db, COL_INGREDIENTS));
+  // Ambil stok semasa dari ingredient_batches
+  var batchSnap = await getDocs(collection(db, COL_INGREDIENT_BATCHES));
+  var batchByIngredient = {};
+  batchSnap.docs.forEach(function(d) {
+    var x = d.data();
+    var ingId = String(x.ingredientId || "");
+    if (!ingId) return;
+    if (!batchByIngredient[ingId]) {
+      batchByIngredient[ingId] = { totalRemaining: 0, totalOriginal: 0, batches: [] };
+    }
+    var qty = typeof x.qtyRemaining === "number" ? x.qtyRemaining : parseFloat(x.qtyRemaining) || 0;
+    var orig = typeof x.qtyOriginal === "number" ? x.qtyOriginal : parseFloat(x.qtyOriginal) || 0;
+    batchByIngredient[ingId].totalRemaining += qty;
+    batchByIngredient[ingId].totalOriginal += orig;
+    batchByIngredient[ingId].batches.push({ id: d.id, qtyRemaining: qty, qtyOriginal: orig, costPerUnit: x.costPerUnit || 0, openedAt: x.openedAt });
+  });
+
+  // Bina ingredientSummary dari batches (bukan ledger)
   var ingNameById = {};
+  var ingUnitById = {};
   ingSnap.docs.forEach(function (d) {
     var x = d.data();
     ingNameById[d.id] = String(x.name || "").trim() || d.id;
+    ingUnitById[d.id] = String(x.unit || "unit");
   });
 
   var staffSnap = await getDocs(collection(db, COL_STAFF));
@@ -199,6 +220,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var voidedCount = 0;
   var netReceiptCount = 0;
   var byPay = {};
+  var menuItemCounts = {};
+
   receiptDocs.forEach(function (d) {
     var x = d.data();
     var voided = !!x.voided;
@@ -213,7 +236,23 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     totalCogs += cog;
     var pm = String(x.paymentMethod || "other").toLowerCase();
     byPay[pm] = (byPay[pm] || 0) + sub;
+
+    // Kira menu paling laris
+    var lines = Array.isArray(x.lines) ? x.lines : [];
+    lines.forEach(function (line) {
+      var itemName = String(line.name || "").trim();
+      if (!itemName) return;
+      var qty = typeof line.qty === "number" ? line.qty : 1;
+      menuItemCounts[itemName] = (menuItemCounts[itemName] || 0) + qty;
+    });
   });
+
+  var topMenuItems = Object.keys(menuItemCounts)
+    .map(function (name) {
+      return { name: name, qty: menuItemCounts[name] };
+    })
+    .sort(function (a, b) { return b.qty - a.qty; })
+    .slice(0, 5);
   grossSales = round2(grossSales);
   totalCogs = round2(totalCogs);
   Object.keys(byPay).forEach(function (k) {
@@ -267,21 +306,38 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
 
   var ledgerPurchaseRm = 0;
   var ledgerByIngredient = {};
+  var ledgerConsumptionByIngredient = {};
   var ledgerKinds = {};
   ledgerDocs.forEach(function (d) {
     var x = d.data();
     var kind = String(x.kind || "");
     ledgerKinds[kind] = (ledgerKinds[kind] || 0) + 1;
-    if (kind !== "purchase" && kind !== "initial" && kind !== "price_adjust") return;
-    var price = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
-    ledgerPurchaseRm += price;
     var iid = String(x.ingredientId || "");
-    if (!iid) return;
-    if (!ledgerByIngredient[iid]) {
-      ledgerByIngredient[iid] = { ingredientId: iid, name: ingNameById[iid] || iid, ledgerSpendRm: 0, entryCount: 0 };
+    var ingName = ingNameById[iid] || String(x.nameSnapshot || iid);
+    var unit = String(x.unit || "unit");
+    if (kind === "purchase" || kind === "initial" || kind === "price_adjust") {
+      var price = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
+      ledgerPurchaseRm += price;
+      if (!iid) return;
+      if (!ledgerByIngredient[iid]) {
+        ledgerByIngredient[iid] = { ingredientId: iid, name: ingName, ledgerSpendRm: 0, entryCount: 0 };
+      }
+      ledgerByIngredient[iid].ledgerSpendRm += price;
+      ledgerByIngredient[iid].entryCount += 1;
     }
-    ledgerByIngredient[iid].ledgerSpendRm += price;
-    ledgerByIngredient[iid].entryCount += 1;
+    if (kind === "sale_consumption") {
+      if (!iid) return;
+      var consumedQty = typeof x.purchaseQty === "number" ? Math.abs(x.purchaseQty) : parseFloat(x.purchaseQty) || 0;
+      if (!ledgerConsumptionByIngredient[iid]) {
+        ledgerConsumptionByIngredient[iid] = {
+          ingredientId: iid,
+          name: ingName,
+          unit: unit,
+          totalQtyConsumed: 0
+        };
+      }
+      ledgerConsumptionByIngredient[iid].totalQtyConsumed += consumedQty;
+    }
   });
   ledgerPurchaseRm = round2(ledgerPurchaseRm);
   var ledgerAgg = Object.keys(ledgerByIngredient)
@@ -294,6 +350,52 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       return b.ledgerSpendRm - a.ledgerSpendRm;
     })
     .slice(0, 40);
+
+  // Kira penggunaan kumulatif SEHINGGA akhir bulan ini sahaja
+  var consumptionUpToThisMonth = {};
+
+  // Ambil semua sale_consumption dari ingredient_ledger sehingga akhir bulan ini
+  var consumptionLedgerSnap = await getDocs(
+    query(
+      collection(db, COL_INGREDIENT_LEDGER),
+      where("kind", "==", "sale_consumption"),
+      where("occurredAt", "<=", tsEnd)
+    )
+  );
+
+  consumptionLedgerSnap.docs.forEach(function(d) {
+    var x = d.data();
+    var iid = String(x.ingredientId || "");
+    if (!iid) return;
+    var qty = typeof x.purchaseQty === "number" ? Math.abs(x.purchaseQty) : parseFloat(x.purchaseQty) || 0;
+    consumptionUpToThisMonth[iid] = round4((consumptionUpToThisMonth[iid] || 0) + qty);
+  });
+
+  // Bina ingredientStockSummary
+  // qtyRemaining = stok asal - semua penggunaan sehingga akhir bulan ini
+  var ingredientStockSummary = Object.keys(batchByIngredient).map(function(ingId) {
+    var b = batchByIngredient[ingId];
+    var name = ingNameById[ingId] || ingId;
+    var unit = ingUnitById[ingId] || "unit";
+    var qtyOriginal = round4(b.totalOriginal);
+    var qtyUsedUpToThisMonth = round4(consumptionUpToThisMonth[ingId] || 0);
+    var qtyRemaining = round4(Math.max(0, qtyOriginal - qtyUsedUpToThisMonth));
+
+    // Penggunaan bulan ini sahaja (dari consumptionAgg)
+    var thisMonthConsumption = ledgerConsumptionByIngredient[ingId];
+    var qtyUsedThisMonth = thisMonthConsumption ? round4(thisMonthConsumption.totalQtyConsumed || 0) : 0;
+
+    return {
+      ingredientId: ingId,
+      name: name,
+      unit: unit,
+      qtyOriginal: qtyOriginal,
+      qtyUsedThisMonth: qtyUsedThisMonth,
+      qtyUsedUpToThisMonth: qtyUsedUpToThisMonth,
+      qtyRemaining: qtyRemaining,
+      status: qtyRemaining <= 0 ? "habis" : qtyRemaining <= 5 ? "rendah" : "ok"
+    };
+  }).sort(function(a, b) { return a.name.localeCompare(b.name); });
 
   var salesLegacySnap = await fetchPagedByRange(COL_SALES, "createdAt", tsStart, tsEnd);
   var legacySalesTotal = 0;
@@ -329,6 +431,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       ledgerSpendInitialPurchaseAdjustRm: ledgerPurchaseRm,
       ledgerKindCounts: ledgerKinds,
       topIngredientsByLedgerSpendRm: ledgerAgg,
+      ingredientStockSummary: ingredientStockSummary,
       ingredientsCatalogCount: ingSnap.size
     },
     sales: {
@@ -339,6 +442,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       totalCogsFifoRm: totalCogs,
       grossProfitRm: grossProfit,
       byPaymentMethodRm: byPay,
+      topMenuItems: topMenuItems,
       legacyColSalesDocumentCount: legacyCount,
       legacyColSalesSubtotalRm: legacySalesTotal,
       avgNonVoidSubtotalRm: avgNonVoidSubtotalRm

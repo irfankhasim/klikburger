@@ -15,25 +15,25 @@ async function main() {
   const batch = db.batch();
 
   const stocks = [
-    { name: "Patty Ayam",        qty: 45,   cpu: 1.03  },
-    { name: "Patty Daging",      qty: 28,   cpu: 1.10  },
-    { name: "Ayam Crispy",       qty: 22,   cpu: 2.25  },
-    { name: "Roti Burger",       qty: 38,   cpu: 0.75  },
-    { name: "Roti Obolong",      qty: 18,   cpu: 1.28  },
-    { name: "Cheese Slice",      qty: 30,   cpu: 0.75  },
-    { name: "Telur",             qty: 60,   cpu: 0.43  },
-    { name: "Lettuce",           qty: 2.8,  cpu: 4.50  },
-    { name: "Timun",             qty: 1.5,  cpu: 5.00  },
-    { name: "Kobis",             qty: 3.2,  cpu: 3.00  },
-    { name: "Bawang",            qty: 1.8,  cpu: 6.50  },
-    { name: "Sos Cili",          qty: 820,  cpu: 0.013 },
-    { name: "Sos Tomato",        qty: 650,  cpu: 0.013 },
-    { name: "Mayonis",           qty: 480,  cpu: 0.024 },
-    { name: "Sos Cheese",        qty: 310,  cpu: 0.050 },
-    { name: "Sos Black Pepper",  qty: 290,  cpu: 0.020 },
-    { name: "Kentang Goreng",    qty: 3200, cpu: 0.012 },
-    { name: "Minyak Masak",      qty: 2800, cpu: 0.015 },
-    { name: "Margerin",          qty: 420,  cpu: 0.028 }
+    { name: "Patty Ayam",        qty: 1100,  cpu: 1.03  },
+    { name: "Patty Daging",      qty: 650,   cpu: 1.10  },
+    { name: "Ayam Crispy",       qty: 250,   cpu: 2.25  },
+    { name: "Roti Burger",       qty: 1700,  cpu: 0.75  },
+    { name: "Roti Obolong",      qty: 150,   cpu: 1.28  },
+    { name: "Cheese Slice",      qty: 680,   cpu: 0.75  },
+    { name: "Telur",             qty: 200,   cpu: 0.43  },
+    { name: "Lettuce",           qty: 42,    cpu: 4.50  },
+    { name: "Timun",             qty: 22,    cpu: 5.00  },
+    { name: "Kobis",             qty: 18,    cpu: 3.00  },
+    { name: "Bawang",            qty: 9,     cpu: 6.50  },
+    { name: "Sos Cili",          qty: 8000,  cpu: 0.013 },
+    { name: "Sos Tomato",        qty: 7000,  cpu: 0.013 },
+    { name: "Mayonis",           qty: 25000, cpu: 0.024 },
+    { name: "Sos Cheese",        qty: 2000,  cpu: 0.050 },
+    { name: "Sos Black Pepper",  qty: 2800,  cpu: 0.020 },
+    { name: "Kentang Goreng",    qty: 14000, cpu: 0.012 },
+    { name: "Minyak Masak",      qty: 3500,  cpu: 0.015 },
+    { name: "Margerin",          qty: 8000,  cpu: 0.028 }
   ];
 
   let count = 0;
