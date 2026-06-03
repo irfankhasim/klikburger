@@ -162,7 +162,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var o = opts || {};
   var bounds = localMonthBounds(year, month1to12);
   var tsStart = Timestamp.fromDate(bounds.start);
-  var tsEnd = Timestamp.fromDate(bounds.end);
+  var tsEnd = Timestamp.fromDate(new Date(year, month1to12, 1, 0, 0, 0)); // start of NEXT month
   var key = monthDocId(year, month1to12);
 
   var receiptDocs = await fetchPagedByRange(COL_POS_RECEIPTS, "createdAt", tsStart, tsEnd);
@@ -239,6 +239,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     grossSales += sub;
     totalCogs += cog;
     var pm = String(x.paymentMethod || "other").toLowerCase();
+    if (pm === "cash" || pm === "tunai") pm = "cash";
+    else pm = "qr";
     byPay[pm] = (byPay[pm] || 0) + sub;
 
     // Kira menu paling laris

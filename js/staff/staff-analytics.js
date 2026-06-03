@@ -13,6 +13,39 @@ function saleCreatedAtDate(data) {
   return null;
 }
 
+function staffActivityCreatedAtDate(data) {
+  var c = data && data.createdAt;
+  if (c && typeof c.toDate === "function") return c.toDate();
+  return null;
+}
+
+export function parseStaffActivityDoc(d) {
+  var data = d.data();
+  if (!data || typeof data !== "object") {
+    return {
+      id: d.id,
+      staffId: "",
+      staffName: "",
+      kind: "",
+      detail: "",
+      createdAt: null
+    };
+  }
+  return {
+    id: d.id,
+    staffId: String(data.staffId || ""),
+    staffName: String(data.staffName || ""),
+    kind: String(data.kind || ""),
+    detail: data.detail != null ? String(data.detail) : "",
+    createdAt: staffActivityCreatedAtDate(data)
+  };
+}
+
+export function isClockActivityKind(kind) {
+  var k = String(kind || "");
+  return k === "clock_in" || k === "clock_out";
+}
+
 export function parseSaleDoc(d) {
   var data = d.data();
   if (!data || typeof data !== "object") {

@@ -21,6 +21,7 @@ import {
   COL_POS_SHIFTS
 } from "./firebase/collections.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
+import { normalizePaymentMethod } from "./pos-firestore-hub.js";
 
 var KB_RESTORE_SS = "fyp_klikburger_restore_v1";
 var KB_RESTORE_LS = "fyp_klikburger_restore_ls_v1";
@@ -273,23 +274,29 @@ function sumReceiptGrossProfit(docs) {
 }
 
 function buildHourlySeries(receiptDocs, bounds) {
-  var labels = ["9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM"];
-  var values = labels.map(function () {
-    return 0;
+  var hours = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+  var labels = hours.map(function(h) {
+    return h < 12 ? h + "AM" : h === 12 ? "12PM" : (h - 12) + "PM";
   });
-  receiptDocs.forEach(function (d) {
+  var values = hours.map(function() { return 0; });
+
+  receiptDocs.forEach(function(d) {
     var x = d.data();
+    if (x.voided) return;
     var ms = toMillis(x.createdAt);
     if (ms < bounds.startMs || ms >= bounds.endMs) return;
     var h = new Date(ms).getHours();
-    if (h >= 9 && h <= 17) {
-      var idx = h - 9;
-      values[idx] += receiptCustomerTotal(x);
+    var idx = hours.indexOf(h);
+    if (idx >= 0) {
+      var sub = typeof x.subtotal === "number" ? x.subtotal : parseFloat(x.subtotal) || 0;
+      values[idx] += sub;
     }
   });
-  values = values.map(function (v) {
+
+  values = values.map(function(v) {
     return Math.round(v * 100) / 100;
   });
+
   return { labels: labels, values: values };
 }
 
@@ -325,26 +332,28 @@ function aggregateTopProducts(receiptDocs, bounds) {
 }
 
 function aggregatePayment(receiptDocs, bounds) {
-  var tunai = 0;
-  var lain = 0;
+  var cash = 0;
+  var qr = 0;
   receiptDocs.forEach(function (d) {
     var x = d.data();
     var ms = toMillis(x.createdAt);
     if (ms < bounds.startMs || ms >= bounds.endMs) return;
-    var pm = String(x.paymentMethod || "cash").toLowerCase();
-    if (pm === "cash" || pm === "tunai") tunai += 1;
-    else lain += 1;
+    var sub = typeof x.subtotal === "number" ? x.subtotal : parseFloat(x.subtotal) || 0;
+    if (normalizePaymentMethod(x.paymentMethod) === "cash") cash += sub;
+    else qr += sub;
   });
-  var tot = tunai + lain;
-  if (!tot) return { tunaiPct: 0, duitnowPct: 0, empty: true };
+  var tot = cash + qr;
+  if (!tot) return { cashPct: 0, qrPct: 0, cashAmt: 0, qrAmt: 0, empty: true };
   return {
-    tunaiPct: Math.round((tunai / tot) * 100),
-    duitnowPct: Math.round((lain / tot) * 100),
+    cashPct: Math.round((cash / tot) * 100),
+    qrPct: Math.round((qr / tot) * 100),
+    cashAmt: Math.round(cash * 100) / 100,
+    qrAmt: Math.round(qr * 100) / 100,
     empty: false
   };
 }
 
-async function buildDrawerRowsFromShifts(bounds) {
+async function buildDrawerRowsFromShifts(bounds, receiptDocs) {
   try {
     var q = query(
       collection(db, COL_POS_SHIFTS),
@@ -354,21 +363,71 @@ async function buildDrawerRowsFromShifts(bounds) {
     var snap = await getDocs(q);
     if (snap.empty) return [];
     var rows = [];
-    snap.docs.forEach(function(d) {
+    var docs = receiptDocs || [];
+
+    for (var si = 0; si < snap.docs.length; si++) {
+      var d = snap.docs[si];
       var x = d.data();
+      var shiftId = d.id;
+      var opening = typeof x.openingCash === "number" ? x.openingCash : parseFloat(x.openingCash) || 0;
+      var openMs = toMillis(x.openedAt);
       var closing = x.closing || {};
-      var variance = typeof closing.variance === "number" ? closing.variance : 0;
-      var expected = typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : 0;
-      var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : 0;
-      var status = closing.varianceCategory || "unknown";
-      rows.push({
-        label: "Shift — " + (x.openedByDisplayName || "Kakitangan"),
-        value: status === "balanced" ? "Seimbang ✓" : variance > 0 ? "+RM " + Math.abs(variance).toFixed(2) + " (Lebih)" : "-RM " + Math.abs(variance).toFixed(2) + " (Kurang)",
-        valueClass: status === "balanced" ? "dash-val--ok" : status === "over" ? "dash-val--over" : "dash-val--short"
+      var closeMs = closing.closedAt ? toMillis(closing.closedAt) : bounds.endMs;
+      if (!openMs) continue;
+
+      var cashSales = 0;
+      docs.forEach(function (rd) {
+        var rx = rd.data();
+        if (rx.voided) return;
+        var ms = toMillis(rx.createdAt);
+        if (ms < openMs || ms >= closeMs) return;
+        if (normalizePaymentMethod(rx.paymentMethod) !== "cash") return;
+        var sub = typeof rx.subtotal === "number" ? rx.subtotal : parseFloat(rx.subtotal) || 0;
+        cashSales += sub;
       });
-    });
+      cashSales = Math.round(cashSales * 100) / 100;
+
+      var cashIn = 0;
+      var cashOut = 0;
+      var movSnap = await getDocs(collection(db, COL_POS_SHIFTS, shiftId, "cash_movements"));
+      movSnap.docs.forEach(function (md) {
+        var m = md.data();
+        var amt = typeof m.amount === "number" ? m.amount : parseFloat(m.amount) || 0;
+        if (m.type === "out") cashOut += amt;
+        else cashIn += amt;
+      });
+      cashIn = Math.round(cashIn * 100) / 100;
+      cashOut = Math.round(cashOut * 100) / 100;
+
+      var expected = Math.round((opening + cashSales + cashIn - cashOut) * 100) / 100;
+      var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : null;
+      var variance = actual != null ? Math.round((actual - expected) * 100) / 100 : null;
+      var staff = x.openedByDisplayName || "Kakitangan";
+      var prefix = "Shift — " + staff;
+
+      rows.push({ label: prefix + " · Tunai awal", value: formatRM(opening) });
+      rows.push({ label: prefix + " · Jualan tunai", value: formatRM(cashSales) });
+      if (cashIn > 0) {
+        rows.push({ label: prefix + " · Tunai masuk", value: "+RM " + cashIn.toFixed(2) });
+      }
+      if (cashOut > 0) {
+        rows.push({ label: prefix + " · Tunai keluar", value: "−RM " + cashOut.toFixed(2) });
+      }
+      rows.push({ label: prefix + " · Jangkaan laci", value: formatRM(expected) });
+      if (actual != null) {
+        rows.push({ label: prefix + " · Laci sebenar", value: formatRM(actual) });
+        var vc = variance === 0 ? "dash-val--ok" : variance > 0 ? "dash-val--over" : "dash-val--short";
+        rows.push({
+          label: prefix + " · Varians",
+          value: (variance >= 0 ? "+RM " : "−RM ") + Math.abs(variance).toFixed(2),
+          valueClass: vc
+        });
+      } else {
+        rows.push({ label: prefix + " · Status", value: "Drawer belum ditutup" });
+      }
+    }
     return rows;
-  } catch(e) {
+  } catch (e) {
     return [];
   }
 }
@@ -498,7 +557,7 @@ function renderDrawer(rows) {
   var el = $("od-drawer-mount");
   if (!el) return;
   if (!rows || !rows.length) {
-    el.innerHTML = emptyBlock("Tiada rekod tunai (cash in/out) dalam audit untuk tarikh ini.");
+    el.innerHTML = emptyBlock("Tiada rekod drawer untuk tarikh ini.");
     return;
   }
   el.innerHTML = rows
@@ -553,21 +612,15 @@ function renderPayment(pay) {
     el.innerHTML = emptyBlock("Tiada data pembayaran untuk tempoh ini.");
     return;
   }
-  var t = pay.tunaiPct;
-  var d = pay.duitnowPct;
   el.innerHTML =
     '<div class="dash-bar-row"><div class="dash-bar-row__lbl"><span>Tunai</span><span>' +
-    t +
-    "%</span></div>" +
-    '<div class="dash-bar-track"><div class="dash-bar-fill" style="width:' +
-    t +
-    '%"></div></div></div>' +
-    '<div class="dash-bar-row"><div class="dash-bar-row__lbl"><span>Bukan tunai</span><span>' +
-    d +
-    "%</span></div>" +
-    '<div class="dash-bar-track"><div class="dash-bar-fill dash-bar-fill--blue" style="width:' +
-    d +
-    '%"></div></div></div>';
+    pay.cashPct + "% · RM " + pay.cashAmt.toFixed(2) +
+    '</span></div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:' +
+    pay.cashPct + '%"></div></div></div>' +
+    '<div class="dash-bar-row"><div class="dash-bar-row__lbl"><span>QR / DuitNow</span><span>' +
+    pay.qrPct + "% · RM " + pay.qrAmt.toFixed(2) +
+    '</span></div><div class="dash-bar-track"><div class="dash-bar-fill dash-bar-fill--blue" style="width:' +
+    pay.qrPct + '%"></div></div></div>';
 }
 
 function applyKpi(payload) {
@@ -708,10 +761,8 @@ async function renderFromBundle() {
   renderChart(hourly);
   renderProducts(aggregateTopProducts(nonVoidedReceipts, bounds));
   renderPayment(aggregatePayment(nonVoidedReceipts, bounds));
-  var drawerRows = await buildDrawerRowsFromShifts(bounds);
+  var drawerRows = await buildDrawerRowsFromShifts(bounds, nonVoidedReceipts);
   renderDrawer(drawerRows);
-  renderOrdersScope();
-  renderOrders(buildOrderCards(nonVoidedReceipts, bounds));
   renderKpiPeriod();
   updateFilterDateUi();
 }
@@ -840,9 +891,7 @@ function refreshDashboardForScope() {
       masaTungguDelta: "",
       waitDeltaMuted: true
     });
-    $("od-orders-mount").innerHTML = emptyBlock("Log masuk diperlukan untuk memuatkan papan pemuka.");
     clearInsightPanels();
-    renderOrdersScope();
     renderKpiPeriod();
     return;
   }

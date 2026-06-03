@@ -108,11 +108,11 @@ function renderReport(d, key) {
 
   // Payment methods
   var by = s.byPaymentMethodRm || {};
-  var payLabels = { cash:"Tunai", card:"Kad", qr:"QR / DuitNow", duitnow:"QR / DuitNow", ewallet:"eWallet" };
+  var payLabels = { cash:"Tunai", tunai:"Tunai", qr:"QR / DuitNow", duitnow:"QR / DuitNow", ewallet:"QR / DuitNow", card:"QR / DuitNow" };
   var payTotal = Object.keys(by).reduce(function(s,k){ return s + (by[k]||0); }, 0);
   var payHtml = Object.keys(by).map(function(k) {
     var pct2 = payTotal > 0 ? Math.round((by[k]/payTotal)*100) : 0;
-    var colors = { cash:"#f5a623", qr:"#3b82f6", duitnow:"#3b82f6", ewallet:"#10b981", card:"#8b5cf6" };
+    var colors = { cash:"#f5a623", qr:"#3b82f6", tunai:"#f5a623", duitnow:"#3b82f6", ewallet:"#3b82f6", card:"#3b82f6" };
     var col = colors[k] || "#888";
     return '<div class="rp-pay-row">' +
       '<span class="rp-pay-label">' + escapeHtml(payLabels[k]||k) + '</span>' +
@@ -329,8 +329,15 @@ async function downloadPdf() {
     pdf.text((netOp >= 0 ? "" : "- ") + rm(Math.abs(netOp)), W-mr-3, y+7, { align: "right" });
     y += 16;
 
-    // Section 2 — Stok
-    sectionHead("2", "Status Stok Bahan");
+    // Section — Menu paling laris
+    var topMenu = (d.sales && d.sales.topMenuItems) || [];
+    if (topMenu.length > 0) {
+      sectionHead("2", "Menu Paling Laris");
+      topMenu.slice(0, 5).forEach(function(x, i) {
+        row((i+1) + ". " + (x.name || "—"), (x.qty || 0) + " pesanan");
+      });
+    }
+    sectionHead(topMenu.length > 0 ? "3" : "2", "Status Stok Bahan");
     var summary = r.ingredientStockSummary || r.ingredientSummary || [];
     var habis = summary.filter(function(x){ return x.status === "habis" || x.qtyRemaining === 0; });
     var rendah = summary.filter(function(x){ return x.status === "rendah" || (x.qtyRemaining > 0 && x.qtyRemaining <= 5); });
@@ -350,14 +357,14 @@ async function downloadPdf() {
     }
 
     // Section 3 — Perbelanjaan
-    sectionHead("3", "Perbelanjaan Bulan Ini");
+    sectionHead(topMenu.length > 0 ? "4" : "3", "Perbelanjaan Bulan Ini");
     row("Gaji pekerja", rm(payrollTotal));
     row("Pembelian stok bahan", rm(r.purchaseHistoryTotalRm));
 
     // Section 4 — Pembayaran
-    sectionHead("4", "Cara Pembayaran Pelanggan");
+    sectionHead(topMenu.length > 0 ? "5" : "4", "Cara Pembayaran Pelanggan");
     var by = s.byPaymentMethodRm || {};
-    var payLabels = { cash:"Tunai", card:"Kad", qr:"QR / DuitNow", duitnow:"QR / DuitNow", ewallet:"eWallet" };
+    var payLabels = { cash:"Tunai", tunai:"Tunai", qr:"QR / DuitNow", duitnow:"QR / DuitNow", ewallet:"QR / DuitNow", card:"QR / DuitNow" };
     var payTotal = Object.keys(by).reduce(function(s,k){ return s+(by[k]||0); },0);
     Object.keys(by).forEach(function(k){
       var p = payTotal > 0 ? ((by[k]/payTotal)*100).toFixed(1) : "0";
@@ -365,7 +372,7 @@ async function downloadPdf() {
     });
 
     // Section 5 — Tindakan
-    sectionHead("5", "Cadangan Tindakan Bulan Depan");
+    sectionHead(topMenu.length > 0 ? "6" : "5", "Cadangan Tindakan Bulan Depan");
     var actions = [];
     if (netOp < 0) {
       var be = Math.ceil((payrollTotal + (r.purchaseHistoryTotalRm||0)) / 0.6);

@@ -116,3 +116,45 @@ export function dedupeStaffByNameKey(staffRows) {
 export function dedupeStaffByCanonical(rows) {
   return dedupeStaffByNameKey(rows);
 }
+
+/** Firestore `staff_activity` → baris UI (kind, createdAt). */
+export function docToStaffActivity(d) {
+  var data = d.data();
+  if (!data || typeof data !== "object") {
+    return {
+      id: d.id,
+      staffId: "",
+      staffName: "",
+      kind: "",
+      detail: "",
+      createdAt: null
+    };
+  }
+  return {
+    id: d.id,
+    staffId: String(data.staffId || ""),
+    staffName: String(data.staffName || ""),
+    kind: String(data.kind || ""),
+    detail: data.detail != null ? String(data.detail) : "",
+    createdAt: data.createdAt || null
+  };
+}
+
+/** Firestore `pos_shifts` → baris jadual drawer. */
+export function docToPosShift(doc) {
+  var x = doc.data();
+  var closing = x.closing || {};
+  return {
+    id: doc.id,
+    openedAt: x.openedAt,
+    closedAt: x.closedAt,
+    status: x.status || "closed",
+    openingCash: typeof x.openingCash === "number" ? x.openingCash : 0,
+    openedByDisplayName: x.openedByDisplayName || "—",
+    actualDrawer: typeof closing.actualDrawer === "number" ? closing.actualDrawer : null,
+    expectedDrawer: typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : null,
+    variance: typeof closing.variance === "number" ? closing.variance : 0,
+    varianceCategory: closing.varianceCategory || "unknown",
+    note: closing.note || ""
+  };
+}

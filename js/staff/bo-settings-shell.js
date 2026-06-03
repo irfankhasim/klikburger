@@ -6,19 +6,16 @@ var MSG_TYPE = "fyp-bo-settings-tab";
 function normalizeTab(hash) {
   var h = String(hash || "").replace(/^#/, "").trim().toLowerCase();
   if (h === "database" || h === "pangkalan") return "database";
-  if (h === "operasi" || h === "cukai" || h === "tax") return "operasi";
   return "staff";
 }
 
 function tabToSrc(tab) {
   if (tab === "database") return "bo-settings-database.html";
-  if (tab === "operasi") return "bo-settings-operasi.html";
   return "bo-settings-staff.html";
 }
 
 function tabTitle(tab) {
   if (tab === "database") return "Pangkalan data — Tetapan";
-  if (tab === "operasi") return "Operasi — Tetapan";
   return "Kakitangan — Tetapan";
 }
 
@@ -47,6 +44,19 @@ function scheduleNotifyMainEmbedHeight() {
   shellNotifyTimer = setTimeout(notifyMainEmbedHeight, 48);
 }
 
+/** Tinggi shell (tab + iframe) — ukur kandungan sebenar, bukan scrollHeight penuh dokumen. */
+function measureShellEmbedHeight() {
+  var app = document.querySelector(".sd-app.bs-settings--shell");
+  var shell = document.querySelector(".bs-settings-shell");
+  if (app && shell) {
+    var top = app.getBoundingClientRect().top;
+    var bottom = shell.getBoundingClientRect().bottom;
+    return Math.max(120, Math.ceil(bottom - top + 6));
+  }
+  if (app) return Math.max(120, Math.ceil(app.offsetHeight));
+  return 240;
+}
+
 /** Tinggi keseluruhan shell (tab + iframe) untuk iframe utama main-menu. */
 function notifyMainEmbedHeight() {
   shellNotifyTimer = null;
@@ -54,12 +64,10 @@ function notifyMainEmbedHeight() {
     requestAnimationFrame(function () {
       try {
         if (window.parent === window) return;
-        var el = document.documentElement;
-        var h = Math.max(
-          el.scrollHeight,
-          document.body ? document.body.scrollHeight : 0
+        window.parent.postMessage(
+          { type: "fyp-bo-embed-height", height: measureShellEmbedHeight() },
+          "*"
         );
-        window.parent.postMessage({ type: "fyp-bo-embed-height", height: h }, "*");
       } catch (e) {}
     });
   });
@@ -97,7 +105,7 @@ function wire() {
     if (!iframe || ev.source !== iframe.contentWindow) return;
     var h = +d.height;
     if (!h || h < 120) return;
-    iframe.style.height = Math.ceil(h + 24) + "px";
+    iframe.style.height = Math.ceil(h + 6) + "px";
     scheduleNotifyMainEmbedHeight();
   });
 

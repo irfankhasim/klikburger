@@ -16,7 +16,8 @@ import {
   orderBy,
   limit,
   where,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from "../firebase/init.js";
 import {
   COL_STAFF,
@@ -31,26 +32,86 @@ export function subscribeStaff(onNext, onError) {
   return onSnapshot(collection(db, COL_STAFF), onNext, onError);
 }
 
-export function subscribeStaffActivity(onNext, onError, maxRows) {
-  var lim = typeof maxRows === "number" && maxRows > 0 ? maxRows : 200;
-  var q = query(collection(db, COL_STAFF_ACTIVITY), orderBy("createdAt", "desc"), limit(lim));
+function staffActivityMonthBounds(year, m0) {
+  var y = typeof year === "number" ? year : new Date().getFullYear();
+  var m = typeof m0 === "number" && m0 >= 0 && m0 <= 11 ? m0 : new Date().getMonth();
+  return {
+    start: Timestamp.fromDate(new Date(y, m, 1)),
+    end: Timestamp.fromDate(new Date(y, m + 1, 1))
+  };
+}
+
+/**
+ * Langgan `staff_activity` — susun & tapis ikut `createdAt` (bukan `at`).
+ * @param {number|{ maxRows?: number, year?: number, m0?: number }} opts — had baris, atau julat bulan (m0 = 0–11)
+ */
+export function subscribeStaffActivity(onNext, onError, opts) {
+  var lim = 200;
+  var year = null;
+  var m0 = null;
+  if (typeof opts === "number" && opts > 0) {
+    lim = opts;
+  } else if (opts && typeof opts === "object") {
+    if (typeof opts.maxRows === "number" && opts.maxRows > 0) lim = opts.maxRows;
+    if (typeof opts.year === "number") year = opts.year;
+    if (typeof opts.m0 === "number") m0 = opts.m0;
+  }
+  var coll = collection(db, COL_STAFF_ACTIVITY);
+  var q;
+  if (year != null && m0 != null && m0 >= 0 && m0 <= 11) {
+    var bounds = staffActivityMonthBounds(year, m0);
+    q = query(
+      coll,
+      where("createdAt", ">=", bounds.start),
+      where("createdAt", "<", bounds.end),
+      orderBy("createdAt", "desc"),
+      limit(lim)
+    );
+  } else {
+    q = query(coll, orderBy("createdAt", "desc"), limit(lim));
+  }
   return onSnapshot(q, onNext, onError);
 }
 
-/** Shift POS ditutup — jadual drawer (amaun awal / akhir / varians). */
-export function subscribeClosedPosShifts(onNext, onError, maxRows) {
-  var lim = typeof maxRows === "number" && maxRows > 0 ? maxRows : 200;
-  var fetchLim = Math.min(lim * 3, 600);
-  var q = query(collection(db, COL_POS_SHIFTS), orderBy("closedAt", "desc"), limit(fetchLim));
+/**
+ * Langgan `pos_shifts` ditutup — tapis ikut `openedAt` dalam bulan dipilih.
+ * @param {number|{ maxRows?: number, year?: number, m0?: number }} opts — m0 = 0–11
+ */
+export function subscribeClosedPosShifts(onNext, onError, opts) {
+  var lim = 200;
+  var year = null;
+  var m0 = null;
+  if (typeof opts === "number" && opts > 0) {
+    lim = opts;
+  } else if (opts && typeof opts === "object") {
+    if (typeof opts.maxRows === "number" && opts.maxRows > 0) lim = opts.maxRows;
+    if (typeof opts.year === "number") year = opts.year;
+    if (typeof opts.m0 === "number") m0 = opts.m0;
+  }
+  var coll = collection(db, COL_POS_SHIFTS);
+  var q;
+  if (year != null && m0 != null && m0 >= 0 && m0 <= 11) {
+    var bounds = staffActivityMonthBounds(year, m0);
+    q = query(
+      coll,
+      where("status", "==", "closed"),
+      where("openedAt", ">=", bounds.start),
+      where("openedAt", "<", bounds.end),
+      orderBy("openedAt", "desc"),
+      limit(lim)
+    );
+  } else {
+    q = query(
+      coll,
+      where("status", "==", "closed"),
+      orderBy("openedAt", "desc"),
+      limit(lim)
+    );
+  }
   return onSnapshot(
     q,
     function (snap) {
-      var docs = snap.docs.filter(function (d) {
-        var x = d.data();
-        return String(x.status || "") === "closed" && x.closedAt;
-      });
-      if (docs.length > lim) docs = docs.slice(0, lim);
-      onNext({ docs: docs });
+      onNext({ docs: snap.docs });
     },
     onError
   );
@@ -102,8 +163,7 @@ function parseStaffSettingsData(d) {
     return {
       teamMonthlyTargetRm: 15000,
       bonusRateAboveTarget: 0.03,
-      ratingBase: 3.6,
-      customerTaxPercent: 0
+      ratingBase: 3.6
     };
   }
   return {
@@ -113,9 +173,7 @@ function parseStaffSettingsData(d) {
       typeof d.bonusRateAboveTarget === "number"
         ? d.bonusRateAboveTarget
         : parseFloat(d.bonusRateAboveTarget) || 0.03,
-    ratingBase: typeof d.ratingBase === "number" ? d.ratingBase : parseFloat(d.ratingBase) || 3.6,
-    customerTaxPercent:
-      typeof d.customerTaxPercent === "number" ? d.customerTaxPercent : parseFloat(d.customerTaxPercent) || 0
+    ratingBase: typeof d.ratingBase === "number" ? d.ratingBase : parseFloat(d.ratingBase) || 3.6
   };
 }
 
@@ -144,10 +202,6 @@ export function saveStaffSettings(data) {
       teamMonthlyTargetRm: data.teamMonthlyTargetRm,
       bonusRateAboveTarget: data.bonusRateAboveTarget,
       ratingBase: data.ratingBase,
-      customerTaxPercent:
-        typeof data.customerTaxPercent === "number"
-          ? data.customerTaxPercent
-          : parseFloat(data.customerTaxPercent) || 0,
       updatedAt: serverTimestamp()
     },
     { merge: true }

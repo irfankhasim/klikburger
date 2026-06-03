@@ -81,13 +81,13 @@ function readBoSettingsSubTab() {
     if (st && st.r === "bo-ai-assistant") {
       return "database";
     }
-    if (st && st.r === "bo-settings" && (st.settingsTab === "database" || st.settingsTab === "staff" || st.settingsTab === "operasi")) {
+    if (st && st.r === "bo-settings" && (st.settingsTab === "database" || st.settingsTab === "staff")) {
       return st.settingsTab;
     }
   } catch (e1) {}
   try {
     var saved = sessionStorage.getItem(SETTINGS_TAB_SS);
-    if (saved === "database" || saved === "staff" || saved === "operasi") return saved;
+    if (saved === "database" || saved === "staff") return saved;
   } catch (e0) {}
   return "staff";
 }
@@ -617,7 +617,7 @@ function showBoSettings() {
   iframe.title = "Tetapan — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Tetapan";
   setTopbarEmbedLead(
-    "<strong>Kakitangan</strong> — sunting rekod staf. <strong>Operasi</strong> — peratus cukai pelanggan. <strong>Pangkalan data</strong> — pengetahuan AI."
+    "<strong>Kakitangan</strong> — sunting rekod staf. <strong>Pangkalan data</strong> — pengetahuan AI."
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
@@ -633,7 +633,7 @@ function wireContentEmbedChildMessages() {
       if (!d || typeof d !== "object") return;
 
       if (d.type === "fyp-bo-settings-tab") {
-        var tab = d.tab === "database" ? "database" : d.tab === "operasi" ? "operasi" : "staff";
+        var tab = d.tab === "database" ? "database" : "staff";
         try {
           sessionStorage.setItem(SETTINGS_TAB_SS, tab);
         } catch (e1) {}
@@ -645,7 +645,7 @@ function wireContentEmbedChildMessages() {
         var h = +d.height;
         if (!h || h < 240) return;
         embed.classList.add("content__embed--intrinsic");
-        embed.style.height = Math.ceil(h + 20) + "px";
+        embed.style.height = Math.ceil(h + 8) + "px";
       }
     } catch (e) {}
   });

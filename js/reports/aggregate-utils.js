@@ -107,6 +107,8 @@ export function aggregatePosReceiptDocs(receiptDocs) {
     grossSales += sub;
     totalCogs += cog;
     var pm = String(x.paymentMethod || "other").toLowerCase();
+    if (pm === "cash" || pm === "tunai") pm = "cash";
+    else pm = "qr";
     byPay[pm] = (byPay[pm] || 0) + sub;
   });
   grossSales = round2(grossSales);

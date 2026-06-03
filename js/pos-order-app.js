@@ -17,7 +17,6 @@ import {
 import { finalizePosSaleFifo, aggregateCartConsumption } from "./pos-sale-fifo.js";
 import { getPosHubState } from "./pos-operations-hub.js";
 import { splitOrderAmounts } from "./pos-tax.js";
-import { subscribeCustomerTaxPercent } from "./pos-tax-settings.js";
 import {
   subscribeRbac,
   canBypassStaffRestrictions,
@@ -29,8 +28,6 @@ import {
 } from "./pos-rbac-session.js";
 
 var menuItems = [];
-/** Peratus cukai pelanggan — dari `staff_settings/default.customerTaxPercent`. */
-var customerTaxPercent = 0;
 /** Snapshot mentah modifier (sebelum agregat usage pakej). */
 var posRawProducts = [];
 /** Peta id modifier ??? objek docToProduct (untuk FIFO jualan). */
@@ -367,7 +364,7 @@ function cartTotal() {
 }
 
 function orderAmountsFromSub(sub) {
-  return splitOrderAmounts(sub, customerTaxPercent);
+  return splitOrderAmounts(sub, 0);
 }
 
 function formatOrderTotalsHtml(amt) {
@@ -776,7 +773,7 @@ function renderFlowPayment() {
     "</strong></p>" +
     '<div class="order-flow__pay-grid" id="flow-pay-opts">' +
     '<label class="order-flow__pay-opt is-active"><input type="radio" name="flow-pay" value="cash" checked /> Tunai</label>' +
-    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="duitnow" /> QR</label>' +
+    '<label class="order-flow__pay-opt"><input type="radio" name="flow-pay" value="qr" /> QR</label>' +
     "</div>" +
     '<div id="flow-cash-panel" style="margin-top:0.5rem;padding:0.65rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-muted)">' +
     "<strong style=\"font-size:0.82rem\">Tunai</strong>" +
@@ -903,9 +900,10 @@ async function onConfirmPayment(amt) {
   selectedPayment =
     (document.querySelector('input[name="flow-pay"]:checked') && document.querySelector('input[name="flow-pay"]:checked').value) ||
     "cash";
-  if (selectedPayment !== "cash" && selectedPayment !== "duitnow") {
+  if (selectedPayment !== "cash" && selectedPayment !== "qr" && selectedPayment !== "duitnow") {
     selectedPayment = "cash";
   }
+  if (selectedPayment === "duitnow") selectedPayment = "qr";
   var tendered = parseFloat(document.getElementById("flow-tendered") && document.getElementById("flow-tendered").value) || 0;
   if (selectedPayment === "cash") {
     if (tendered + 1e-9 < totalDue) {
@@ -946,7 +944,7 @@ async function onConfirmPayment(amt) {
       taxAmount: amt.taxAmount,
       total: amt.total
     });
-    var labels = { cash: "Tunai", duitnow: "QR" };
+    var labels = { cash: "Tunai", qr: "QR", duitnow: "QR" };
     if (!result.order || !result.receipt) {
       throw new Error("Transaksi jualan tidak lengkap (pesanan/resit).");
     }
@@ -1058,15 +1056,6 @@ async function init() {
       updatePosRbacChrome();
       renderGrid();
       renderCart();
-    })
-  );
-
-  posOrderFirestoreUnsubs.push(
-    subscribeCustomerTaxPercent(function (pct) {
-      customerTaxPercent = pct;
-      renderCart();
-      if (flowStep === "review" && checkoutLines.length) renderFlowReview();
-      else if (flowStep === "pay" && checkoutLines.length) renderFlowPayment();
     })
   );
 

@@ -2,16 +2,22 @@
  * Halaman dipaparkan dalam iframe Tetapan (shell) — hantar tinggi kandungan
  * supaya induk boleh set tinggi iframe = satu scroll di peringkat tetingkap utama.
  */
+function measureInnerHeight() {
+  var main =
+    document.querySelector(".sd-app.bs-settings") ||
+    document.querySelector(".sd-app") ||
+    document.getElementById("ai-root") ||
+    document.querySelector(".ai-app");
+  if (main) {
+    return Math.max(120, Math.ceil(main.offsetTop + main.offsetHeight + 4));
+  }
+  var b = document.body;
+  return Math.max(120, Math.ceil(b ? b.offsetHeight : 0));
+}
+
 function postInnerHeight() {
   if (window.parent === window) return;
-  var root = document.documentElement;
-  var b = document.body;
-  var h = Math.max(
-    root.scrollHeight,
-    b ? b.scrollHeight : 0,
-    b ? b.offsetHeight : 0
-  );
-  window.parent.postMessage({ type: "fyp-bs-inner-height", height: h }, "*");
+  window.parent.postMessage({ type: "fyp-bs-inner-height", height: measureInnerHeight() }, "*");
 }
 
 function init() {

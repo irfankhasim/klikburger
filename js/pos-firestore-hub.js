@@ -463,18 +463,42 @@ export async function shiftCashMovement(type, amount, note, auditActor) {
   return { ok: true };
 }
 
-function ordersInCurrentShift(state) {
-  if (!state.shift || !state.shift.openedAt) return [];
+export function normalizePaymentMethod(code) {
+  var pm = String(code || "cash").toLowerCase();
+  if (pm === "cash" || pm === "tunai") return "cash";
+  return "qr";
+}
+
+function shiftTimeBounds(state) {
+  if (!state.shift || !state.shift.openedAt) return null;
   var t0 = new Date(state.shift.openedAt).getTime();
   var t1 =
     state.shift.closing && state.shift.closing.closedAt
       ? new Date(state.shift.closing.closedAt).getTime()
       : null;
+  return { startMs: t0, endMs: t1 };
+}
+
+function receiptsInCurrentShift(state) {
+  var bounds = shiftTimeBounds(state);
+  if (!bounds) return [];
+  return state.receipts.filter(function (r) {
+    if (r.voided) return false;
+    var ct = new Date(r.createdAt).getTime();
+    if (ct < bounds.startMs) return false;
+    if (bounds.endMs != null && ct >= bounds.endMs) return false;
+    return true;
+  });
+}
+
+function ordersInCurrentShift(state) {
+  var bounds = shiftTimeBounds(state);
+  if (!bounds) return [];
   return state.orders.filter(function (o) {
     if (!o.paidAt) return false;
     var pt = new Date(o.paidAt).getTime();
-    if (pt < t0) return false;
-    if (t1 != null && pt > t1) return false;
+    if (pt < bounds.startMs) return false;
+    if (bounds.endMs != null && pt >= bounds.endMs) return false;
     return true;
   });
 }
@@ -487,12 +511,10 @@ function isReceiptVoided(state, receiptNo) {
 }
 
 function sumCashSales(state) {
-  var list = ordersInCurrentShift(state);
-  return list.reduce(function (s, o) {
-    if (o.paymentMethod === "cash" && o.lifecycle !== "cancelled" && !isReceiptVoided(state, o.receiptNo)) {
-      return s + (typeof o.subtotal === "number" ? o.subtotal : 0);
-    }
-    return s;
+  return receiptsInCurrentShift(state).reduce(function (s, r) {
+    if (normalizePaymentMethod(r.paymentMethod) !== "cash") return s;
+    var sub = typeof r.subtotal === "number" ? r.subtotal : parseFloat(r.subtotal) || 0;
+    return s + sub;
   }, 0);
 }
 
@@ -511,26 +533,17 @@ export function getShiftSalesBreakdown() {
   var state = hubCache;
   var cash = 0;
   var qr = 0;
-  var card = 0;
-  var ewallet = 0;
-  var total = 0;
-  var scope = ordersInCurrentShift(state);
-  scope.forEach(function (o) {
-    if (o.lifecycle === "cancelled") return;
-    if (isReceiptVoided(state, o.receiptNo)) return;
-    var sub = typeof o.subtotal === "number" ? o.subtotal : 0;
-    total += sub;
-    if (o.paymentMethod === "cash") cash += sub;
-    else if (o.paymentMethod === "duitnow") qr += sub;
-    else if (o.paymentMethod === "card") card += sub;
-    else if (o.paymentMethod === "ewallet") ewallet += sub;
+  receiptsInCurrentShift(state).forEach(function (r) {
+    var sub = typeof r.subtotal === "number" ? r.subtotal : parseFloat(r.subtotal) || 0;
+    if (normalizePaymentMethod(r.paymentMethod) === "cash") cash += sub;
+    else qr += sub;
   });
+  cash = Math.round(cash * 100) / 100;
+  qr = Math.round(qr * 100) / 100;
   return {
-    total: Math.round(total * 100) / 100,
-    cash: Math.round(cash * 100) / 100,
-    duitnow: Math.round(qr * 100) / 100,
-    card: Math.round(card * 100) / 100,
-    ewallet: Math.round(ewallet * 100) / 100
+    total: Math.round((cash + qr) * 100) / 100,
+    cash: cash,
+    qr: qr
   };
 }
 
@@ -559,9 +572,7 @@ export async function shiftClose(p) {
     varianceCategory: varianceCategoryFromVariance(variance),
     salesTotal: br.total,
     cashSales: br.cash,
-    qrSales: br.duitnow,
-    cardSales: br.card,
-    ewalletSales: br.ewallet,
+    qrSales: br.qr,
     refundNotes: p.refundNotes != null ? String(p.refundNotes) : "",
     closedWithOwnerBypass: !!p.ownerBypass
   };
@@ -612,13 +623,7 @@ export function orderPriorityFlag(order) {
 }
 
 export function paymentMethodLabel(code) {
-  var m = {
-    cash: "Tunai",
-    duitnow: "QR",
-    card: "Kad",
-    ewallet: "eWallet"
-  };
-  return m[code] || code;
+  return normalizePaymentMethod(code) === "cash" ? "Tunai" : "QR";
 }
 
 export { PROTOTYPE_MANAGER_PIN };

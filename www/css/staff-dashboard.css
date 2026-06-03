@@ -13,7 +13,11 @@ html.kb-embed body.staff-dash {
 }
 
 html.kb-embed .staff-dash .sd-app {
-  padding: 0.75rem 1rem 2rem;
+  padding: 0.75rem 1rem 1rem;
+}
+
+html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
+  padding-bottom: 0.65rem;
 }
 
 .sd-app {

@@ -3,6 +3,15 @@
   margin-bottom: 0.75rem;
 }
 
+/* Dalam iframe main-menu: tajuk/perihalan di topbar induk — elak scroll berlebihan */
+html.kb-embed .bs-settings--shell .kb-page-header {
+  display: none !important;
+}
+
+html.kb-embed .bs-settings--shell.sd-app {
+  padding: 0.35rem 1rem 0.5rem;
+}
+
 .bs-settings-shell {
   display: flex;
   flex-direction: column;
@@ -63,8 +72,8 @@
 .bs-settings-shell__frame {
   display: block;
   width: 100%;
-  min-height: 20rem;
-  height: 28rem;
+  min-height: 0;
+  height: 16rem;
   border: 0;
   background: var(--surface-muted, #fafafa);
 }

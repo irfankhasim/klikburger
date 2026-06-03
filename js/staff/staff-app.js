@@ -3,7 +3,8 @@
  */
 import { auth } from "../firebase/init.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
-import { docToStaff, dedupeStaffByNameKey } from "./staff-mappers.js";
+import { docToStaff, docToStaffActivity, docToPosShift, dedupeStaffByNameKey } from "./staff-mappers.js";
+import { isClockActivityKind } from "./staff-analytics.js";
 import { subscribeStaff, subscribeStaffActivity, subscribeClosedPosShifts } from "./staff-repository.js";
 import { roundMoney, varianceCategoryFromVariance, varianceLabelMs } from "../drawer-variance.js";
 
@@ -13,6 +14,8 @@ var posShiftRows = [];
 var filterMonthStr = "";
 
 var staffFirestoreUnsubs = [];
+var staffActivityUnsub = null;
+var staffShiftsUnsub = null;
 var staffPagehideBound = false;
 
 function teardownStaffFirestoreListeners() {
@@ -78,19 +81,6 @@ function tsToMillis(ts) {
   return 0;
 }
 
-function shiftClosedMillis(shiftData) {
-  if (!shiftData || typeof shiftData !== "object") return 0;
-  var m = tsToMillis(shiftData.closedAt);
-  if (m) return m;
-  var c = shiftData.closing && shiftData.closing.closedAt;
-  if (!c) return 0;
-  if (typeof c === "string") {
-    var d = new Date(c);
-    return isNaN(d.getTime()) ? 0 : d.getTime();
-  }
-  return tsToMillis(c);
-}
-
 function inCalendarMonth(ms, y, m0) {
   if (!ms) return false;
   var d = new Date(ms);
@@ -106,16 +96,11 @@ function renderSummary() {
   }).length;
   var clockN = 0;
   (activityRows || []).forEach(function (r) {
-    var k = String(r.kind || "");
-    if (k !== "clock_in" && k !== "clock_out") return;
+    if (!isClockActivityKind(r.kind)) return;
     if (!inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0)) return;
     clockN++;
   });
-  var drawerN = 0;
-  (posShiftRows || []).forEach(function (r) {
-    if (!inCalendarMonth(shiftClosedMillis(r.raw), ym.y, ym.m0)) return;
-    drawerN++;
-  });
+  var drawerN = (posShiftRows || []).length;
   el.innerHTML =
     '<article class="sd-metric"><div class="sd-metric__label">Staf aktif</div><div class="sd-metric__value">' +
     active +
@@ -148,8 +133,7 @@ function renderClockTable() {
   var ym = ymParts();
   var rows = (activityRows || [])
     .filter(function (r) {
-      var k = String(r.kind || "");
-      if (k !== "clock_in" && k !== "clock_out") return false;
+      if (!isClockActivityKind(r.kind)) return false;
       return inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0);
     })
     .sort(function (a, b) {
@@ -191,29 +175,12 @@ function formatMsDateTime(ms) {
   }
 }
 
-function buildNoteFromClosing(closing) {
-  if (!closing || typeof closing !== "object") return "";
-  var parts = [];
-  if (closing.refundNotes) parts.push(String(closing.refundNotes).trim());
-  if (closing.notes && String(closing.notes).trim() && String(closing.notes) !== String(closing.refundNotes || "")) {
-    parts.push(String(closing.notes).trim());
+function varianceCellHtmlFromShift(s) {
+  var v = typeof s.variance === "number" ? s.variance : null;
+  if ((v == null || isNaN(v)) && s.actualDrawer != null && s.expectedDrawer != null) {
+    v = roundMoney(s.actualDrawer - s.expectedDrawer);
   }
-  if (closing.source === "MCP_AGENT") parts.push("Tutupan MCP");
-  return parts.join(" · ").slice(0, 220);
-}
-
-function varianceCellHtml(closing) {
-  if (!closing || typeof closing !== "object") closing = {};
-  var expected = typeof closing.expectedDrawer === "number" ? closing.expectedDrawer : parseFloat(closing.expectedDrawer);
-  var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : parseFloat(closing.actualDrawer);
-  if ((actual == null || isNaN(actual)) && closing.closingCash != null) {
-    actual = parseFloat(closing.closingCash);
-  }
-  var v = typeof closing.variance === "number" ? closing.variance : null;
-  if ((v == null || isNaN(v)) && !isNaN(expected) && !isNaN(actual)) {
-    v = roundMoney(actual - expected);
-  }
-  var cat = closing.varianceCategory || varianceCategoryFromVariance(v);
+  var cat = s.varianceCategory || varianceCategoryFromVariance(v);
   var label = varianceLabelMs(cat);
   var rmPart = "";
   if (v != null && !isNaN(v) && cat !== "unknown") {
@@ -226,34 +193,24 @@ function varianceCellHtml(closing) {
 function renderDrawerTable() {
   var tb = $("sd-drawer-body");
   if (!tb) return;
-  var ym = ymParts();
-  var rows = (posShiftRows || [])
-    .filter(function (r) {
-      return inCalendarMonth(shiftClosedMillis(r.raw), ym.y, ym.m0);
-    })
-    .sort(function (a, b) {
-      return shiftClosedMillis(b.raw) - shiftClosedMillis(a.raw);
-    });
+  var rows = (posShiftRows || []).slice().sort(function (a, b) {
+    return tsToMillis(b.openedAt) - tsToMillis(a.openedAt);
+  });
   if (!rows.length) {
     tb.innerHTML =
       '<tr><td colspan="5" class="sd-footnote">Tiada shift ditutup pada bulan ini dalam <code>pos_shifts</code>. Varians dikira automatik semasa tutup shift di POS.</td></tr>';
     return;
   }
   tb.innerHTML = rows
-    .map(function (r) {
-      var raw = r.raw;
-      var clos = raw.closing && typeof raw.closing === "object" ? raw.closing : {};
-      var ms = shiftClosedMillis(raw);
-      var when = formatMsDateTime(ms);
-      var opening = typeof raw.openingCash === "number" ? raw.openingCash : parseFloat(raw.openingCash) || 0;
-      var openingStr = "RM " + roundMoney(opening).toFixed(2);
-      var actualN = typeof clos.actualDrawer === "number" ? clos.actualDrawer : parseFloat(clos.actualDrawer);
-      if ((actualN == null || isNaN(actualN)) && clos.closingCash != null) {
-        actualN = parseFloat(clos.closingCash);
-      }
-      var actualStr = actualN != null && !isNaN(actualN) ? "RM " + roundMoney(actualN).toFixed(2) : "—";
-      var note = buildNoteFromClosing(clos);
-      var varHtml = varianceCellHtml(clos);
+    .map(function (s) {
+      var when = formatMsDateTime(tsToMillis(s.openedAt));
+      var openingStr = "RM " + roundMoney(s.openingCash).toFixed(2);
+      var actualStr =
+        s.actualDrawer != null && !isNaN(s.actualDrawer) ? "RM " + roundMoney(s.actualDrawer).toFixed(2) : "—";
+      var noteParts = [String(s.openedByDisplayName || "—")];
+      if (s.note) noteParts.push(String(s.note));
+      var note = noteParts.join(" · ");
+      var varHtml = varianceCellHtmlFromShift(s);
       return (
         "<tr><td>" +
         escapeHtml(when) +
@@ -296,9 +253,68 @@ function initMonthInput() {
   if (inp) inp.value = filterMonthStr;
 }
 
+function subscribeStaffActivityForFilterMonth() {
+  if (staffActivityUnsub) {
+    try {
+      staffActivityUnsub();
+    } catch (e) {}
+    var idx = staffFirestoreUnsubs.indexOf(staffActivityUnsub);
+    if (idx >= 0) staffFirestoreUnsubs.splice(idx, 1);
+    staffActivityUnsub = null;
+  }
+  var ym = ymParts();
+  staffActivityUnsub = subscribeStaffActivity(
+    function (snap) {
+      activityRows = snap.docs.map(docToStaffActivity);
+      refreshAll();
+    },
+    function (err) {
+      console.error(err);
+      activityRows = [];
+      setStatus(err.message || String(err), "err");
+      refreshAll();
+    },
+    { maxRows: 500, year: ym.y, m0: ym.m0 }
+  );
+  staffFirestoreUnsubs.push(staffActivityUnsub);
+}
+
+function subscribeClosedPosShiftsForFilterMonth() {
+  if (staffShiftsUnsub) {
+    try {
+      staffShiftsUnsub();
+    } catch (e) {}
+    var idx = staffFirestoreUnsubs.indexOf(staffShiftsUnsub);
+    if (idx >= 0) staffFirestoreUnsubs.splice(idx, 1);
+    staffShiftsUnsub = null;
+  }
+  var ym = ymParts();
+  staffShiftsUnsub = subscribeClosedPosShifts(
+    function (snap) {
+      try {
+        posShiftRows = snap.docs.map(docToPosShift);
+      } catch (e) {
+        console.error(e);
+        posShiftRows = [];
+      }
+      refreshAll();
+    },
+    function (err) {
+      console.error(err);
+      posShiftRows = [];
+      setStatus(err.message || String(err), "err");
+      refreshAll();
+    },
+    { maxRows: 500, year: ym.y, m0: ym.m0 }
+  );
+  staffFirestoreUnsubs.push(staffShiftsUnsub);
+}
+
 function wireEvents() {
   $("sd-filter-month").addEventListener("change", function () {
     filterMonthStr = $("sd-filter-month").value;
+    subscribeStaffActivityForFilterMonth();
+    subscribeClosedPosShiftsForFilterMonth();
     refreshAll();
   });
 }
@@ -341,52 +357,8 @@ async function main() {
     )
   );
 
-  staffFirestoreUnsubs.push(
-    subscribeStaffActivity(
-      function (snap) {
-        activityRows = snap.docs.map(function (d) {
-          var x = d.data();
-          return {
-            id: d.id,
-            staffId: x.staffId,
-            staffName: x.staffName,
-            kind: x.kind,
-            detail: x.detail,
-            createdAt: x.createdAt
-          };
-        });
-        refreshAll();
-      },
-      function (err) {
-        console.error(err);
-        setStatus(err.message || String(err), "err");
-      },
-      220
-    )
-  );
-
-  staffFirestoreUnsubs.push(
-    subscribeClosedPosShifts(
-      function (snap) {
-        try {
-          posShiftRows = snap.docs.map(function (d) {
-            return { id: d.id, raw: d.data() };
-          });
-        } catch (e) {
-          console.error(e);
-          posShiftRows = [];
-        }
-        refreshAll();
-      },
-      function (err) {
-        console.error(err);
-        posShiftRows = [];
-        setStatus(err.message || String(err), "err");
-        refreshAll();
-      },
-      220
-    )
-  );
+  subscribeStaffActivityForFilterMonth();
+  subscribeClosedPosShiftsForFilterMonth();
 
   refreshAll();
 }

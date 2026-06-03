@@ -5,6 +5,7 @@ import {
   subscribePosHub,
   getPosHubState,
   paymentMethodLabel,
+  normalizePaymentMethod,
   voidReceiptInHub,
   removeVoidedReceiptFromHub
 } from "./pos-operations-hub.js";
@@ -110,7 +111,7 @@ function filteredReceipts(state) {
   var q = (document.getElementById("rc-search") && document.getElementById("rc-search").value.trim().toLowerCase()) || "";
   var pf = (document.getElementById("rc-filter-pay") && document.getElementById("rc-filter-pay").value) || "";
   return state.receipts.filter(function (r) {
-    if (pf && r.paymentMethod !== pf) return false;
+    if (pf && normalizePaymentMethod(r.paymentMethod) !== pf) return false;
     if (!q) return true;
     var blob = (r.receiptNo + " " + (r.orderNo || "") + " " + (r.orderId || "")).toLowerCase();
     return blob.indexOf(q) !== -1;

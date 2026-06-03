@@ -162,7 +162,7 @@ function renderPayChips(b) {
       "</span></span>"
     );
   }
-  chips.innerHTML = chip("Tunai", b.cash) + chip("QR", b.duitnow);
+  chips.innerHTML = chip("Tunai", b.cash) + chip("QR", b.qr);
 }
 
 export function renderShiftPanelUI(state) {
@@ -315,23 +315,29 @@ function handleShiftClose() {
     window.alert("Tiada drawer aktif.");
     return;
   }
-  var exp = getExpectedDrawerCash();
+  var stClose = getPosHubState();
+  var opening = typeof stClose.shift.openingCash === "number" ? stClose.shift.openingCash : 0;
   var br = getShiftSalesBreakdown();
+  var expFull = getExpectedDrawerCash();
+  var expSimple = Math.round((opening + br.cash) * 100) / 100;
   showModal(
     "Tutup drawer — ringkasan",
     "<p class=\"ops-muted\" style=\"margin:0 0 0.65rem\">Sahkan kiraan tunai sebelum tutup.</p>" +
       '<dl class="rc-dl" style="margin-bottom:0.75rem">' +
-      "<dt>Jualan drawer</dt><dd><strong>" +
-      formatRM(br.total) +
+      "<dt>Tunai awal (opening)</dt><dd><strong>" +
+      formatRM(opening) +
       "</strong></dd>" +
-      "<dt>Jangkaan laci</dt><dd><strong>" +
-      formatRM(exp) +
-      "</strong></dd>" +
-      "<dt>Tunai</dt><dd><strong>" +
+      "<dt>Jualan tunai</dt><dd><strong>" +
       formatRM(br.cash) +
       "</strong></dd>" +
-      "<dt>QR</dt><dd><strong>" +
-      formatRM(br.duitnow) +
+      "<dt>Jualan QR</dt><dd><strong>" +
+      formatRM(br.qr) +
+      "</strong></dd>" +
+      "<dt>Jangkaan laci (awal + tunai)</dt><dd><strong>" +
+      formatRM(expSimple) +
+      "</strong></dd>" +
+      "<dt>Jangkaan laci (termasuk masuk/keluar)</dt><dd><strong>" +
+      formatRM(expFull) +
       "</strong></dd>" +
       "</dl>" +
       '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Kiraan tunai sebenar dalam laci (RM)</span></label>' +
