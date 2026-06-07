@@ -213,7 +213,16 @@ async function loadReport() {
     var snap = await getDoc(doc(db, COL_MONTHLY_REPORTS, currentKey));
     if (!snap.exists()) {
       currentReport = null;
-      setStatus("Tiada laporan untuk " + currentKey + " — klik Jana laporan.", null);
+      var now = new Date();
+      var isCurrent = sel.year === now.getFullYear() && sel.month === (now.getMonth() + 1);
+      var isFuture = sel.year > now.getFullYear() || (sel.year === now.getFullYear() && sel.month > now.getMonth() + 1);
+      if (isCurrent) {
+        setStatus("Bulan " + currentKey + " masih berjalan — laporan hanya boleh dijana selepas bulan tamat.", null);
+      } else if (isFuture) {
+        setStatus("Bulan " + currentKey + " belum bermula — laporan tidak tersedia.", null);
+      } else {
+        setStatus("Tiada laporan untuk " + currentKey + " — klik Jana laporan.", null);
+      }
       renderEmpty();
       return;
     }
@@ -229,6 +238,21 @@ async function loadReport() {
 async function onGenerate() {
   if (!isElevatedRole()) { window.alert("Hanya pemilik boleh jana laporan."); return; }
   var sel = selectedYearMonth();
+  var now = new Date();
+  var currentYear = now.getFullYear();
+  var currentMonth = now.getMonth() + 1;
+
+  // Bulan semasa — belum habis, tidak boleh jana
+  if (sel.year === currentYear && sel.month === currentMonth) {
+    window.alert("Laporan untuk bulan semasa (" + sel.year + "-" + String(sel.month).padStart(2,"0") + ") tidak boleh dijana kerana bulan ini belum tamat. Sila tunggu sehingga bulan hadapan.");
+    return;
+  }
+
+  // Bulan hadapan — tidak boleh jana
+  if (sel.year > currentYear || (sel.year === currentYear && sel.month > currentMonth)) {
+    window.alert("Laporan untuk bulan hadapan tidak boleh dijana.");
+    return;
+  }
   var btn = $("mr-generate");
   if (btn) { btn.disabled = true; btn.textContent = "Jana…"; }
   setStatus("Menjana laporan " + sel.year + "-" + String(sel.month).padStart(2,"0") + "…");
@@ -416,12 +440,32 @@ async function downloadPdf() {
   }
 }
 
+function updateGenerateButtonState() {
+  var btn = $("mr-generate");
+  if (!btn) return;
+  var sel = selectedYearMonth();
+  var now = new Date();
+  var currentYear = now.getFullYear();
+  var currentMonth = now.getMonth() + 1;
+  var isCurrentOrFuture = sel.year > currentYear ||
+    (sel.year === currentYear && sel.month >= currentMonth);
+  btn.disabled = isCurrentOrFuture;
+  btn.title = isCurrentOrFuture
+    ? "Tidak boleh jana laporan untuk bulan semasa atau hadapan"
+    : "Jana laporan untuk tempoh ini";
+}
+
 // Event listeners
 var genBtn = $("mr-generate");
 if (genBtn) genBtn.addEventListener("click", onGenerate);
 
 var pdfBtn = $("mr-download-pdf");
 if (pdfBtn) pdfBtn.addEventListener("click", downloadPdf);
+
+var yearSel = $("mr-year");
+var monthSel = $("mr-month");
+if (yearSel) yearSel.addEventListener("change", updateGenerateButtonState);
+if (monthSel) monthSel.addEventListener("change", updateGenerateButtonState);
 
 // Init — no auto-fetch on filter change; report loads only via "Jana laporan"
 async function init() {
@@ -430,5 +474,6 @@ async function init() {
   currentKey = "";
   renderEmpty();
   setStatus("Pilih tahun dan bulan, kemudian klik Jana laporan.", null);
+  updateGenerateButtonState();
 }
 init();

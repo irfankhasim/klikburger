@@ -67,8 +67,9 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-function round4(n) {
-  return Math.round(n * 10000) / 10000;
+export function round4(n) {
+  var x = typeof n === "number" ? n : parseFloat(n) || 0;
+  return Math.round(x * 10000) / 10000;
 }
 
 async function fetchPagedByRange(colName, field, tsStart, tsEnd) {

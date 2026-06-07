@@ -353,51 +353,6 @@ function aggregatePayment(receiptDocs, bounds) {
   };
 }
 
-async function buildDrawerRowsFromShifts(bounds) {
-  var rows = [];
-  try {
-    // Kira jualan dari receipts yang dah diload
-    var cashTotal = 0;
-    var qrTotal = 0;
-    var cashCount = 0;
-    var qrCount = 0;
-
-    if (latestBundle && latestBundle.receiptDocs) {
-      var receipts = latestBundle.receiptDocs.filter(function(d) {
-        var x = d.data();
-        if (x.voided) return false;
-        var ms = toMillis(x.createdAt);
-        return ms >= bounds.startMs && ms < bounds.endMs;
-      });
-
-      receipts.forEach(function(d) {
-        var x = d.data();
-        var sub = typeof x.subtotal === "number" ? x.subtotal : parseFloat(x.subtotal) || 0;
-        var pm = String(x.paymentMethod || "cash").toLowerCase();
-        if (pm === "cash" || pm === "tunai") {
-          cashTotal += sub;
-          cashCount++;
-        } else {
-          qrTotal += sub;
-          qrCount++;
-        }
-      });
-    }
-
-    cashTotal = Math.round(cashTotal * 100) / 100;
-    qrTotal = Math.round(qrTotal * 100) / 100;
-
-    rows.push({ label: "Jualan Tunai", value: formatRM(cashTotal) + " (" + cashCount + " transaksi)" });
-    rows.push({ label: "Jualan QR / DuitNow", value: formatRM(qrTotal) + " (" + qrCount + " transaksi)" });
-    rows.push({ label: "Jumlah Jualan", value: formatRM(Math.round((cashTotal + qrTotal) * 100) / 100) });
-
-    return rows;
-  } catch(e) {
-    console.error("buildDrawerRowsFromShifts:", e);
-    return [{ label: "Ralat memuatkan data drawer", value: "" }];
-  }
-}
-
 function buildOrderCards(receiptDocs, bounds) {
   var dayShort = parseCalendarKeyLocal(bounds.dateKey || effectiveCalendarKey()).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
   return receiptDocs
@@ -516,20 +471,6 @@ function renderOrders(cards) {
       );
     })
     .join("");
-}
-
-function renderDrawer(rows) {
-  var el = $("od-drawer-mount");
-  if (!el) return;
-  if (!rows || !rows.length) {
-    el.innerHTML = emptyBlock("Tiada data untuk tarikh ini.");
-    return;
-  }
-  el.innerHTML = rows.map(function(r) {
-    if (!r.label && !r.value) return '<div style="border-top:1px solid var(--border);margin:6px 0"></div>';
-    var vc = r.valueClass ? ' class="' + escapeHtml(r.valueClass) + '"' : "";
-    return '<div class="dash-drawer-row"><span>' + escapeHtml(r.label || "") + '</span><strong' + vc + '>' + escapeHtml(r.value || "") + '</strong></div>';
-  }).join("");
 }
 
 function renderProducts(list) {
@@ -810,7 +751,6 @@ async function loadDayOnce(dateKey) {
 
 function clearInsightPanels() {
   renderProducts([]);
-  renderDrawer([]);
   renderPayment({ empty: true });
   var canvas = $("od-chart-sales");
   if (canvas && typeof Chart !== "undefined" && typeof Chart.getChart === "function") {

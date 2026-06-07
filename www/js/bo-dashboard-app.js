@@ -353,85 +353,6 @@ function aggregatePayment(receiptDocs, bounds) {
   };
 }
 
-async function buildDrawerRowsFromShifts(bounds, receiptDocs) {
-  try {
-    var q = query(
-      collection(db, COL_POS_SHIFTS),
-      where("openedAt", ">=", bounds.startTs),
-      where("openedAt", "<", bounds.endTs)
-    );
-    var snap = await getDocs(q);
-    if (snap.empty) return [];
-    var rows = [];
-    var docs = receiptDocs || [];
-
-    for (var si = 0; si < snap.docs.length; si++) {
-      var d = snap.docs[si];
-      var x = d.data();
-      var shiftId = d.id;
-      var opening = typeof x.openingCash === "number" ? x.openingCash : parseFloat(x.openingCash) || 0;
-      var openMs = toMillis(x.openedAt);
-      var closing = x.closing || {};
-      var closeMs = closing.closedAt ? toMillis(closing.closedAt) : bounds.endMs;
-      if (!openMs) continue;
-
-      var cashSales = 0;
-      docs.forEach(function (rd) {
-        var rx = rd.data();
-        if (rx.voided) return;
-        var ms = toMillis(rx.createdAt);
-        if (ms < openMs || ms >= closeMs) return;
-        if (normalizePaymentMethod(rx.paymentMethod) !== "cash") return;
-        var sub = typeof rx.subtotal === "number" ? rx.subtotal : parseFloat(rx.subtotal) || 0;
-        cashSales += sub;
-      });
-      cashSales = Math.round(cashSales * 100) / 100;
-
-      var cashIn = 0;
-      var cashOut = 0;
-      var movSnap = await getDocs(collection(db, COL_POS_SHIFTS, shiftId, "cash_movements"));
-      movSnap.docs.forEach(function (md) {
-        var m = md.data();
-        var amt = typeof m.amount === "number" ? m.amount : parseFloat(m.amount) || 0;
-        if (m.type === "out") cashOut += amt;
-        else cashIn += amt;
-      });
-      cashIn = Math.round(cashIn * 100) / 100;
-      cashOut = Math.round(cashOut * 100) / 100;
-
-      var expected = Math.round((opening + cashSales + cashIn - cashOut) * 100) / 100;
-      var actual = typeof closing.actualDrawer === "number" ? closing.actualDrawer : null;
-      var variance = actual != null ? Math.round((actual - expected) * 100) / 100 : null;
-      var staff = x.openedByDisplayName || "Kakitangan";
-      var prefix = "Shift — " + staff;
-
-      rows.push({ label: prefix + " · Tunai awal", value: formatRM(opening) });
-      rows.push({ label: prefix + " · Jualan tunai", value: formatRM(cashSales) });
-      if (cashIn > 0) {
-        rows.push({ label: prefix + " · Tunai masuk", value: "+RM " + cashIn.toFixed(2) });
-      }
-      if (cashOut > 0) {
-        rows.push({ label: prefix + " · Tunai keluar", value: "−RM " + cashOut.toFixed(2) });
-      }
-      rows.push({ label: prefix + " · Jangkaan laci", value: formatRM(expected) });
-      if (actual != null) {
-        rows.push({ label: prefix + " · Laci sebenar", value: formatRM(actual) });
-        var vc = variance === 0 ? "dash-val--ok" : variance > 0 ? "dash-val--over" : "dash-val--short";
-        rows.push({
-          label: prefix + " · Varians",
-          value: (variance >= 0 ? "+RM " : "−RM ") + Math.abs(variance).toFixed(2),
-          valueClass: vc
-        });
-      } else {
-        rows.push({ label: prefix + " · Status", value: "Drawer belum ditutup" });
-      }
-    }
-    return rows;
-  } catch (e) {
-    return [];
-  }
-}
-
 function buildOrderCards(receiptDocs, bounds) {
   var dayShort = parseCalendarKeyLocal(bounds.dateKey || effectiveCalendarKey()).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
   return receiptDocs
@@ -455,8 +376,7 @@ function buildOrderCards(receiptDocs, bounds) {
         status: "handed",
         amt: formatRM(x.subtotal || 0)
       };
-    })
-    .slice(0, 20);
+    });
 }
 
 function computeKpiDeltas(sales, orderCount, cogs, profit, prev) {
@@ -548,29 +468,6 @@ function renderOrders(cards) {
         '">' +
         escapeHtml(pillLabel(o.status)) +
         "</span></div></article>"
-      );
-    })
-    .join("");
-}
-
-function renderDrawer(rows) {
-  var el = $("od-drawer-mount");
-  if (!el) return;
-  if (!rows || !rows.length) {
-    el.innerHTML = emptyBlock("Tiada rekod drawer untuk tarikh ini.");
-    return;
-  }
-  el.innerHTML = rows
-    .map(function (r) {
-      var vc = r.valueClass ? ' class="' + r.valueClass + '"' : "";
-      return (
-        '<div class="dash-drawer-row"><span>' +
-        escapeHtml(r.label) +
-        "</span><strong" +
-        vc +
-        ">" +
-        escapeHtml(r.value) +
-        "</strong></div>"
       );
     })
     .join("");
@@ -749,7 +646,7 @@ async function renderFromBundle() {
   var deltas = computeKpiDeltas(sales, orderCount, cogs, profit, prevDayTotals);
   applyKpi({
     jumlahJualan: formatRM(sales),
-    jumlahOrder: orderCount + " order",
+    jumlahOrder: orderCount + " transaksi",
     kosBahan: formatRM(cogs),
     untungKasar: formatRM(profit),
     jumlahJualanDelta: deltas.jumlahJualanDelta,
@@ -761,8 +658,6 @@ async function renderFromBundle() {
   renderChart(hourly);
   renderProducts(aggregateTopProducts(nonVoidedReceipts, bounds));
   renderPayment(aggregatePayment(nonVoidedReceipts, bounds));
-  var drawerRows = await buildDrawerRowsFromShifts(bounds, nonVoidedReceipts);
-  renderDrawer(drawerRows);
   renderKpiPeriod();
   updateFilterDateUi();
 }
@@ -856,7 +751,6 @@ async function loadDayOnce(dateKey) {
 
 function clearInsightPanels() {
   renderProducts([]);
-  renderDrawer([]);
   renderPayment({ empty: true });
   var canvas = $("od-chart-sales");
   if (canvas && typeof Chart !== "undefined" && typeof Chart.getChart === "function") {
