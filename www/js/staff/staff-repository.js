@@ -27,6 +27,9 @@ import {
   COL_POS_AUDIT,
   COL_POS_SHIFTS
 } from "../firebase/collections.js";
+import { OWNER_STAFF_DOC_ID } from "./staff-mappers.js";
+
+export { OWNER_STAFF_DOC_ID };
 
 export function subscribeStaff(onNext, onError) {
   return onSnapshot(collection(db, COL_STAFF), onNext, onError);
@@ -133,10 +136,30 @@ export function addStaff(payload) {
 }
 
 export function persistStaff(id, payload) {
+  var patch = Object.assign({}, payload);
+  if (String(id) === OWNER_STAFF_DOC_ID) {
+    patch.staffId = OWNER_STAFF_DOC_ID;
+    patch.isOwner = true;
+    patch.role = "owner";
+  }
   return updateDoc(doc(db, COL_STAFF, id), {
-    ...payload,
+    ...patch,
     updatedAt: serverTimestamp()
   });
+}
+
+export async function getOwnerStaffDoc() {
+  var snap = await getDoc(doc(db, COL_STAFF, OWNER_STAFF_DOC_ID));
+  if (!snap.exists()) return null;
+  return { id: snap.id, data: snap.data() };
+}
+
+export async function staffPinExists(staffDocId) {
+  var sid = String(staffDocId || "").trim();
+  if (!sid) return false;
+  var snap = await getDoc(doc(db, "staff_pins", sid));
+  if (!snap.exists()) return false;
+  return !!String(snap.data().pin || "").trim();
 }
 
 export function removeStaff(id) {

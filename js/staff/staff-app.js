@@ -3,7 +3,13 @@
  */
 import { auth } from "../firebase/init.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
-import { docToStaff, docToStaffActivity, docToPosShift, dedupeStaffByNameKey } from "./staff-mappers.js";
+import {
+  docToStaff,
+  docToStaffActivity,
+  docToPosShift,
+  dedupeStaffByNameKey,
+  staffDisplayNameWithOwnerSuffix
+} from "./staff-mappers.js";
 import { isClockActivityKind } from "./staff-analytics.js";
 import { subscribeStaff, subscribeStaffActivity, subscribeClosedPosShifts } from "./staff-repository.js";
 import { roundMoney, varianceCategoryFromVariance, varianceLabelMs } from "../drawer-variance.js";
@@ -155,7 +161,17 @@ function renderClockTable() {
         "<tr><td>" +
         escapeHtml(t) +
         "</td><td>" +
-        escapeHtml(r.staffName || "") +
+        escapeHtml(
+          (function () {
+            var sid = String(r.staffId || "");
+            var match = staffList.find(function (s) {
+              return String(s.id) === sid || String(s.staffId) === sid;
+            });
+            if (match) return staffDisplayNameWithOwnerSuffix(match);
+            if (sid === "owner_01") return (r.staffName || "Pemilik") + " (Owner)";
+            return r.staffName || "";
+          })()
+        ) +
         "</td><td>" +
         escapeHtml(activityKindLabel(r.kind)) +
         "</td><td>" +

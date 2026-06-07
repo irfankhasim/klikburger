@@ -857,20 +857,30 @@ function mapDedupeSortStaffRowsFromDocs(docs) {
     return String(a.id).localeCompare(String(b.id));
   });
   var seen = {};
+  var owners = [];
   var rows = [];
   for (var i = 0; i < docsSorted.length; i++) {
     var d = docsSorted[i];
     var x = d.data();
-    var name = String(x.name || "").trim() || d.id;
+    var name = String(x.name || x.staffName || "").trim() || d.id;
+    var isOwner =
+      !!x.isOwner || String(x.role || "").toLowerCase() === "owner" || d.id === "owner_01";
+    if (isOwner) {
+      owners.push({ id: d.id, name: name, isOwner: true });
+      continue;
+    }
     var key = normalizeStaffRowNameKey(name);
     if (seen[key]) continue;
     seen[key] = true;
-    rows.push({ id: d.id, name: name });
+    rows.push({ id: d.id, name: name, isOwner: false });
   }
   rows.sort(function (a, b) {
     return a.name.localeCompare(b.name, "ms");
   });
-  return rows;
+  owners.sort(function (a, b) {
+    return a.name.localeCompare(b.name, "ms");
+  });
+  return owners.concat(rows);
 }
 
 function notifyStaffRowsListeners() {
@@ -900,13 +910,14 @@ function staffRowsBuildOptionsHtml(rows, curSelectedId, emptyOptionLabel) {
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     var idEsc = escapeHtml(r.id);
+    var label = r.isOwner ? r.name + " (Owner)" : r.name;
     opts +=
       '<option value="' +
       idEsc +
       '"' +
       (cur === r.id ? " selected" : "") +
       ">" +
-      escapeHtml(r.name) +
+      escapeHtml(label) +
       "</option>";
   }
   return opts;

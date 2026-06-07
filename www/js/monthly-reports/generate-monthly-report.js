@@ -24,6 +24,7 @@ import {
   COL_INGREDIENTS,
   COL_INGREDIENT_BATCHES,
   COL_STAFF,
+  COL_STAFF_ACTIVITY,
   COL_SALES,
   COL_MONTHLY_REPORTS
 } from "../firebase/collections.js";
@@ -170,6 +171,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var purchaseDocs = await fetchPagedByRange(COL_PURCHASE_HISTORY, "createdAt", tsStart, tsEnd);
   var ledgerDocs = await fetchPagedByRange(COL_INGREDIENT_LEDGER, "occurredAt", tsStart, tsEnd);
   var shiftDocs = await fetchClosedShiftsInRange(tsStart, tsEnd);
+  var activityDocs = await fetchPagedByRange(COL_STAFF_ACTIVITY, "createdAt", tsStart, tsEnd);
 
   var ingSnap = await getDocs(collection(db, COL_INGREDIENTS));
   // Ambil stok semasa dari ingredient_batches
@@ -198,25 +200,62 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     ingUnitById[d.id] = String(x.unit || "unit");
   });
 
+  var clockByStaff = {};
+  activityDocs.forEach(function (docSnap) {
+    var a = docSnap.data();
+    var kind = String(a.kind || "");
+    if (kind !== "clock_in" && kind !== "clock_out") return;
+    var sid = String(a.staffId || docSnap.id || "").trim();
+    if (!sid) return;
+    if (!clockByStaff[sid]) {
+      clockByStaff[sid] = { clockIn: 0, clockOut: 0, events: [] };
+    }
+    if (kind === "clock_in") clockByStaff[sid].clockIn += 1;
+    if (kind === "clock_out") clockByStaff[sid].clockOut += 1;
+    var atIso = "";
+    if (a.createdAt && typeof a.createdAt.toDate === "function") {
+      atIso = a.createdAt.toDate().toISOString();
+    }
+    clockByStaff[sid].events.push({
+      kind: kind,
+      at: atIso,
+      staffName: String(a.staffName || "")
+    });
+  });
+
   var staffSnap = await getDocs(collection(db, COL_STAFF));
   var staffLines = [];
   var payrollTotal = 0;
   staffSnap.docs.forEach(function (d) {
     var x = d.data();
     var status = String(x.employmentStatus || "active");
-    var est = staffSalaryForCalendarMonth(x, year, month1to12);
+    var role = String(x.role || "");
+    var isOwner = !!(x.isOwner || role.toLowerCase() === "owner" || d.id === "owner_01");
+    var baseName = String(x.name || x.staffName || "").trim() || "Tanpa nama";
+    var est = isOwner ? 0 : staffSalaryForCalendarMonth(x, year, month1to12);
     if (status === "active" && est > 0) payrollTotal += est;
+    var clock = clockByStaff[d.id] || clockByStaff[String(x.staffId || "")] || { clockIn: 0, clockOut: 0, events: [] };
     staffLines.push({
       staffId: d.id,
-      name: String(x.name || "").trim() || "Tanpa nama",
-      role: String(x.role || ""),
+      name: isOwner ? baseName + " (Owner)" : baseName,
+      role: role,
+      isOwner: isOwner,
       employmentStatus: status,
       payType: String(x.payType || "hourly"),
       payAmount: typeof x.payAmount === "number" ? x.payAmount : parseFloat(x.payAmount) || 0,
       startedAt: staffStartedAtIso(x),
       estimatedMonthlySalaryRm: est,
-      accumulatedSalaryRm: staffAccumulatedSalaryToDate(x, year, month1to12)
+      salaryDisplayRm: isOwner ? "N/A" : round2(est),
+      accumulatedSalaryRm: isOwner ? 0 : staffAccumulatedSalaryToDate(x, year, month1to12),
+      clockInCount: clock.clockIn,
+      clockOutCount: clock.clockOut,
+      clockEvents: clock.events.slice(0, 40)
     });
+  });
+  staffLines.sort(function (a, b) {
+    if (a.isOwner && !b.isOwner) return -1;
+    if (!a.isOwner && b.isOwner) return 1;
+    return String(a.name).localeCompare(String(b.name), "ms");
   });
   payrollTotal = round2(payrollTotal);
 

@@ -3,13 +3,23 @@
  */
 import { Timestamp, auth, db, doc, getDoc, setDoc, serverTimestamp } from "../firebase/init.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
-import { docToStaff, normalizeStaffNameKey, staffCanonicalDisplayName, dedupeStaffByNameKey } from "./staff-mappers.js";
-import { subscribeStaff, addStaff, persistStaff, removeStaff } from "./staff-repository.js";
+import { isElevatedRole } from "../pos-rbac-session.js";
+import {
+  docToStaff,
+  normalizeStaffNameKey,
+  staffCanonicalDisplayName,
+  dedupeStaffByNameKey,
+  isOwnerStaffRecord,
+  OWNER_STAFF_DOC_ID,
+  STAFF_ROLES_MS
+} from "./staff-mappers.js";
+import { subscribeStaff, addStaff, persistStaff, removeStaff, staffPinExists } from "./staff-repository.js";
 
 var staffList = [];
 var selectedId = "";
 var staffUnsub = null;
 var pagehideBound = false;
+var staffPinStatus = Object.create(null);
 
 function defaultWeeklyRosterPagi() {
   var out = [];
@@ -80,28 +90,92 @@ function applyPayrollFieldsVisibility() {
   wrap.setAttribute("aria-hidden", hide ? "true" : "false");
 }
 
+function pinStatusLabel(staffId) {
+  var has = staffPinStatus[String(staffId)];
+  if (has === true) return "PIN: ada";
+  if (has === false) return "PIN: tiada";
+  return "PIN: …";
+}
+
+async function refreshStaffPinStatusCache(rows) {
+  var next = Object.create(null);
+  await Promise.all(
+    (rows || []).map(async function (s) {
+      try {
+        next[String(s.id)] = await staffPinExists(s.id);
+      } catch (e) {
+        next[String(s.id)] = false;
+      }
+    })
+  );
+  staffPinStatus = next;
+  renderStaffList();
+}
+
 function renderStaffList() {
   var wrap = $("bs-staff-list");
   if (!wrap) return;
   if (!staffList.length) {
-    wrap.innerHTML = '<p class="sd-footnote">Tiada rekod staf. Klik <strong>Tambah kakitangan</strong>.</p>';
+    wrap.innerHTML = '<p class="sd-footnote">Tiada rekod staf. Klik <strong>Tambah kakitangan</strong> atau jalankan <code>node scripts/add-owner-staff.js</code>.</p>';
     return;
   }
   wrap.innerHTML = staffList
     .map(function (s) {
       var active = String(s.id) === String(selectedId);
       var displayName = staffCanonicalDisplayName(s.name);
+      var owner = isOwnerStaffRecord(s);
+      var roleBadge = owner
+        ? '<span class="kb-badge kb-badge--owner">Owner</span>'
+        : '<span class="kb-badge kb-badge--muted">' + escapeHtml(STAFF_ROLES_MS[s.role] || s.role) + "</span>";
       return (
         '<button type="button" class="bs-staff-pick btn btn--outline' +
         (active ? " is-active" : "") +
+        (owner ? " bs-staff-pick--owner" : "") +
         '" data-staff-id="' +
         escapeHtml(s.id) +
-        '"><span>' +
+        '"><span class="bs-staff-pick__name">' +
         escapeHtml(displayName) +
-        "</span></button>"
+        '</span><span class="bs-staff-pick__meta">' +
+        roleBadge +
+        '<span class="sd-muted">' +
+        escapeHtml(pinStatusLabel(s.id)) +
+        "</span></span></button>"
       );
     })
     .join("");
+}
+
+function applyOwnerFormMode(s) {
+  var ownerMode = !!(s && isOwnerStaffRecord(s));
+  var roleEl = $("bs-form-role");
+  var statusEl = $("bs-form-status");
+  var phoneEl = $("bs-form-phone");
+  var startedEl = $("bs-form-started");
+  var emailEl = $("bs-form-email");
+  var addBtn = $("bs-btn-add-staff");
+  var deleteBtn = $("bs-form-delete");
+  var ownerNote = $("bs-owner-note");
+  if (ownerNote) ownerNote.hidden = !ownerMode;
+  if (roleEl) {
+    roleEl.disabled = ownerMode;
+    if (ownerMode) roleEl.value = "owner";
+  }
+  if (statusEl) statusEl.disabled = ownerMode;
+  if (phoneEl) {
+    var phoneLabel = phoneEl.closest("label");
+    if (phoneLabel) phoneLabel.hidden = ownerMode;
+  }
+  if (startedEl) {
+    var startedLabel = startedEl.closest("label");
+    if (startedLabel) startedLabel.hidden = ownerMode;
+  }
+  if (emailEl) {
+    var emailLabel = emailEl.closest("label");
+    if (emailLabel) emailLabel.hidden = ownerMode;
+  }
+  if (addBtn) addBtn.hidden = ownerMode && !!selectedId;
+  if (deleteBtn) deleteBtn.hidden = ownerMode || !selectedId;
+  applyPayrollFieldsVisibility();
 }
 
 async function fillFormForStaff(id) {
@@ -119,7 +193,8 @@ async function fillFormForStaff(id) {
     $("bs-form-paytype").value = "hourly";
     $("bs-form-pay").value = "8";
     $("bs-form-pin").value = "";
-    applyPayrollFieldsVisibility();
+    if ($("bs-form-pin-confirm")) $("bs-form-pin-confirm").value = "";
+    applyOwnerFormMode(null);
     renderStaffList();
     return;
   }
@@ -143,14 +218,17 @@ async function fillFormForStaff(id) {
   }
   $("bs-form-paytype").value = s.payType || "hourly";
   $("bs-form-pay").value = String(s.payAmount != null ? s.payAmount : "");
-  applyPayrollFieldsVisibility();
+  applyOwnerFormMode(s);
   // Load PIN from staff_pins
   try {
     var pinSnap = await getDoc(doc(db, "staff_pins", id));
     $("bs-form-pin").value = pinSnap.exists() ? pinSnap.data().pin || "" : "";
+    staffPinStatus[String(id)] = !!String($("bs-form-pin").value || "").trim();
   } catch (e) {
     $("bs-form-pin").value = "";
+    staffPinStatus[String(id)] = false;
   }
+  if ($("bs-form-pin-confirm")) $("bs-form-pin-confirm").value = "";
   renderStaffList();
 }
 
@@ -166,9 +244,29 @@ async function saveStaffForm() {
   var id = $("bs-form-id").value.trim();
   var name = $("bs-form-name").value.trim();
   var emailRaw = ($("bs-form-email") && $("bs-form-email").value.trim()) || "";
+  var editingOwner = id && (id === OWNER_STAFF_DOC_ID || isOwnerStaffRecord(staffList.find(function (x) { return String(x.id) === id; })));
+
+  if (editingOwner && !isElevatedRole()) {
+    setStatus("Hanya pemilik (owner) boleh kemaskini rekod pemilik.", "err");
+    return;
+  }
+
   if (!name) {
     setStatus("Isi nama.", "err");
     return;
+  }
+
+  var pinVal = ($("bs-form-pin").value || "").trim();
+  var pinConfirm = ($("bs-form-pin-confirm") && $("bs-form-pin-confirm").value.trim()) || "";
+  if (pinVal || pinConfirm || editingOwner) {
+    if (!/^\d{4}$/.test(pinVal)) {
+      setStatus("PIN mesti 4 digit angka.", "err");
+      return;
+    }
+    if (pinVal !== pinConfirm) {
+      setStatus("PIN dan pengesahan PIN tidak sepadan.", "err");
+      return;
+    }
   }
   var nameKey = normalizeStaffNameKey(name);
   var dupOther = staffList.some(function (s) {
@@ -187,35 +285,44 @@ async function saveStaffForm() {
     return;
   }
   var sh = shiftPayloadForSave(id);
-  var roleVal = $("bs-form-role").value;
+  var roleVal = editingOwner ? "owner" : $("bs-form-role").value;
   var payload = {
     name: staffCanonicalDisplayName(name),
-    email: emailRaw,
+    staffName: staffCanonicalDisplayName(name),
     role: roleVal,
-    employmentStatus: $("bs-form-status").value,
-    phone: $("bs-form-phone").value.trim(),
     defaultShift: sh.defaultShift,
     weeklyRoster: sh.weeklyRoster
   };
-  if (!isOwnerStaffRole(roleVal)) {
-    payload.payType = $("bs-form-paytype").value;
-    payload.payAmount = parseFloat($("bs-form-pay").value) || 0;
+  if (editingOwner) {
+    payload.isOwner = true;
+    payload.staffId = OWNER_STAFF_DOC_ID;
+    payload.payType = "salary";
+    payload.payAmount = 0;
+    payload.salary = 0;
+    payload.employmentStatus = "active";
+  } else {
+    payload.email = emailRaw;
+    payload.employmentStatus = $("bs-form-status").value;
+    payload.phone = $("bs-form-phone").value.trim();
+    if (!isOwnerStaffRole(roleVal)) {
+      payload.payType = $("bs-form-paytype").value;
+      payload.payAmount = parseFloat($("bs-form-pay").value) || 0;
+    }
+    var st = startedTimestampFromInput();
+    if (st) payload.startedAt = st;
   }
-  var st = startedTimestampFromInput();
-  if (st) payload.startedAt = st;
 
   try {
     if (id) {
       await persistStaff(id, payload);
       setStatus("Butiran staf dikemas kini.", "ok");
       selectedId = id;
-      // Save PIN to staff_pins collection
-      var pinVal = ($("bs-form-pin").value || "").trim();
       if (pinVal) {
         await setDoc(doc(db, "staff_pins", id), {
           pin: pinVal,
           updatedAt: serverTimestamp()
         });
+        staffPinStatus[String(id)] = true;
       }
     } else {
       var ref = await addStaff(payload);
@@ -224,13 +331,12 @@ async function saveStaffForm() {
       $("bs-form-delete").hidden = false;
       setStatus("Kakitangan ditambah.", "ok");
       renderStaffList();
-      // Save PIN to staff_pins collection
-      var newPinVal = ($("bs-form-pin").value || "").trim();
-      if (newPinVal) {
+      if (pinVal) {
         await setDoc(doc(db, "staff_pins", ref.id), {
-          pin: newPinVal,
+          pin: pinVal,
           updatedAt: serverTimestamp()
         });
+        staffPinStatus[String(ref.id)] = true;
       }
     }
   } catch (e) {
@@ -242,6 +348,10 @@ async function saveStaffForm() {
 async function deleteStaffForm() {
   var id = $("bs-form-id").value.trim();
   if (!id) return;
+  if (id === OWNER_STAFF_DOC_ID) {
+    setStatus("Rekod pemilik tidak boleh dipadam.", "err");
+    return;
+  }
   if (!confirm("Padam kakitangan ini dari pangkalan data?")) return;
   try {
     await removeStaff(id);
@@ -311,6 +421,7 @@ async function main() {
           return docToStaff(d);
         });
         staffList = dedupeStaffByNameKey(rawFiltered);
+        refreshStaffPinStatusCache(staffList);
       } catch (e) {
         console.error(e);
         staffList = [];

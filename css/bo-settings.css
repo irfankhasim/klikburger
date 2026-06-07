@@ -118,6 +118,57 @@ html.kb-embed .bs-settings--shell.sd-app {
   font-weight: 500;
 }
 
+.bs-staff-pick__name {
+  font-weight: 600;
+}
+
+.bs-staff-pick__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.bs-staff-pick--owner {
+  border-color: rgba(245, 166, 35, 0.45);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.95), rgba(255, 247, 237, 0.85));
+}
+
+.kb-badge--owner {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #78350f;
+  background: linear-gradient(135deg, #fde68a, #fbbf24);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+
+.kb-badge--muted {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-muted, #f4f4f5);
+  border: 1px solid var(--border);
+}
+
+.bs-owner-note {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  background: rgba(255, 251, 235, 0.75);
+}
+
 .bs-settings__actions {
   display: flex;
   flex-wrap: wrap;

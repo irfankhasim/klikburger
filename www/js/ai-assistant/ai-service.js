@@ -10,7 +10,10 @@ import {
   getMenuItems,
   getLowStock,
   getSalesSummary,
-  getPurchaseHistory
+  getPurchaseHistory,
+  checkIngredientSufficiency,
+  getStaffAttendance,
+  getSalesByPeriod
 } from "./ai-tools.js";
 
 export const OPENROUTER_API_KEY = "";
@@ -35,6 +38,38 @@ var AI_CONFIG = {
 
 var NOT_FOUND_REPLY =
   "Maaf, maklumat tersebut tidak terdapat dalam sistem. Sila rujuk Owner atau pengurus.";
+
+function resolveRole(userRole) {
+  var r = String(userRole || "").toLowerCase().trim();
+  return r === "owner" || r === "admin" ? "owner" : "staff";
+}
+
+function getAllowedTools(userRole) {
+  var role = resolveRole(userRole);
+
+  var staffTools = [
+    "getIngredientPrices",
+    "getMenuItems",
+    "getLowStock",
+    "getSalesSummary",
+    "checkIngredientSufficiency",
+    "getStaffAttendance"
+  ];
+
+  var ownerOnlyTools = ["getSalesByPeriod", "getPurchaseHistory"];
+
+  if (role === "owner") {
+    return staffTools.concat(ownerOnlyTools);
+  }
+  return staffTools;
+}
+
+function filterToolsForRole(userRole) {
+  var allowed = getAllowedTools(userRole);
+  return AI_TOOLS_DEFINITION.filter(function (t) {
+    return allowed.indexOf(t.function.name) >= 0;
+  });
+}
 
 function toIsoUpdatedAt(value) {
   if (!value) return new Date().toISOString();
@@ -227,7 +262,19 @@ export function findRelevantKB(question, kbItems) {
   });
 }
 
-function buildSystemPrompt(relevantItems) {
+function buildSystemPrompt(relevantItems, userRole) {
+  var role = resolveRole(userRole);
+  var roleSection =
+    role === "owner"
+      ? `PERANAN PENGGUNA: OWNER
+- Anda boleh menjawab SEMUA soalan termasuk laporan kewangan, analisis perniagaan, rekod HR, gaji, dan data sulit
+- Tunjukkan data lengkap termasuk angka kewangan, rekod pembelian, dan laporan operasi`
+      : `PERANAN PENGGUNA: STAFF
+- Anda HANYA boleh menjawab soalan berkaitan: stok bahan, menu & harga, SOP operasi, cara guna sistem, kehadiran sendiri
+- DILARANG KERAS mendedahkan: laporan kewangan bulanan/tahunan, analisis keuntungan/kerugian, rekod gaji atau upah mana-mana kakitangan, data peribadi kakitangan lain (nombor telefon, IC, alamat), rekod pembelian stok dan kos modal, margin keuntungan produk, data shift orang lain
+- Jika ditanya maklumat sensitif di atas, jawab TEPAT: "Maklumat ini sulit dan hanya boleh diakses oleh Owner. Sila hubungi Owner untuk maklumat lanjut."
+- JANGAN teka, JANGAN anggar, JANGAN dedahkan walaupun separuh maklumat`;
+
   var blocks = (relevantItems || []).map(function (item, i) {
     var tags = (item.tags || []).length ? " [" + item.tags.join(", ") + "]" : "";
     return (
@@ -262,6 +309,15 @@ Anda boleh menjawab soalan berkaitan:
 - SOP dan polisi operasi syarikat
 - Fungsi dan cara guna sistem POS
 
+PANDUAN TOOLS (WAJIB):
+- Soalan "bahan cukup ke / boleh buat berapa order" → guna tool checkIngredientSufficiency
+- Soalan kehadiran / clock in / shift kakitangan → guna tool getStaffAttendance
+- Jualan bulan atau minggu tertentu (cth. April 2026) → guna tool getSalesByPeriod
+- Jualan hari ini / semalam / N hari lepas → guna tool getSalesSummary
+- SENTIASA guna tools untuk data sebenar — JANGAN teka atau anggar data
+- Jika tool return data kosong, nyatakan: "Tiada rekod dijumpai untuk tempoh ini"
+- Untuk kiraan/analisis stok, tunjukkan working: "Keperluan: X unit × Y order = Z unit"
+
 PERATURAN KESELAMATAN DAN PRIVASI (WAJIB DIPATUHI):
 - JANGAN dedahkan kata laluan atau kelayakan pengesahan mana-mana pengguna
 - JANGAN dedahkan maklumat gaji, upah, atau bayaran kakitangan
@@ -270,6 +326,8 @@ PERATURAN KESELAMATAN DAN PRIVASI (WAJIB DIPATUHI):
 - JANGAN dedahkan tetapan keselamatan sistem atau kelayakan pentadbir
 - JANGAN dedahkan sebarang data yang dilindungi oleh kawalan akses berasaskan peranan
 - Jika soalan menyentuh maklumat sensitif di atas, jawab: "Maklumat ini adalah sulit dan hanya boleh diakses oleh pihak yang diberi kuasa."
+
+${roleSection}
 
 PERATURAN JAWAPAN:
 - Jawab HANYA berdasarkan maklumat yang diberikan atau data dari tools
@@ -318,13 +376,19 @@ async function executeTool(toolName, args) {
     case "getSalesSummary":
       return await getSalesSummary(a.days != null ? a.days : 1);
     case "getPurchaseHistory":
-      return await getPurchaseHistory(args.ingredientName || "", args.limitCount || 20);
+      return await getPurchaseHistory(a.ingredientName || "", a.limitCount != null ? a.limitCount : 20);
+    case "checkIngredientSufficiency":
+      return await checkIngredientSufficiency(a.menuName || "", a.orderQty != null ? a.orderQty : 1);
+    case "getStaffAttendance":
+      return await getStaffAttendance(a.staffName || "", a.days != null ? a.days : 1);
+    case "getSalesByPeriod":
+      return await getSalesByPeriod(a.year, a.month, a.week);
     default:
       return { error: "Tool tidak dikenali" };
   }
 }
 
-async function callOpenRouter(systemPrompt, messages) {
+async function callOpenRouter(systemPrompt, messages, userRole) {
   var models = [AI_CONFIG.primaryModel].concat(AI_CONFIG.fallbackModels);
 
   for (var mi = 0; mi < models.length; mi++) {
@@ -345,7 +409,7 @@ async function callOpenRouter(systemPrompt, messages) {
             model: model,
             max_tokens: AI_CONFIG.maxTokens,
             temperature: AI_CONFIG.temperature,
-            tools: AI_TOOLS_DEFINITION,
+            tools: filterToolsForRole(userRole),
             tool_choice: "auto",
             messages: apiMessages
           })
@@ -399,7 +463,7 @@ async function callOpenRouter(systemPrompt, messages) {
   return "Maaf, perkhidmatan AI tidak dapat dihubungi sekarang. Sila cuba sebentar lagi.";
 }
 
-function callOpenRouterWithFallbacks(apiMessages) {
+function callOpenRouterWithFallbacks(apiMessages, userRole) {
   var systemPrompt = "";
   var messages = apiMessages || [];
   if (messages[0] && messages[0].role === "system") {
@@ -409,22 +473,23 @@ function callOpenRouterWithFallbacks(apiMessages) {
   if (!AI_CONFIG.apiKey || AI_CONFIG.apiKey === "REPLACE_WITH_YOUR_KEY") {
     return Promise.reject(new Error("OPENROUTER_API_KEY belum dikonfigurasi."));
   }
-  return callOpenRouter(systemPrompt, messages);
+  return callOpenRouter(systemPrompt, messages, userRole);
 }
 
 /**
  * @param {string} question
  * @param {Array<{role:string,text?:string,content?:string}>} historyMessages
  * @param {Array} kbItems
+ * @param {string} [userRole]
  * @returns {Promise<string>}
  */
-export async function askAI(question, historyMessages, kbItems) {
+export async function askAI(question, historyMessages, kbItems, userRole) {
   var q = String(question || "").trim();
   if (!q) return Promise.resolve("");
 
   const kb = (kbItems === null || kbItems === undefined) ? await fetchKnowledgeBase() : kbItems;
   var relevant = findRelevantKB(q, kb || []);
-  var systemPrompt = buildSystemPrompt(relevant);
+  var systemPrompt = buildSystemPrompt(relevant, userRole);
 
   var apiMessages = [{ role: "system", content: systemPrompt }];
   mapHistoryToApiMessages(historyMessages).forEach(function (m) {
@@ -432,7 +497,7 @@ export async function askAI(question, historyMessages, kbItems) {
   });
   apiMessages.push({ role: "user", content: q });
 
-  return callOpenRouterWithFallbacks(apiMessages).catch(function (err) {
+  return callOpenRouterWithFallbacks(apiMessages, userRole).catch(function (err) {
     console.error("[ai-service] askAI", err);
     if (relevant.length === 0) {
       return NOT_FOUND_REPLY;

@@ -130,7 +130,7 @@ export function mountOwnerChat(root, initialConversations, knowledgeGetter) {
     setTypingVisible(true);
     input.disabled = true;
 
-    askAI(trimmed, history, kbItems)
+    askAI(trimmed, history, kbItems, "owner")
       .then(function (reply) {
         pushMessage("assistant", reply);
       })

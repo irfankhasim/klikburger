@@ -4,6 +4,7 @@
 import { escapeHtml, formatDateTime } from "../utils.js";
 import { STAFF_QUICK_SUGGESTIONS } from "../mock-data.js";
 import { askAI, fetchKnowledgeBase } from "../ai-service.js";
+import { loadSession } from "../../pos-rbac-session.js";
 
 /** Ikon FAB — gelembung sembang + sparkle (gaya pembantu AI). */
 var FAB_ICON_SVG =
@@ -162,7 +163,10 @@ export function mountGlobalAiChatWidget() {
       return { role: m.role, text: m.text };
     });
 
-    askAI(trimmed, history, null)
+    var session = loadSession();
+    var userRole = session.role || "cashier";
+
+    askAI(trimmed, history, null, userRole)
       .then(function (reply) {
         messages.push({
           role: "assistant",

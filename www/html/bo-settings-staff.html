@@ -47,6 +47,9 @@
 
         <section class="sd-panel bs-settings__form-panel" aria-labelledby="bs-form-title">
           <h2 class="sd-panel__title" id="bs-form-title">Butiran staf</h2>
+          <p id="bs-owner-note" class="sd-footnote bs-owner-note" hidden>
+            <strong>Profil pemilik</strong> — kemaskini nama paparan dan PIN clock in/out anda. Rekod ini digunakan untuk kehadiran POS (<code>owner_01</code>).
+          </p>
           <input type="hidden" id="bs-form-id" value="" />
           <div class="sd-form-grid">
             <label class="sd-field sd-field--full">
@@ -98,8 +101,8 @@
             </div>
             <label class="sd-field sd-field--full">
               PIN Clock In (4 digit)
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input type="password" id="bs-form-pin" maxlength="6" placeholder="Contoh: 1234" autocomplete="off" style="max-width:160px;" />
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="password" id="bs-form-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="Contoh: 1234" autocomplete="off" style="max-width:160px;" />
                 <button type="button" id="bs-btn-show-pin" class="btn btn--ghost btn--sm" title="Tunjuk/Sembunyi PIN">
                   <i class="fa-solid fa-eye" aria-hidden="true"></i>
                 </button>
@@ -107,7 +110,11 @@
                   Reset PIN
                 </button>
               </div>
-              <span class="sd-footnote" style="margin-top:4px;display:block;">PIN digunakan oleh staf untuk clock in di terminal POS.</span>
+              <span class="sd-footnote" style="margin-top:4px;display:block;">PIN digunakan untuk clock in/out di terminal POS (termasuk pemilik).</span>
+            </label>
+            <label class="sd-field sd-field--full">
+              Sahkan PIN
+              <input type="password" id="bs-form-pin-confirm" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="Ulang PIN" autocomplete="off" style="max-width:160px;" />
             </label>
           </div>
           <div class="bs-settings__actions">

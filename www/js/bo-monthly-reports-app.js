@@ -121,6 +121,42 @@ function renderReport(d, key) {
       '</div>';
   }).join("");
 
+  var staffLines = Array.isArray(st.lines) ? st.lines : [];
+  var staffHtml = "";
+  if (!staffLines.length) {
+    staffHtml = '<p class="mr-note">Tiada rekod kakitangan — jalankan <code>node scripts/add-owner-staff.js</code> jika perlu.</p>';
+  } else {
+    staffHtml = staffLines
+      .map(function (row) {
+        var salary = row.isOwner ? "N/A" : rm(row.estimatedMonthlySalaryRm || 0);
+        var clockTxt =
+          (row.clockInCount || 0) +
+          " in · " +
+          (row.clockOutCount || 0) +
+          " out";
+        var badge = row.isOwner
+          ? '<span class="rp-badge" style="background:#fef3c7;color:#92400e">Owner</span>'
+          : '<span class="rp-badge rp-badge-ok">' + escapeHtml(row.role || "staff") + "</span>";
+        return (
+          '<div class="rp-staff-row">' +
+          '<div class="rp-staff-row__head">' +
+          '<strong>' +
+          escapeHtml(row.name || "—") +
+          "</strong> " +
+          badge +
+          "</div>" +
+          '<div class="rp-row"><span class="rp-row-label">Gaji anggaran</span><span class="rp-row-val">' +
+          escapeHtml(salary) +
+          "</span></div>" +
+          '<div class="rp-row"><span class="rp-row-label">Clock bulan ini</span><span class="rp-row-val">' +
+          escapeHtml(clockTxt) +
+          "</span></div>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
   // Cadangan tindakan
   var actions = [];
   if (netOp < 0) {
@@ -188,9 +224,15 @@ function renderReport(d, key) {
     payHtml +
     '</div>' +
 
-    // Section 6 — Tindakan
+    // Section 6 — Kakitangan
     '<div class="rp-section">' +
-    '<div class="rp-section-head"><div class="rp-section-num">6</div><p class="rp-section-title">Cadangan tindakan bulan depan</p></div>' +
+    '<div class="rp-section-head"><div class="rp-section-num">6</div><p class="rp-section-title">Senarai kakitangan</p></div>' +
+    staffHtml +
+    '</div>' +
+
+    // Section 7 — Tindakan
+    '<div class="rp-section">' +
+    '<div class="rp-section-head"><div class="rp-section-num">7</div><p class="rp-section-title">Cadangan tindakan bulan depan</p></div>' +
     '<ul class="rp-action-list">' +
     actions.map(function(a) {
       return '<li class="rp-action-item"><div class="rp-action-dot"></div><div>' + a + '</div></li>';
