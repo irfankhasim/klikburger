@@ -362,20 +362,24 @@ function ledgerKindLabel(k) {
   if (k === "initial") return "Daftar";
   if (k === "purchase") return "Beli";
   if (k === "price_adjust") return "Harga";
+  if (k === "sale_consumption") return "Jualan";
   return k ? String(k) : "—";
 }
 
 function docToLedgerEntry(d) {
   var x = d.data();
+  var isSaleConsumption = (x.kind || "") === "sale_consumption";
+  var rawQty = typeof x.purchaseQty === "number" ? x.purchaseQty : parseFloat(x.purchaseQty) || 0;
+  var rawPrice = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
   return {
     id: d.id,
     kind: x.kind || "",
     occurredAt: x.occurredAt,
-    purchasePrice: typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0,
-    purchaseQty: typeof x.purchaseQty === "number" ? x.purchaseQty : parseFloat(x.purchaseQty) || 0,
+    purchasePrice: isSaleConsumption ? Math.abs(rawPrice) : rawPrice,
+    purchaseQty: isSaleConsumption ? Math.abs(rawQty) : rawQty,
     unit: x.unit || "",
-    costPerUnit: typeof x.costPerUnit === "number" ? x.costPerUnit : parseFloat(x.costPerUnit) || 0,
-    notes: x.notes || ""
+    costPerUnit: typeof x.costPerUnit === "number" ? Math.abs(x.costPerUnit) : Math.abs(parseFloat(x.costPerUnit) || 0),
+    notes: x.notes ? String(x.notes).slice(0, 30) : ""
   };
 }
 
@@ -654,7 +658,7 @@ function renderLedgerRows(snap) {
   if (!tbody) return;
   if (!snap || snap.empty) {
     tbody.innerHTML =
-      '<tr><td colspan="5" class="ing-ledger-empty">Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
+      '<tr><td colspan="3" class="ing-ledger-empty">Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
     return;
   }
   var activeLedgerId = selectedLedgerIngredientId
@@ -665,24 +669,31 @@ function renderLedgerRows(snap) {
       var row = docToLedgerEntry(d);
       var isActive = activeLedgerId && String(row.id) === String(activeLedgerId);
       var pack =
-        escapeHtml(String(row.purchasePrice)) +
-        " RM · " +
         escapeHtml(String(row.purchaseQty)) +
         " " +
-        escapeHtml(row.unit || "");
+        escapeHtml(row.unit || "") +
+        " · RM " +
+        escapeHtml(String(row.purchasePrice));
+
+      var activeLabel = isActive
+        ? '<span style="font-size:11px;font-weight:600;' +
+          'background:#FEF08A;color:#854D0E;padding:2px 8px;' +
+          'border-radius:999px;margin-left:6px">Sedang digunakan</span>'
+        : "";
+
       return (
         "<tr" +
-        (isActive ? ' class="ing-ledger-row ing-ledger-row--active"' : "") +
-        "><td class=\"ing-ledger-date\">" +
+        (isActive
+          ? ' class="ing-ledger-row ing-ledger-row--active" ' +
+            'style="background:#FEFCE8;border-left:3px solid #EAB308"'
+          : ' class="ing-ledger-row"') +
+        '><td class="ing-ledger-date">' +
         escapeHtml(formatFsDate(row.occurredAt)) +
-        "</td><td class=\"ing-ledger-kind\">" +
-        escapeHtml(ledgerKindLabel(row.kind)) +
-        "</td><td class=\"ing-ledger-pack\">" +
+        '</td><td class="ing-ledger-pack">' +
         pack +
-        "</td><td class=\"num ing-ledger-cpu\">" +
+        activeLabel +
+        '</td><td class="num ing-ledger-cpu">' +
         escapeHtml(formatRM(row.costPerUnit)) +
-        "</td><td class=\"ing-ledger-note\">" +
-        escapeHtml(row.notes || "—") +
         "</td></tr>"
       );
     })
@@ -715,7 +726,6 @@ function openIngredientDrawer(ingredientId) {
   document.getElementById("ing-log-qty").value = String(ing.purchaseQty > 0 ? ing.purchaseQty : 1);
   document.getElementById("ing-log-price").value = String(ing.purchasePrice ?? 0);
   fillUnitSelectElement(document.getElementById("ing-log-unit"), ing.unit || "g");
-  document.getElementById("ing-log-notes").value = "";
   updateIngDrawerCpuPreview();
 
   if (bd) {
@@ -1805,7 +1815,7 @@ async function init() {
       return;
     }
     var unit = document.getElementById("ing-log-unit").value;
-    var notes = document.getElementById("ing-log-notes").value.trim();
+    var notes = "";
     var purchaseAt = Timestamp.now();
     var sortIdx = typeof ing.sortIndex === "number" ? ing.sortIndex : 0;
     var draft = {
@@ -1986,3 +1996,404 @@ async function init() {
 init().catch(function (e) {
   console.error(e);
 });
+
+/* ===== Belian borong (bulk purchase) ===== */
+var bulkRows = [];
+var bulkRowIdCounter = 0;
+
+function bulkUnitOptions(selected) {
+  return ["g", "kg", "ml", "L", "pcs", "biji", "keping", "paket", "botol"]
+    .map(function (u) {
+      return "<option" + (u === selected ? " selected" : "") + ">" + escapeHtml(u) + "</option>";
+    })
+    .join("");
+}
+
+function bulkIngredientOptions(selectedId) {
+  return (
+    '<option value="">-- Pilih bahan --</option>' +
+    ingredients
+      .map(function (ing) {
+        return (
+          '<option value="' +
+          escapeAttr(ing.id) +
+          '"' +
+          (ing.id === selectedId ? " selected" : "") +
+          ">" +
+          escapeHtml(ing.name) +
+          "</option>"
+        );
+      })
+      .join("") +
+    '<option value="__new__">+ Tambah bahan baru...</option>'
+  );
+}
+
+function renderBulkRow(row) {
+  var rid = row.id;
+  var isNew = row.isNew;
+  var nameCell = isNew
+    ? '<div style="display:flex;align-items:center;gap:4px">' +
+      '<input type="text" class="bulk-ing-name" data-rid="' +
+      rid +
+      '" ' +
+      'value="' +
+      escapeAttr(row.name || "") +
+      '" placeholder="Nama bahan baru" style="flex:1">' +
+      '<span class="bulk-tag-new">Baru</span></div>'
+    : '<select class="bulk-ing-select" data-rid="' +
+      rid +
+      '">' +
+      bulkIngredientOptions(row.ingredientId) +
+      "</select>";
+
+  return (
+    '<div class="bulk-ing-row" data-rid="' +
+    rid +
+    '">' +
+    nameCell +
+    '<input type="number" class="bulk-ing-qty" data-rid="' +
+    rid +
+    '" ' +
+    'value="' +
+    (row.qty || 1) +
+    '" min="0.001" step="any">' +
+    '<input type="number" class="bulk-ing-price" data-rid="' +
+    rid +
+    '" ' +
+    'value="' +
+    (row.price || 0) +
+    '" min="0" step="any" placeholder="RM">' +
+    '<select class="bulk-ing-unit" data-rid="' +
+    rid +
+    '">' +
+    bulkUnitOptions(row.unit || "pcs") +
+    "</select>" +
+    '<button type="button" class="bulk-btn-del" data-rid="' +
+    rid +
+    '" ' +
+    'aria-label="Buang baris"><i class="ti ti-trash" aria-hidden="true"></i></button>' +
+    "</div>"
+  );
+}
+
+function addBulkRow(isNew) {
+  var row = {
+    id: ++bulkRowIdCounter,
+    isNew: !!isNew,
+    ingredientId: "",
+    name: "",
+    qty: 1,
+    price: 0,
+    unit: "pcs"
+  };
+  bulkRows.push(row);
+  var container = document.getElementById("bulk-rows");
+  var div = document.createElement("div");
+  div.innerHTML = renderBulkRow(row);
+  container.appendChild(div.firstChild);
+  bindBulkRowEvents(row.id);
+  recalcBulk();
+}
+
+function bindBulkRowEvents(rid) {
+  var rowEl = document.querySelector('[data-rid="' + rid + '"].bulk-ing-row');
+  if (!rowEl) return;
+  var row = bulkRows.find(function (r) {
+    return r.id === rid;
+  });
+  if (!row) return;
+
+  var selectEl = rowEl.querySelector(".bulk-ing-select");
+  if (selectEl) {
+    selectEl.addEventListener("change", function () {
+      if (this.value === "__new__") {
+        row.isNew = true;
+        row.ingredientId = "";
+        var div = document.createElement("div");
+        div.innerHTML = renderBulkRow(row);
+        rowEl.parentNode.replaceChild(div.firstChild, rowEl);
+        bindBulkRowEvents(rid);
+      } else {
+        row.ingredientId = this.value;
+        var ing = ingredients.find(function (i) {
+          return i.id === row.ingredientId;
+        });
+        if (ing) {
+          row.unit = ing.unit || "pcs";
+          var unitEl = rowEl.querySelector(".bulk-ing-unit");
+          if (unitEl) unitEl.value = row.unit;
+        }
+      }
+      recalcBulk();
+    });
+  }
+
+  var nameEl = rowEl.querySelector(".bulk-ing-name");
+  if (nameEl) {
+    nameEl.addEventListener("input", function () {
+      row.name = this.value;
+    });
+  }
+
+  var qtyEl = rowEl.querySelector(".bulk-ing-qty");
+  if (qtyEl) {
+    qtyEl.addEventListener("input", function () {
+      row.qty = parseFloat(this.value) || 0;
+      recalcBulk();
+    });
+  }
+
+  var priceEl = rowEl.querySelector(".bulk-ing-price");
+  if (priceEl) {
+    priceEl.addEventListener("input", function () {
+      row.price = parseFloat(this.value) || 0;
+      recalcBulk();
+    });
+  }
+
+  var unitEl = rowEl.querySelector(".bulk-ing-unit");
+  if (unitEl) {
+    unitEl.addEventListener("change", function () {
+      row.unit = this.value;
+    });
+  }
+
+  var delEl = rowEl.querySelector(".bulk-btn-del");
+  if (delEl) {
+    delEl.addEventListener("click", function () {
+      bulkRows = bulkRows.filter(function (r) {
+        return r.id !== rid;
+      });
+      var el = document.querySelector('.bulk-ing-row[data-rid="' + rid + '"]');
+      if (el) el.remove();
+      recalcBulk();
+    });
+  }
+}
+
+function recalcBulk() {
+  var taxVal = parseFloat(document.getElementById("bulk-tax-val").value) || 0;
+  var taxType = document.getElementById("bulk-tax-type").value;
+  var subtotal = bulkRows.reduce(function (s, r) {
+    return s + (r.price || 0);
+  }, 0);
+  var taxAmt = taxType === "pct" ? (subtotal * taxVal) / 100 : taxVal;
+  var grand = subtotal + taxAmt;
+
+  document.getElementById("bulk-tax-result").textContent = "+ RM " + taxAmt.toFixed(2);
+  document.getElementById("bulk-subtotal").textContent = "RM " + subtotal.toFixed(2);
+  document.getElementById("bulk-tax-total").textContent = "+ RM " + taxAmt.toFixed(2);
+  document.getElementById("bulk-grand-total").textContent = "RM " + grand.toFixed(2);
+
+  var taxLabel =
+    taxType === "pct" ? "Cukai (" + taxVal + "%)" : "Cukai (RM " + taxVal.toFixed(2) + ")";
+  document.getElementById("bulk-tax-label-display").textContent = taxLabel;
+  document.querySelector(".bulk-preview__title").textContent =
+    "Ringkasan & agihan cukai" +
+    (taxVal > 0 ? " (" + (taxType === "pct" ? taxVal + "%" : "RM " + taxVal.toFixed(2)) + ")" : "");
+
+  var previewRows = document.getElementById("bulk-preview-rows");
+  if (previewRows) {
+    previewRows.innerHTML = bulkRows
+      .map(function (row) {
+        var share = subtotal > 0 ? (row.price / subtotal) * taxAmt : 0;
+        var final = row.price + share;
+        var name = row.isNew
+          ? (row.name || "Bahan baru") + ' <span class="bulk-tag-new">Baru</span>'
+          : (function () {
+              var ing = ingredients.find(function (i) {
+                return i.id === row.ingredientId;
+              });
+              return escapeHtml(ing ? ing.name : "Bahan tidak dipilih");
+            })();
+        return (
+          '<div class="bulk-preview__row">' +
+          "<span>" +
+          name +
+          " &times; " +
+          row.qty +
+          " " +
+          escapeHtml(row.unit) +
+          "</span>" +
+          '<div style="text-align:right">' +
+          "<div>RM " +
+          (row.price || 0).toFixed(2) +
+          "</div>" +
+          (taxVal > 0
+            ? '<div class="bulk-preview__sub">+ cukai RM ' +
+              share.toFixed(2) +
+              " = <strong>RM " +
+              final.toFixed(2) +
+              "</strong></div>"
+            : "") +
+          "</div></div>"
+        );
+      })
+      .join("");
+  }
+
+  var previewEl = document.getElementById("bulk-preview");
+  if (previewEl) previewEl.hidden = bulkRows.length === 0;
+}
+
+function openBulkModal() {
+  bulkRows = [];
+  bulkRowIdCounter = 0;
+  document.getElementById("bulk-rows").innerHTML = "";
+  document.getElementById("bulk-tax-val").value = "0";
+  document.getElementById("bulk-preview-rows").innerHTML = "";
+  document.getElementById("bulk-preview").hidden = true;
+  document.getElementById("bulk-status").textContent = "";
+  document.getElementById("bulk-status").className = "kb-status kb-status--hidden";
+  addBulkRow(false);
+  var bd = document.getElementById("bulk-purchase-backdrop");
+  bd.hidden = false;
+  bd.removeAttribute("hidden");
+  bd.setAttribute("aria-hidden", "false");
+}
+
+function closeBulkModal() {
+  var bd = document.getElementById("bulk-purchase-backdrop");
+  bd.hidden = true;
+  bd.setAttribute("hidden", "");
+  bd.setAttribute("aria-hidden", "true");
+}
+
+async function saveBulkPurchase() {
+  var taxVal = parseFloat(document.getElementById("bulk-tax-val").value) || 0;
+  var taxType = document.getElementById("bulk-tax-type").value;
+  var subtotal = bulkRows.reduce(function (s, r) {
+    return s + (r.price || 0);
+  }, 0);
+  var taxAmt = taxType === "pct" ? (subtotal * taxVal) / 100 : taxVal;
+
+  var statusEl = document.getElementById("bulk-status");
+
+  if (!bulkRows.length) {
+    statusEl.textContent = "Tambah sekurang-kurangnya satu bahan.";
+    statusEl.className = "kb-status kb-status--error";
+    return;
+  }
+
+  for (var i = 0; i < bulkRows.length; i++) {
+    var row = bulkRows[i];
+    if (row.isNew && !String(row.name || "").trim()) {
+      statusEl.textContent = "Sila masukkan nama untuk bahan baru.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+    if (!row.isNew && !row.ingredientId) {
+      statusEl.textContent = "Sila pilih bahan untuk semua baris.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+    if (!row.qty || row.qty <= 0) {
+      statusEl.textContent = "Kuantiti mesti lebih dari 0.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+  }
+
+  var confirmBtn = document.getElementById("btn-bulk-confirm");
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Menyimpan...";
+  }
+
+  try {
+    for (var j = 0; j < bulkRows.length; j++) {
+      var r = bulkRows[j];
+      var share = subtotal > 0 ? (r.price / subtotal) * taxAmt : 0;
+      var finalPrice = r.price + share;
+      var cpu = r.qty > 0 ? finalPrice / r.qty : 0;
+      var ingId = r.ingredientId;
+
+      if (r.isNew) {
+        var newIngDoc = await addIngredient({
+          name: String(r.name).trim(),
+          purchasePrice: finalPrice,
+          purchaseQty: r.qty,
+          unit: r.unit,
+          sortIndex: 0
+        });
+        ingId = newIngDoc.id;
+      }
+
+      await addIngredientLedgerEntry({
+        ingredientId: ingId,
+        kind: "purchase",
+        occurredAt: new Date(),
+        purchasePrice: finalPrice,
+        purchaseQty: r.qty,
+        unit: r.unit,
+        costPerUnit: cpu,
+        notes:
+          taxVal > 0
+            ? "Belian borong. Cukai diagihkan: RM " + share.toFixed(2)
+            : "Belian borong."
+      });
+
+      await createPurchaseBatch({
+        ingredientId: ingId,
+        qtyRemaining: r.qty,
+        qtyOriginal: r.qty,
+        costPerUnit: cpu,
+        openedAt: new Date(),
+        purchaseOccurredAt: new Date(),
+        purchaseTotalRm: finalPrice
+      });
+
+      await recordIngredientPurchaseHistory({
+        ingredientId: ingId,
+        label: r.isNew
+          ? String(r.name).trim()
+          : (ingredients.find(function (i) {
+              return i.id === ingId;
+            }) || {}).name || "",
+        qty: r.qty,
+        unit: r.unit,
+        costPerUnit: cpu,
+        totalAmountRm: finalPrice
+      });
+    }
+
+    statusEl.textContent = "Belian borong berjaya disimpan!";
+    statusEl.className = "kb-status kb-status--ok";
+    setTimeout(function () {
+      closeBulkModal();
+    }, 1200);
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Ralat: " + (err.message || String(err));
+    statusEl.className = "kb-status kb-status--error";
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '<i class="ti ti-check"></i> Sahkan & simpan';
+    }
+  }
+}
+
+(function bindBulkPurchaseUI() {
+  var openBtn = document.getElementById("btn-bulk-purchase");
+  if (!openBtn) return;
+  openBtn.addEventListener("click", openBulkModal);
+  document.getElementById("btn-bulk-close").addEventListener("click", closeBulkModal);
+  document.getElementById("btn-bulk-cancel").addEventListener("click", closeBulkModal);
+  document.getElementById("btn-bulk-add-existing").addEventListener("click", function () {
+    addBulkRow(false);
+  });
+  document.getElementById("btn-bulk-add-new").addEventListener("click", function () {
+    addBulkRow(true);
+  });
+  document.getElementById("btn-bulk-confirm").addEventListener("click", saveBulkPurchase);
+  document.getElementById("bulk-tax-val").addEventListener("input", recalcBulk);
+  document.getElementById("bulk-tax-type").addEventListener("change", recalcBulk);
+  var backdrop = document.getElementById("bulk-purchase-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeBulkModal();
+    });
+  }
+})();

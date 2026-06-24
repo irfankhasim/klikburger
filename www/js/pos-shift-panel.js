@@ -401,17 +401,33 @@ async function onModalFootClick(e) {
       window.alert("Sila clock in dahulu. Kawalan laci tunai dan drawer hanya dibuka selepas clock in.");
       return;
     }
-    var actual = parseFloat(document.getElementById("mod-act").value);
+    var actInput = document.getElementById("mod-act");
+    var actual = parseFloat(actInput && actInput.value);
+    if (!isFinite(actual)) {
+      window.alert("Sila masukkan kiraan tunai sebenar dalam laci (RM).");
+      if (actInput) actInput.focus();
+      return;
+    }
     var refund = document.getElementById("mod-close-refund").value;
     var act = getActorForAudit();
-    var resC = await shiftClose({
-      actualCount: actual,
-      refundNotes: refund,
-      ownerBypass: canBypassStaffRestrictions(),
-      actor: act
-    });
-    if (!resC.ok) {
-      window.alert(resC.error);
+    if (t instanceof HTMLButtonElement) t.disabled = true;
+    var resC;
+    try {
+      resC = await shiftClose({
+        actualCount: actual,
+        refundNotes: refund,
+        ownerBypass: canBypassStaffRestrictions(),
+        actor: act
+      });
+    } catch (err) {
+      console.error(err);
+      if (t instanceof HTMLButtonElement) t.disabled = false;
+      window.alert("Gagal tutup drawer: " + (err && err.message ? err.message : String(err)));
+      return;
+    }
+    if (!resC || !resC.ok) {
+      if (t instanceof HTMLButtonElement) t.disabled = false;
+      window.alert(resC && resC.error ? resC.error : "Gagal tutup drawer.");
       return;
     }
     clearManagerPinFailures();

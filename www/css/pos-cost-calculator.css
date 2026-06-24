@@ -1432,8 +1432,13 @@
         background: #fafafa;
       }
 
+      .ing-ledger-row--active {
+        background: #FEFCE8;
+        border-left: 3px solid #EAB308;
+      }
+
       .ing-ledger-table tbody tr.ing-ledger-row--active td {
-        background: #fff59d !important;
+        background: #FEFCE8 !important;
       }
 
       .ing-ledger-date {
@@ -1446,12 +1451,15 @@
         color: #777;
         font-size: 0.75rem;
         max-width: 5rem;
+        white-space: nowrap;
       }
 
       .ing-ledger-pack {
         font-variant-numeric: tabular-nums;
         line-height: 1.35;
         color: var(--text);
+        white-space: nowrap;
+        min-width: 120px;
       }
 
       .ing-ledger-cpu {
@@ -1463,8 +1471,10 @@
       .ing-ledger-note {
         color: #777;
         font-size: 0.75rem;
-        max-width: 9rem;
-        word-break: break-word;
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .ing-ledger-empty {
@@ -1560,4 +1570,242 @@
         .modal-stats {
           grid-template-columns: 1fr;
         }
+      }
+
+      /* ===== Belian borong (bulk purchase) ===== */
+      .ing-drawer-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+        overflow-y: auto;
+        background: rgba(26, 26, 26, 0.36);
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .ing-drawer-backdrop[hidden] {
+        display: none !important;
+        pointer-events: none !important;
+      }
+
+      .bulk-modal {
+        background: var(--surface);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        width: 100%;
+        max-width: 720px;
+        max-height: 90vh;
+        overflow-y: auto;
+        margin: auto;
+        position: relative;
+        box-shadow: 0 20px 56px rgba(0, 0, 0, 0.22);
+      }
+
+      .bulk-modal__head {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: var(--surface);
+        z-index: 1;
+      }
+
+      .bulk-modal__title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0;
+      }
+
+      .bulk-modal__sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 2px 0 0;
+      }
+
+      .bulk-modal__close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 18px;
+        color: var(--text-muted);
+        padding: 4px;
+      }
+
+      .bulk-modal__body {
+        padding: 16px 20px;
+      }
+
+      .bulk-modal__foot {
+        padding: 14px 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        position: sticky;
+        bottom: 0;
+        background: var(--surface);
+      }
+
+      .bulk-row-head {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 80px 36px;
+        gap: 8px;
+        padding: 0 0 8px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .bulk-ing-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 80px 36px;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .bulk-ing-row input,
+      .bulk-ing-row select {
+        width: 100%;
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .bulk-tag-new {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #0369a1;
+        margin-left: 4px;
+        white-space: nowrap;
+      }
+
+      .bulk-add-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+
+      .bulk-tax-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+        padding: 12px 16px;
+        background: var(--content-bg);
+        border-radius: 8px;
+      }
+
+      .bulk-tax-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        flex: 1;
+      }
+
+      .bulk-tax-input {
+        width: 80px;
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .bulk-tax-type {
+        width: 70px;
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .bulk-tax-result {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--warning);
+        min-width: 80px;
+        text-align: right;
+      }
+
+      .bulk-preview {
+        background: var(--content-bg);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-top: 16px;
+      }
+
+      .bulk-preview__title {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+      }
+
+      .bulk-preview__row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        padding: 4px 0;
+        color: var(--text);
+      }
+
+      .bulk-preview__row--tax {
+        color: var(--warning);
+      }
+
+      .bulk-preview__sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-left: 12px;
+      }
+
+      .bulk-preview__divider {
+        height: 1px;
+        background: var(--border);
+        margin: 8px 0;
+      }
+
+      .bulk-preview__total {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: 600;
+        padding-top: 8px;
+        margin-top: 8px;
+        border-top: 1px solid var(--border);
+        color: var(--text);
+      }
+
+      .bulk-btn-del {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--danger);
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: none;
+        font-size: 14px;
       }

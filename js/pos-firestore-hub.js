@@ -276,6 +276,7 @@ export async function updateKitchenStage(orderId, stage) {
   if (stage === "preparing") lifecycle = "preparing";
   else if (stage === "ready") lifecycle = "ready";
   else if (stage === "handed") lifecycle = "completed";
+  else if (stage === "done") lifecycle = "done"; // Selesai — keluar dari papan pesanan aktif
   else if (stage === "waiting") lifecycle = "paid";
   await updateDoc(ref, {
     kitchenStage: stage,
@@ -551,7 +552,8 @@ export async function shiftClose(p) {
   p = p || {};
   var actor = p.actor || {};
   var expected = getExpectedDrawerCash();
-  var actual = typeof p.actualCount === "number" ? p.actualCount : parseFloat(p.actualCount) || 0;
+  var actual = Number(p.actualCount);
+  if (!isFinite(actual)) actual = 0;
   var variance = Math.round((actual - expected) * 100) / 100;
   var br = getShiftSalesBreakdown();
   var countersRef = doc(db, COL_POS_META, "counters");
