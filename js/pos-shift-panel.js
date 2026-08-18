@@ -482,7 +482,6 @@ export function bindShiftModalRoot() {
   m.dataset.kbModalBound = "1";
   var bd = document.getElementById("kb-shift-modal-bd");
   var x = document.getElementById("kb-shift-modal-x");
-  var foot = document.getElementById("kb-shift-modal-foot");
   if (bd) {
     bd.addEventListener("click", function (ev) {
       if (ev.target === bd) hideModal();
@@ -491,9 +490,13 @@ export function bindShiftModalRoot() {
   if (x) {
     x.addEventListener("click", hideModal);
   }
-  if (foot) {
-    foot.addEventListener("click", onModalFootClick);
-  }
+  // Delegasi pada modal keseluruhan — butang foot dijana semula (innerHTML)
+  // setiap kali modal dibuka, jadi delegasi lebih selamat daripada ikat pada foot.
+  m.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!btn || btn.id === "kb-shift-modal-x") return;
+    onModalFootClick(e);
+  });
 }
 
 export function ensureShiftPanelHubSync() {

@@ -7,6 +7,7 @@ import {
   paymentMethodLabel,
   normalizePaymentMethod,
   voidReceiptInHub,
+  refundReceiptInHub,
   removeVoidedReceiptFromHub
 } from "./pos-operations-hub.js";
 import {
@@ -18,8 +19,7 @@ import {
   getActorForAudit,
   recordManagerPinFailure,
   clearManagerPinFailures,
-  isPinLocked,
-  staffLockMessage
+  isPinLocked
 } from "./pos-rbac-session.js";
 import { PROTOTYPE_MANAGER_PIN } from "./pos-security-constants.js";
 
@@ -76,7 +76,8 @@ function renderRbacBanner() {
   if (!canAccessOperationalModules()) {
     el.hidden = false;
     el.removeAttribute("hidden");
-    el.textContent = staffLockMessage();
+    el.textContent =
+      "Mod baca sahaja — resit boleh dilihat. Untuk void/refund, clock in dan buka drawer di menu <strong>Clock In / Drawer</strong>.";
     return;
   }
   if (isReadOnlyMode()) {
@@ -99,12 +100,12 @@ function renderRbacBanner() {
 }
 
 function applyReceiptFiltersGates() {
-  var bypass = canBypassStaffRestrictions();
-  var ops = canAccessOperationalModules() || bypass;
+  // Resit ialah rekod sejarah (baca sahaja) — carian/penapis sentiasa dibenarkan.
+  // Tindakan ubah (void/refund/padam) kekal dikawal oleh voidAllowed().
   var search = document.getElementById("rc-search");
   var pay = document.getElementById("rc-filter-pay");
-  if (search) search.disabled = !ops && !bypass;
-  if (pay) pay.disabled = !ops && !bypass;
+  if (search) search.disabled = false;
+  if (pay) pay.disabled = false;
 }
 
 function filteredReceipts(state) {
@@ -123,12 +124,9 @@ function renderReceiptList(state) {
   var cnt = document.getElementById("rc-count");
   if (!el) return;
 
-  if (!canAccessOperationalModules() && !canBypassStaffRestrictions()) {
-    if (cnt) cnt.textContent = "0 resit dipaparkan.";
-    el.innerHTML = '<p class="rc-empty">' + escapeHtml(staffLockMessage()) + "</p>";
-    return;
-  }
-
+  // Senarai resit ialah data sejarah (baca sahaja) dan sentiasa boleh dilihat oleh
+  // mana-mana pengguna POS yang sah — termasuk semasa belum clock in atau syif ditutup.
+  // (Dahulu disekat penuh oleh canAccessOperationalModules(), menyebabkan resit "hilang".)
   var rows = filteredReceipts(state);
   if (cnt) {
     cnt.textContent =
@@ -155,9 +153,6 @@ function renderReceiptList(state) {
         '<div class="rc-receipt-row__main">' +
         '<span class="rc-receipt-row__no">' +
         escapeHtml(r.receiptNo) +
-        "</span>" +
-        '<span class="rc-receipt-row__order">Pesanan ' +
-        escapeHtml(r.orderNo || "—") +
         "</span>" +
         '<span class="rc-receipt-row__meta">' +
         escapeHtml(meta) +
@@ -193,7 +188,7 @@ function openDrawer(state) {
   var subEl = document.getElementById("rc-drawer-sub");
   if (!r || !back || !dr || !body) return;
   if (subEl) {
-    subEl.textContent = r.receiptNo + " · " + (r.orderNo || "");
+    subEl.textContent = r.receiptNo;
   }
   var linesUl =
     r.lines && r.lines.length
@@ -217,6 +212,7 @@ function openDrawer(state) {
       : "<p class=\"ops-muted\" style=\"margin:0;font-size:0.82rem\">Tiada baris item.</p>";
 
   var voidDis = r.voided || !voidAllowed();
+  var refundDis = r.voided || r.refunded || !voidAllowed();
   var padamRow =
     r.voided && voidAllowed()
       ? '<div class="rc-drawer-delete"><button type="button" class="rc-btn rc-btn--line rc-btn--sm" id="rc-delete">Padam rekod</button></div>'
@@ -250,6 +246,16 @@ function openDrawer(state) {
     '<button type="button" class="rc-btn rc-btn--solid rc-btn--drawer rc-btn--void" id="rc-void"' +
     (voidDis ? " disabled" : "") +
     '><i class="fa-solid fa-ban" aria-hidden="true"></i> Void</button>' +
+    '<button type="button" class="rc-btn rc-btn--drawer rc-btn--refund js-refund-receipt" id="rc-refund" ' +
+    'data-no="' +
+    escapeAttr(r.receiptNo) +
+    '" data-subtotal="' +
+    r.subtotal +
+    '" data-pm="' +
+    escapeAttr(r.paymentMethod) +
+    '"' +
+    (refundDis ? " disabled" : "") +
+    '><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Refund</button>' +
     "</div>" +
     padamRow;
 
@@ -327,6 +333,116 @@ async function promptVoid(receiptNo, closeDrawer) {
   renderAll(getPosHubState());
 }
 
+var refundModal = {
+  receiptNo: null,
+  subtotal: 0,
+  paymentMethod: "cash"
+};
+
+function closeReceiptDrawerUI() {
+  var back = document.getElementById("rc-drawer-back");
+  var dr = document.getElementById("rc-drawer");
+  if (back) {
+    back.classList.remove("is-open");
+    back.setAttribute("aria-hidden", "true");
+  }
+  if (dr) {
+    dr.classList.remove("is-open");
+    dr.setAttribute("aria-hidden", "true");
+  }
+}
+
+function setRefundStatus(text, kind) {
+  var el = document.getElementById("refund-status");
+  if (!el) return;
+  if (!text) {
+    el.textContent = "";
+    el.className = "kb-status kb-status--hidden";
+    return;
+  }
+  el.textContent = text;
+  el.className = kind === "ok" ? "kb-status kb-status--ok" : "kb-status kb-status--error";
+}
+
+function openRefundModal(receiptNo, subtotal, paymentMethod) {
+  if (!voidAllowed()) {
+    window.alert("Refund tidak tersedia — buka drawer di menu Clock In / Drawer, atau tunggu keluar mod baca sahaja.");
+    return;
+  }
+  refundModal.receiptNo = receiptNo;
+  refundModal.subtotal = subtotal;
+  refundModal.paymentMethod = paymentMethod;
+
+  var modal = document.getElementById("refund-modal");
+  if (!modal) return;
+
+  document.getElementById("refund-receipt-no").textContent = receiptNo;
+  document.getElementById("refund-amount").textContent = "RM " + (parseFloat(subtotal) || 0).toFixed(2);
+  document.getElementById("refund-pm").textContent =
+    paymentMethod === "cash" || paymentMethod === "tunai"
+      ? "Tunai (akan dipulangkan dari drawer)"
+      : "QR/Online (proses manual diperlukan)";
+  document.getElementById("refund-note").value = "";
+  setRefundStatus("", null);
+
+  modal.hidden = false;
+  modal.removeAttribute("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeRefundModal() {
+  var modal = document.getElementById("refund-modal");
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute("hidden", "");
+    modal.setAttribute("aria-hidden", "true");
+  }
+}
+
+async function processRefund() {
+  var note = document.getElementById("refund-note").value.trim() || "Pemulangan wang";
+  var confirmBtn = document.getElementById("btn-refund-confirm");
+
+  if (!voidAllowed()) {
+    setRefundStatus("Refund tidak tersedia — buka drawer dahulu.", "error");
+    return;
+  }
+
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = "Memproses...";
+  setRefundStatus("", null);
+
+  try {
+    var actor = getActorForAudit();
+    var result = await refundReceiptInHub(refundModal.receiptNo, {
+      ownerBypass: canBypassStaffRestrictions(),
+      actor: actor,
+      refundNote: note
+    });
+
+    if (!result.ok) {
+      setRefundStatus(result.error, "error");
+      return;
+    }
+
+    var msg = result.cashRefunded
+      ? "Refund berjaya. RM " +
+        (parseFloat(refundModal.subtotal) || 0).toFixed(2) +
+        " telah dipulangkan dari drawer tunai."
+      : "Refund direkodkan. Bayaran QR/online perlu diproses secara manual.";
+
+    setRefundStatus(msg, "ok");
+    closeReceiptDrawerUI();
+    renderAll(getPosHubState());
+    setTimeout(closeRefundModal, 2000);
+  } catch (err) {
+    setRefundStatus("Ralat: " + (err && err.message ? err.message : String(err)), "error");
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Sahkan refund";
+  }
+}
+
 function renderAll(state) {
   renderRbacBanner();
   applyReceiptFiltersGates();
@@ -340,6 +456,29 @@ function wire() {
   document.getElementById("rc-filter-pay").addEventListener("change", function () {
     renderAll(getPosHubState());
   });
+
+  document.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest(".js-refund-receipt") : null;
+    if (!btn || btn.disabled) return;
+    openRefundModal(
+      btn.getAttribute("data-no"),
+      parseFloat(btn.getAttribute("data-subtotal")) || 0,
+      btn.getAttribute("data-pm") || "cash"
+    );
+  });
+
+  var refundConfirm = document.getElementById("btn-refund-confirm");
+  if (refundConfirm) refundConfirm.addEventListener("click", processRefund);
+  var refundCancel = document.getElementById("btn-refund-cancel");
+  if (refundCancel) refundCancel.addEventListener("click", closeRefundModal);
+  var refundCloseX = document.getElementById("btn-refund-close");
+  if (refundCloseX) refundCloseX.addEventListener("click", closeRefundModal);
+  var refundBack = document.getElementById("refund-modal");
+  if (refundBack) {
+    refundBack.addEventListener("click", function (e) {
+      if (e.target === refundBack) closeRefundModal();
+    });
+  }
 
   subscribePosHub(function (state) {
     renderAll(state);

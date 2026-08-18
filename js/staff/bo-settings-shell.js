@@ -4,8 +4,8 @@
 var MSG_TYPE = "fyp-bo-settings-tab";
 
 function normalizeTab(hash) {
-  var h = String(hash || "").replace(/^#/, "").trim().toLowerCase();
-  if (h === "database" || h === "pangkalan") return "database";
+  // UI "Pangkalan data" telah dibuang — semua laluan kini ke tab Kakitangan sahaja.
+  // (Sesi/URL lama dengan #database akan jatuh balik ke "staff".)
   return "staff";
 }
 

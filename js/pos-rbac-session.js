@@ -11,11 +11,43 @@ export { ROLES, OPERATIONAL_STATUS };
 
 /** Cermin Firestore — dynamic import elak rantaian modul berat semasa boot / login. */
 function mirrorClockStaffActivity(kind) {
+  // Snapshot sesi SEKARANG (segerak). clockOut() memanggil clearPosOperationalStaff()
+  // sebaik selepas ini; jika kita baca loadSession() dalam .then(import) yang tak segerak,
+  // operationalStaffId sudah dikosongkan dan clock_out akan ditulis dengan staffId salah
+  // (UID Auth) — menyebabkan ia gagal dipadan dengan clock_in dan tidak dipaparkan.
+  var session = loadSession();
+  var atMs = Date.now();
+  console.info(
+    "[clock] mirror",
+    kind,
+    "staffId:",
+    session.operationalStaffId || session.userId,
+    "name:",
+    session.operationalStaffName || session.displayName
+  );
   import("./staff/clock-attendance-firestore.js")
     .then(function (m) {
-      return m.recordPosClockStaffActivity({ kind: kind, session: loadSession() });
+      return m.recordPosClockStaffActivity({ kind: kind, atMs: atMs, session: session });
     })
-    .catch(function () {});
+    .catch(function (e) {
+      console.warn("[clock] mirror gagal:", e && e.message ? e.message : e);
+    });
+}
+
+/** Cuba hantar semula sebarang peristiwa clock tertangguh (cth. gagal rangkaian sebelum ini). */
+function flushPendingClockOnLoad() {
+  import("./staff/clock-attendance-firestore.js")
+    .then(function (m) {
+      if (m && typeof m.flushPendingClockActivity === "function") return m.flushPendingClockActivity();
+    })
+    .catch(function () {
+      /* abaikan — akan dicuba semula pada tindakan clock seterusnya */
+    });
+}
+
+if (typeof window !== "undefined") {
+  // Tangguh sedikit supaya tidak melambatkan boot / login.
+  setTimeout(flushPendingClockOnLoad, 4000);
 }
 
 var STORAGE_KEY = "kb_pos_rbac_session_v1";
@@ -246,12 +278,22 @@ export function loginSession(payload) {
 export function getLogoutBlockReason() {
   var sess = loadSession();
   var hub = getPosHubState();
+
+  // Semak drawer dulu
   if (hub.shift && hub.shift.isOpen) {
     return "Tutup drawer tunai (syif kaunter) dahulu sebelum log keluar. Pergi ke menu Clock In / Drawer.";
   }
+
+  // Semak clock in aktif — wajib clock out dulu
   if (sess.clockedIn) {
+    return "Anda masih clock in. Sila clock out terlebih dahulu sebelum log keluar. Pergi ke menu Clock In / Clock Out.";
+  }
+
+  // Semak jika ada sesi clock in aktif dalam operationalStaffId yang berbeza
+  if (sess.operationalStaffId && sess.operationalStaffId !== "") {
     return "Sila clock out terlebih dahulu sebelum log keluar. Pergi ke menu Clock In / Clock Out.";
   }
+
   return null;
 }
 
@@ -261,8 +303,15 @@ export function canLogout() {
 
 /** Sahkan sedia log keluar — termasuk semakan Firestore jika cache hub belum dimuat. */
 export async function assertLogoutReady() {
+  // Semak clock in dulu
+  var sess = loadSession();
+  if (sess.clockedIn) {
+    return "Anda masih clock in. Sila clock out terlebih dahulu sebelum log keluar.";
+  }
+
   var reason = getLogoutBlockReason();
   if (reason) return reason;
+
   try {
     var hubMod = await import("./pos-firestore-hub.js");
     if (await hubMod.queryOpenShiftExists()) {
@@ -282,9 +331,6 @@ export function logoutSession() {
 export function clockIn() {
   var s = loadSession();
   if (s.clockedIn) return { ok: false, error: "Sudah clock in." };
-  if (getPosHubState().shift && getPosHubState().shift.isOpen) {
-    return { ok: false, error: "Drawer tunai masih dibuka. Tutup drawer dahulu sebelum clock in." };
-  }
   s.clockedIn = true;
   s.clockedInAt = new Date().toISOString();
   s.clockedOutAt = null;
@@ -304,11 +350,14 @@ export function clockIn() {
 }
 
 export function clockOut() {
+  var s = loadSession();
+  if (!s.clockedIn) {
+    return { ok: false, error: "Belum clock in." };
+  }
   var hub = getPosHubState();
   if (hub.shift && hub.shift.isOpen) {
     return { ok: false, error: "Tutup drawer tunai dahulu sebelum clock out." };
   }
-  var s = loadSession();
   s.clockedIn = false;
   s.clockedOutAt = new Date().toISOString();
   s.afterShiftCloseReadOnly = false;

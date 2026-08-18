@@ -4,6 +4,8 @@
 import {
   db,
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -17,9 +19,12 @@ import {
   COL_INGREDIENT_LEDGER,
   COL_MODIFIERS,
   COL_POS_RECEIPTS,
-  COL_STAFF_ACTIVITY
+  COL_STAFF_ACTIVITY,
+  COL_MONTHLY_REPORTS,
+  COL_POS_SHIFTS
 } from "../firebase/collections.js";
 import { sortBatchesFifo } from "../cost-calculator/ingredient-batch-repository.js";
+import { usageBaseQty } from "../cost-calculator/core.js";
 
 function num(v) {
   return typeof v === "number" ? v : parseFloat(v) || 0;
@@ -354,13 +359,20 @@ export async function checkIngredientSufficiency(menuName, orderQty) {
     };
   }
 
+  // Had unit boleh dihasilkan (selari dengan validasi POS): min(stok / guna-asas) merentas semua bahan.
+  var maxProducibleUnits = Infinity;
+
   usageKeys.forEach(function (ingId) {
-    var perUnit = num(modifier.usage[ingId]);
+    var ing = ingById[ingId] || {};
+    // PENTING: usage boleh berbentuk objek { guna, gunaUnit } — mesti ditukar ke unit asas bahan
+    // menggunakan logik yang SAMA seperti POS (usageBaseQty). num() pada objek = 0 (punca pepijat lama).
+    var perUnit = Math.round(usageBaseQty(ing, modifier.usage[ingId]) * 10000) / 10000;
     if (perUnit <= 0) return;
     var required = Math.round(perUnit * qty * 10000) / 10000;
     var available = Math.round(num(stockTotals[ingId]) * 10000) / 10000;
-    var ing = ingById[ingId] || {};
     var sufficient = available >= required;
+    var ingMax = Math.floor((available + 1e-9) / perUnit);
+    if (ingMax < maxProducibleUnits) maxProducibleUnits = ingMax;
     results.push({
       ingredientName: str(ing.name) || ingId,
       unit: str(ing.unit),
@@ -369,12 +381,23 @@ export async function checkIngredientSufficiency(menuName, orderQty) {
       available: available,
       sufficient: sufficient,
       shortage: sufficient ? 0 : Math.round((required - available) * 10000) / 10000,
+      maxUnitsFromThisIngredient: ingMax,
       working: "Keperluan: " + perUnit + " " + str(ing.unit) + " × " + qty + " order = " + required + " " + str(ing.unit)
     });
   });
 
+  if (!isFinite(maxProducibleUnits)) maxProducibleUnits = 0;
+
   var allSufficient = results.length > 0 && results.every(function (r) {
     return r.sufficient;
+  });
+
+  // Bahan yang paling mengehadkan (limiting ingredient) untuk penjelasan kepada pengguna.
+  var limiting = null;
+  results.forEach(function (r) {
+    if (r.maxUnitsFromThisIngredient === maxProducibleUnits) {
+      if (!limiting) limiting = r.ingredientName;
+    }
   });
 
   return {
@@ -383,9 +406,11 @@ export async function checkIngredientSufficiency(menuName, orderQty) {
       allSufficient: allSufficient,
       menuName: modifier.name,
       orderQty: qty,
+      maxProducibleUnits: maxProducibleUnits,
+      limitingIngredient: limiting,
       message: allSufficient
-        ? "Stok mencukupi untuk " + qty + " order " + modifier.name + "."
-        : "Stok TIDAK mencukupi untuk " + qty + " order " + modifier.name + "."
+        ? "Stok mencukupi untuk " + qty + " order " + modifier.name + ". Maksimum boleh dihasilkan: " + maxProducibleUnits + " unit (dihadkan oleh " + (limiting || "—") + "). Nota: Had sebenar dalam POS mungkin lebih rendah jika terdapat pesanan lain dalam troli semasa."
+        : "Stok TIDAK mencukupi untuk " + qty + " order " + modifier.name + ". Maksimum boleh dihasilkan: " + maxProducibleUnits + " unit (dihadkan oleh " + (limiting || "—") + "). Nota: Had sebenar dalam POS mungkin lebih rendah jika terdapat pesanan lain dalam troli semasa."
     }
   };
 }
@@ -564,6 +589,333 @@ export async function getSalesByPeriod(year, month, week) {
   };
 }
 
+/**
+ * Tool 9: Laporan kewangan bulanan dari monthly_reports.
+ * @param {number} [year]
+ * @param {number} [month]
+ */
+export async function getMonthlyReport(year, month) {
+  var y = typeof year === "number" ? year : new Date().getFullYear();
+  var m = typeof month === "number" ? month : new Date().getMonth() + 1;
+  var key = y + "-" + String(m).padStart(2, "0");
+
+  var snap = await getDoc(doc(db, COL_MONTHLY_REPORTS, key));
+  if (!snap.exists()) {
+    return { error: "Tiada laporan untuk " + key + ". Sila jana laporan dahulu dalam Back Office." };
+  }
+
+  var d = snap.data() || {};
+  var company = d.company || {};
+  var sales = d.sales || {};
+
+  var revenue = num(company.revenuePosReceiptsRm);
+  var cogs = num(company.costOfGoodsFifoRm);
+  var grossProfit = num(company.grossProfitRm);
+  var netOp = num(company.netOperatingEstimateRm);
+  var grossMargin = revenue > 0 ? Math.round((grossProfit / revenue) * 10000) / 100 : 0;
+  var netMargin = revenue > 0 ? Math.round((netOp / revenue) * 10000) / 100 : 0;
+
+  return {
+    period: key,
+    revenue: revenue,
+    cogs: cogs,
+    grossProfit: grossProfit,
+    grossMarginPct: grossMargin,
+    netOperating: netOp,
+    netMarginPct: netMargin,
+    payrollEstimate: num(company.payrollEstimateRm),
+    inventoryPurchases: num(company.inventoryPurchasesRecordedRm),
+    totalOrders: num(sales.nonVoidReceiptCount || 0),
+    topProducts: sales.topMenuItems || [],
+    narrative: company.narrative || ""
+  };
+}
+
+/**
+ * Tool 10: Analisis trend jualan merentas beberapa bulan.
+ * @param {number} [monthsBack]
+ */
+export async function getSalesTrend(monthsBack) {
+  var n = typeof monthsBack === "number" && monthsBack > 0 ? Math.min(monthsBack, 6) : 3;
+  var now = new Date();
+  var results = [];
+
+  for (var i = n - 1; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    try {
+      var snap = await getDoc(doc(db, COL_MONTHLY_REPORTS, key));
+      if (snap.exists()) {
+        var data = snap.data() || {};
+        var company = data.company || {};
+        var revenue = num(company.revenuePosReceiptsRm);
+        var grossProfit = num(company.grossProfitRm);
+        results.push({
+          period: key,
+          revenue: revenue,
+          cogs: num(company.costOfGoodsFifoRm),
+          grossProfit: grossProfit,
+          netOperating: num(company.netOperatingEstimateRm),
+          grossMarginPct: revenue > 0 ? Math.round((grossProfit / revenue) * 10000) / 100 : 0,
+          totalOrders: num((data.sales || {}).nonVoidReceiptCount || 0)
+        });
+      } else {
+        results.push({ period: key, error: "Tiada laporan" });
+      }
+    } catch (e) {
+      results.push({ period: key, error: str(e.message || e) });
+    }
+  }
+
+  var valid = results.filter(function (r) { return !r.error; });
+  var trend = null;
+  if (valid.length >= 2) {
+    var latest = valid[valid.length - 1];
+    var prev = valid[valid.length - 2];
+    var revChange = prev.revenue > 0
+      ? Math.round(((latest.revenue - prev.revenue) / prev.revenue) * 10000) / 100
+      : null;
+    trend = {
+      revenueChangePct: revChange,
+      direction: revChange > 0 ? "naik" : revChange < 0 ? "turun" : "sama",
+      bestMonth: valid.reduce(function (a, b) { return b.revenue > a.revenue ? b : a; }).period,
+      worstMonth: valid.reduce(function (a, b) { return b.revenue < a.revenue ? b : a; }).period
+    };
+  }
+
+  return { months: results, trend: trend, periodsAnalyzed: n };
+}
+
+/**
+ * Tool 11: Analisis menyeluruh stok — penggunaan, nilai, amaran, bahan jarang guna.
+ */
+export async function getStockAnalysis() {
+  var ingById = await loadIngredientsById();
+  var batchesByIng = await loadPositiveBatchesByIngredientId();
+
+  var allBatchSnap = await getDocs(collection(db, COL_INGREDIENT_BATCHES));
+  var consumptionByIng = {};
+  allBatchSnap.docs.forEach(function (d) {
+    var x = d.data();
+    var ingId = str(x.ingredientId);
+    if (!ingId) return;
+    var used = num(x.qtyOriginal) - num(x.qtyRemaining);
+    if (used > 0) consumptionByIng[ingId] = (consumptionByIng[ingId] || 0) + used;
+  });
+
+  var analysis = [];
+  Object.keys(ingById).forEach(function (id) {
+    var ing = ingById[id];
+    var name = str(ing.name) || id;
+    var batches = batchesByIng[id] || [];
+    var totalRemaining = batches.reduce(function (s, b) {
+      return s + num(b.qtyRemaining);
+    }, 0);
+    var totalConsumed = consumptionByIng[id] || 0;
+    var totalOriginal = totalRemaining + totalConsumed;
+    var usageRatePct = totalOriginal > 0
+      ? Math.round((totalConsumed / totalOriginal) * 10000) / 100
+      : 0;
+    var activeBatch = batches[0] || null;
+    var costPerUnit = activeBatch ? num(activeBatch.costPerUnit) : num(ing.purchasePrice);
+    var stockValue = Math.round(totalRemaining * costPerUnit * 100) / 100;
+
+    var flags = [];
+    if (totalRemaining <= 0) flags.push("HABIS");
+    else if (totalRemaining <= 3) flags.push("KRITIKAL");
+    else if (totalRemaining <= 8) flags.push("RENDAH");
+    if (usageRatePct < 5 && totalOriginal > 0) flags.push("JARANG_DIGUNAKAN");
+    if (usageRatePct > 85) flags.push("PENGGUNAAN_TINGGI");
+
+    analysis.push({
+      name: name,
+      unit: str(ing.unit),
+      qtyRemaining: Math.round(totalRemaining * 100) / 100,
+      qtyConsumed: Math.round(totalConsumed * 100) / 100,
+      usageRatePct: usageRatePct,
+      costPerUnit: costPerUnit,
+      stockValue: stockValue,
+      flags: flags
+    });
+  });
+
+  analysis.sort(function (a, b) {
+    var order = ["HABIS", "KRITIKAL", "RENDAH"];
+    var aScore = order.findIndex(function (f) { return a.flags.includes(f); });
+    var bScore = order.findIndex(function (f) { return b.flags.includes(f); });
+    if (aScore !== bScore) return (aScore === -1 ? 99 : aScore) - (bScore === -1 ? 99 : bScore);
+    return a.name.localeCompare(b.name);
+  });
+
+  var totalStockValue = Math.round(analysis.reduce(function (s, a) {
+    return s + a.stockValue;
+  }, 0) * 100) / 100;
+
+  return {
+    ingredients: analysis,
+    summary: {
+      totalIngredients: analysis.length,
+      outOfStock: analysis.filter(function (a) { return a.flags.includes("HABIS"); }).length,
+      critical: analysis.filter(function (a) { return a.flags.includes("KRITIKAL"); }).length,
+      lowStock: analysis.filter(function (a) { return a.flags.includes("RENDAH"); }).length,
+      rarelyUsed: analysis.filter(function (a) { return a.flags.includes("JARANG_DIGUNAKAN"); }).length,
+      totalStockValueRm: totalStockValue
+    }
+  };
+}
+
+/**
+ * Tool 12: Cadangan pembelian stok berdasarkan corak penggunaan dan baki semasa.
+ */
+export async function getRestockRecommendation() {
+  var ingById = await loadIngredientsById();
+  var batchesByIng = await loadPositiveBatchesByIngredientId();
+
+  var ledgerSnap = await getDocs(query(
+    collection(db, COL_INGREDIENT_LEDGER),
+    orderBy("occurredAt", "desc"),
+    limit(500)
+  ));
+
+  var consumptionByIng = {};
+  var daysTracked = 30;
+
+  ledgerSnap.docs.forEach(function (d) {
+    var x = d.data();
+    if (x.kind !== "sale_consumption") return;
+    var ingId = str(x.ingredientId);
+    if (!ingId) return;
+    consumptionByIng[ingId] = (consumptionByIng[ingId] || 0) + num(x.purchaseQty || x.qty || 0);
+  });
+
+  var recommendations = [];
+  Object.keys(ingById).forEach(function (id) {
+    var ing = ingById[id];
+    var name = str(ing.name) || id;
+    var batches = batchesByIng[id] || [];
+    var totalRemaining = batches.reduce(function (s, b) {
+      return s + num(b.qtyRemaining);
+    }, 0);
+    var totalConsumed = consumptionByIng[id] || 0;
+    var dailyAvg = totalConsumed / daysTracked;
+    var daysLeft = dailyAvg > 0 ? Math.floor(totalRemaining / dailyAvg) : null;
+    var reorderQty = dailyAvg > 0 ? Math.ceil(dailyAvg * 14) : null;
+    var activeBatch = batches[0] || null;
+    var costPerUnit = activeBatch ? num(activeBatch.costPerUnit) : num(ing.purchasePrice);
+    var estimatedCost = reorderQty ? Math.round(reorderQty * costPerUnit * 100) / 100 : null;
+
+    var urgency = "ok";
+    if (totalRemaining <= 0) urgency = "segera";
+    else if (daysLeft !== null && daysLeft <= 3) urgency = "segera";
+    else if (daysLeft !== null && daysLeft <= 7) urgency = "minggu_ini";
+    else if (daysLeft !== null && daysLeft <= 14) urgency = "minggu_depan";
+
+    if (urgency !== "ok") {
+      recommendations.push({
+        name: name,
+        unit: str(ing.unit),
+        qtyRemaining: Math.round(totalRemaining * 100) / 100,
+        dailyAvgUsage: Math.round(dailyAvg * 1000) / 1000,
+        daysStockLeft: daysLeft,
+        recommendedOrderQty: reorderQty,
+        estimatedCostRm: estimatedCost,
+        urgency: urgency
+      });
+    }
+  });
+
+  recommendations.sort(function (a, b) {
+    var order = { segera: 0, minggu_ini: 1, minggu_depan: 2 };
+    return (order[a.urgency] || 9) - (order[b.urgency] || 9);
+  });
+
+  return {
+    recommendations: recommendations,
+    totalItemsNeedRestock: recommendations.length,
+    estimatedTotalCostRm: Math.round(
+      recommendations.reduce(function (s, r) {
+        return s + (r.estimatedCostRm || 0);
+      }, 0) * 100
+    ) / 100,
+    basedOnDays: daysTracked
+  };
+}
+
+/**
+ * Tool 13: Kesan kemungkinan pembaziran atau penggunaan stok tidak normal.
+ */
+export async function getWastageAnalysis() {
+  var ingById = await loadIngredientsById();
+
+  var allBatchSnap = await getDocs(collection(db, COL_INGREDIENT_BATCHES));
+
+  var batchData = {};
+  allBatchSnap.docs.forEach(function (d) {
+    var x = d.data();
+    var ingId = str(x.ingredientId);
+    if (!ingId) return;
+    if (!batchData[ingId]) batchData[ingId] = { original: 0, remaining: 0 };
+    batchData[ingId].original += num(x.qtyOriginal);
+    batchData[ingId].remaining += num(x.qtyRemaining);
+  });
+
+  var ledgerSnap = await getDocs(query(
+    collection(db, COL_INGREDIENT_LEDGER),
+    orderBy("occurredAt", "desc"),
+    limit(500)
+  ));
+
+  var salesConsumption = {};
+  ledgerSnap.docs.forEach(function (d) {
+    var x = d.data();
+    if (x.kind !== "sale_consumption") return;
+    var ingId = str(x.ingredientId);
+    if (!ingId) return;
+    salesConsumption[ingId] = (salesConsumption[ingId] || 0) + num(x.qty || x.purchaseQty || 0);
+  });
+
+  var wastageItems = [];
+  Object.keys(batchData).forEach(function (id) {
+    var bd = batchData[id];
+    var actualUsed = bd.original - bd.remaining;
+    var salesUsed = salesConsumption[id] || 0;
+    var unexplained = actualUsed - salesUsed;
+    var wastageRatePct = actualUsed > 0
+      ? Math.round((unexplained / actualUsed) * 10000) / 100
+      : 0;
+
+    if (unexplained > 0.05 && wastageRatePct > 5) {
+      var ing = ingById[id] || {};
+      var name = str(ing.name) || id;
+      var costPerUnit = num(ing.purchasePrice);
+      wastageItems.push({
+        name: name,
+        unit: str(ing.unit),
+        totalUsed: Math.round(actualUsed * 100) / 100,
+        salesAccountedFor: Math.round(salesUsed * 100) / 100,
+        unexplainedQty: Math.round(unexplained * 100) / 100,
+        wastageRatePct: wastageRatePct,
+        estimatedLossRm: Math.round(unexplained * costPerUnit * 100) / 100
+      });
+    }
+  });
+
+  wastageItems.sort(function (a, b) {
+    return b.estimatedLossRm - a.estimatedLossRm;
+  });
+
+  var totalLoss = Math.round(
+    wastageItems.reduce(function (s, w) { return s + w.estimatedLossRm; }, 0) * 100
+  ) / 100;
+
+  return {
+    wastageItems: wastageItems,
+    totalItemsWithWastage: wastageItems.length,
+    totalEstimatedLossRm: totalLoss,
+    note: "Pengiraan berdasarkan perbezaan antara stok yang digunakan dengan penggunaan yang direkodkan dalam jualan."
+  };
+}
+
 /** Definisi alat untuk OpenRouter API `tools` parameter. */
 export var AI_TOOLS_DEFINITION = [
   {
@@ -665,7 +1017,7 @@ export var AI_TOOLS_DEFINITION = [
     function: {
       name: "checkIngredientSufficiency",
       description:
-        "Semak sama ada stok bahan mentah mencukupi untuk bilangan order tertentu. Guna apabila ditanya 'boleh buat berapa', 'stok cukup ke untuk X order', 'bahan cukup tak untuk Y burger'.",
+        "Semak sama ada stok bahan mentah mencukupi untuk bilangan order tertentu, DAN dapatkan had maksimum unit yang boleh dihasilkan. Guna apabila ditanya 'boleh buat berapa', 'maksimum berapa unit', 'stok cukup ke untuk X order', 'bahan cukup tak untuk Y burger'. PENTING: Untuk menjawab bilangan maksimum yang boleh dihasilkan, GUNA terus medan summary.maxProducibleUnits daripada hasil tool ini (ia sudah selari dengan validasi kuantiti di skrin POS). JANGAN kira sendiri daripada usage mentah. Nyatakan juga summary.limitingIngredient sebagai sebab hadnya.",
       parameters: {
         type: "object",
         properties: {
@@ -728,6 +1080,64 @@ export var AI_TOOLS_DEFINITION = [
         },
         required: []
       }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getMonthlyReport",
+      description:
+        "Dapatkan laporan kewangan bulanan lengkap: jualan, COGS, untung kasar, untung bersih, margin keuntungan, gaji, pembelian inventori. Guna untuk soalan tentang untung rugi, prestasi bulan tertentu, margin keuntungan.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "number", description: "Tahun. Contoh: 2026" },
+          month: { type: "number", description: "Bulan 1-12. Contoh: 4 untuk April, 5 untuk Mei" }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getSalesTrend",
+      description:
+        "Analisis trend jualan dan keuntungan merentas beberapa bulan. Bandingkan prestasi, kenal pasti bulan terbaik dan terburuk, arah pertumbuhan perniagaan. Guna untuk soalan tentang pertumbuhan, trend, perbandingan bulan.",
+      parameters: {
+        type: "object",
+        properties: {
+          monthsBack: { type: "number", description: "Bilangan bulan untuk dianalisis. Default 3, maksimum 6." }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getStockAnalysis",
+      description:
+        "Analisis menyeluruh semua stok bahan mentah: baki, nilai stok, kadar penggunaan, bahan kritikal, bahan hampir habis, bahan jarang digunakan. Guna untuk gambaran keseluruhan inventori.",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getRestockRecommendation",
+      description:
+        "Cadangan pembelian stok berdasarkan corak penggunaan harian dan baki semasa. Kira berapa hari stok tinggal dan kuantiti yang perlu dipesan. Guna untuk soalan tentang reorder, pembelian stok, perancangan inventori.",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getWastageAnalysis",
+      description:
+        "Kesan pembaziran atau penggunaan stok yang tidak dapat dijelaskan oleh jualan. Bandingkan stok yang digunakan dengan rekod jualan untuk kesan anomali. Guna untuk soalan tentang pembaziran, kehilangan stok, atau penggunaan tidak normal.",
+      parameters: { type: "object", properties: {}, required: [] }
     }
   }
 ];

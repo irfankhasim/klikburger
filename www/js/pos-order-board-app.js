@@ -77,10 +77,12 @@ function ticketCard(o) {
       escapeHtml(isReadOnlyMode() ? "Read-only (shift closed)." : staffLockMessage()) +
       "</p>";
   } else {
-    var nextByStage = { waiting: "preparing", preparing: "ready", ready: "handed" };
+    var nextByStage = { waiting: "preparing", preparing: "ready", ready: "handed", handed: "done" };
     var prevByStage = { preparing: "waiting", ready: "preparing", handed: "ready" };
     var toNext = nextByStage[o.kitchenStage];
     var toPrev = prevByStage[o.kitchenStage];
+    // Dari "Diserahkan", butang → menandakan pesanan "Selesai" dan ia keluar dari papan aktif.
+    var nextIsDone = o.kitchenStage === "handed";
     var leftBtn =
       '<button type="button" class="ops-btn ops-btn--ghost ops-btn--sm ops-btn--icon" disabled aria-hidden="true">←</button>';
     var rightBtn =
@@ -99,7 +101,11 @@ function ticketCard(o) {
         escapeAttr(toNext) +
         '" data-id="' +
         escapeAttr(o.id) +
-        '" aria-label="Alih ke kolum seterusnya">→</button>';
+        '" aria-label="' +
+        (nextIsDone ? "Tandakan pesanan Selesai" : "Alih ke kolum seterusnya") +
+        '" title="' +
+        (nextIsDone ? "Tandakan Selesai (keluar dari papan)" : "Kolum seterusnya") +
+        '">→</button>';
     }
     actions = '<div class="ops-ticket__nav">' + leftBtn + rightBtn + "</div>";
   }
@@ -108,7 +114,7 @@ function ticketCard(o) {
     escapeAttr(o.id) +
     '">' +
     '<div class="ops-ticket__no">' +
-    escapeHtml(o.orderNo) +
+    escapeHtml(o.receiptNo || o.orderNo) +
     "</div>" +
     (String(o.customerName || "").trim()
       ? '<p class="ops-ticket__customer" title="' +

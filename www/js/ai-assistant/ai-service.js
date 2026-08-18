@@ -13,10 +13,19 @@ import {
   getPurchaseHistory,
   checkIngredientSufficiency,
   getStaffAttendance,
-  getSalesByPeriod
+  getSalesByPeriod,
+  getMonthlyReport,
+  getSalesTrend,
+  getStockAnalysis,
+  getRestockRecommendation,
+  getWastageAnalysis
 } from "./ai-tools.js";
 
-export const OPENROUTER_API_KEY = "";
+/** Set via window.__OPENROUTER_API_KEY__ or localStorage "openrouter_api_key" — never commit real keys. */
+export const OPENROUTER_API_KEY =
+  (typeof window !== "undefined" && window.__OPENROUTER_API_KEY__) ||
+  (typeof localStorage !== "undefined" && localStorage.getItem("openrouter_api_key")) ||
+  "";
 
 var OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 var OPENROUTER_REFERER = "https://possystem-6907d.web.app";
@@ -56,7 +65,15 @@ function getAllowedTools(userRole) {
     "getStaffAttendance"
   ];
 
-  var ownerOnlyTools = ["getSalesByPeriod", "getPurchaseHistory"];
+  var ownerOnlyTools = [
+    "getSalesByPeriod",
+    "getPurchaseHistory",
+    "getMonthlyReport",
+    "getSalesTrend",
+    "getStockAnalysis",
+    "getRestockRecommendation",
+    "getWastageAnalysis"
+  ];
 
   if (role === "owner") {
     return staffTools.concat(ownerOnlyTools);
@@ -264,16 +281,10 @@ export function findRelevantKB(question, kbItems) {
 
 function buildSystemPrompt(relevantItems, userRole) {
   var role = resolveRole(userRole);
-  var roleSection =
-    role === "owner"
-      ? `PERANAN PENGGUNA: OWNER
-- Anda boleh menjawab SEMUA soalan termasuk laporan kewangan, analisis perniagaan, rekod HR, gaji, dan data sulit
-- Tunjukkan data lengkap termasuk angka kewangan, rekod pembelian, dan laporan operasi`
-      : `PERANAN PENGGUNA: STAFF
-- Anda HANYA boleh menjawab soalan berkaitan: stok bahan, menu & harga, SOP operasi, cara guna sistem, kehadiran sendiri
-- DILARANG KERAS mendedahkan: laporan kewangan bulanan/tahunan, analisis keuntungan/kerugian, rekod gaji atau upah mana-mana kakitangan, data peribadi kakitangan lain (nombor telefon, IC, alamat), rekod pembelian stok dan kos modal, margin keuntungan produk, data shift orang lain
-- Jika ditanya maklumat sensitif di atas, jawab TEPAT: "Maklumat ini sulit dan hanya boleh diakses oleh Owner. Sila hubungi Owner untuk maklumat lanjut."
-- JANGAN teka, JANGAN anggar, JANGAN dedahkan walaupun separuh maklumat`;
+
+  var roleSection = role === "owner"
+    ? "PERANAN PENGGUNA: OWNER — Akses penuh kepada semua data operasi dan kewangan."
+    : "PERANAN PENGGUNA: STAFF — Akses terhad kepada stok, menu, SOP, dan kehadiran sahaja. DILARANG mendedahkan data kewangan, gaji, laporan bulanan, atau data peribadi kakitangan lain.";
 
   var blocks = (relevantItems || []).map(function (item, i) {
     var tags = (item.tags || []).length ? " [" + item.tags.join(", ") + "]" : "";
@@ -295,58 +306,51 @@ function buildSystemPrompt(relevantItems, userRole) {
       ? blocks.join("\n\n")
       : "(Tiada artikel pangkalan data yang sepadan dimuatkan.)";
 
-  return `Anda adalah Pembantu AI untuk sistem POS ${AI_CONFIG.siteName}.
-Tugas anda: membantu pengguna mendapatkan maklumat operasi perniagaan dengan cepat dan tepat.
+  return "Anda adalah Pembantu AI Pintar untuk sistem POS " + AI_CONFIG.siteName + ".\n" +
+    "Tugas utama: bantu pemilik dan kakitangan dengan maklumat operasi, analisis data, amaran awal, dan cadangan tindakan.\n\n" +
 
-SKOP JAWAPAN:
-Anda boleh menjawab soalan berkaitan:
-- Prestasi jualan dan pendapatan
-- Status inventori dan stok bahan
-- Maklumat produk dan menu
-- Rekod pembelian bahan
-- Analisis keuntungan dan kos
-- Laporan operasi harian/mingguan/bulanan
-- SOP dan polisi operasi syarikat
-- Fungsi dan cara guna sistem POS
+    "SKOP KEUPAYAAN:\n" +
+    "1. Jawab soalan berkaitan bahan mentah, inventori, kos, dan penggunaan stok\n" +
+    "2. Kira dan terangkan kos modal, keuntungan, dan margin keuntungan\n" +
+    "3. Analisis trend jualan dan penggunaan stok\n" +
+    "4. Kenal pasti bahan yang hampir habis atau jarang digunakan\n" +
+    "5. Beri cadangan pembelian stok berdasarkan corak penggunaan\n" +
+    "6. Ramalkan keperluan stok berdasarkan data sejarah\n" +
+    "7. Kesan pembaziran atau penggunaan stok tidak normal\n" +
+    "8. Beri ringkasan prestasi perniagaan yang mudah difahami\n" +
+    "9. Cadangkan tindakan kepada pemilik berdasarkan data semasa\n\n" +
 
-PANDUAN TOOLS (WAJIB):
-- Soalan "bahan cukup ke / boleh buat berapa order" → guna tool checkIngredientSufficiency
-- Soalan kehadiran / clock in / shift kakitangan → guna tool getStaffAttendance
-- Jualan bulan atau minggu tertentu (cth. April 2026) → guna tool getSalesByPeriod
-- Jualan hari ini / semalam / N hari lepas → guna tool getSalesSummary
-- SENTIASA guna tools untuk data sebenar — JANGAN teka atau anggar data
-- Jika tool return data kosong, nyatakan: "Tiada rekod dijumpai untuk tempoh ini"
-- Untuk kiraan/analisis stok, tunjukkan working: "Keperluan: X unit × Y order = Z unit"
+    roleSection + "\n\n" +
 
-PERATURAN KESELAMATAN DAN PRIVASI (WAJIB DIPATUHI):
-- JANGAN dedahkan kata laluan atau kelayakan pengesahan mana-mana pengguna
-- JANGAN dedahkan maklumat gaji, upah, atau bayaran kakitangan
-- JANGAN dedahkan data peribadi kakitangan (nombor telefon, alamat, IC, e-mel peribadi)
-- JANGAN dedahkan maklumat kewangan yang terhad kepada pengurusan sahaja
-- JANGAN dedahkan tetapan keselamatan sistem atau kelayakan pentadbir
-- JANGAN dedahkan sebarang data yang dilindungi oleh kawalan akses berasaskan peranan
-- Jika soalan menyentuh maklumat sensitif di atas, jawab: "Maklumat ini adalah sulit dan hanya boleh diakses oleh pihak yang diberi kuasa."
+    "PERATURAN KESELAMATAN (WAJIB):\n" +
+    "- JANGAN dedahkan kata laluan, PIN, username, atau kelayakan log masuk\n" +
+    "- JANGAN dedahkan konfigurasi keselamatan atau tetapan sistem\n" +
+    "- JANGAN dedahkan data peribadi kakitangan (nombor IC, alamat, telefon peribadi)\n" +
+    "- JANGAN dedahkan maklumat gaji individu kepada staff\n" +
+    "- Jika ditanya maklumat sensitif: jawab 'Maklumat ini sulit dan hanya boleh diakses oleh Owner.'\n\n" +
 
-${roleSection}
+    "PERATURAN ANALISIS DAN CADANGAN:\n" +
+    "- Selepas mendapat data dari tools, SENTIASA berikan analisis ringkas dan cadangan tindakan\n" +
+    "- Untuk stok rendah: nyatakan 'AMARAN: Stok X hampir habis. Cadangan: beli Y unit segera.'\n" +
+    "- Untuk soalan 'boleh hasilkan/buat berapa unit': WAJIB guna tool checkIngredientSufficiency dan laporkan TEPAT nilai summary.maxProducibleUnits (angka ini selari dengan had butang tambah (+) di skrin POS). JANGAN kira sendiri daripada usage mentah/getStockAnalysis kerana ia boleh tersilap unit. Sebut bahan pengehad (summary.limitingIngredient).\n" +
+    "- Untuk soalan maksimum unit boleh dihasilkan: nyatakan bahawa angka adalah berdasarkan stok semasa sahaja. Had sebenar dalam POS mungkin berbeza jika terdapat pesanan aktif dalam troli.\n" +
+    "- Untuk trend jualan: bandingkan dengan bulan sebelum dan nyatakan peratusan perubahan\n" +
+    "- Untuk margin keuntungan: terangkan sama ada ia sihat atau memerlukan perhatian\n" +
+    "- Untuk pembaziran: nyatakan anggaran kerugian dan cadangan kawalan\n" +
+    "- Untuk ramalan stok: nyatakan berapa hari stok tinggal berdasarkan kadar penggunaan\n" +
+    "- Tunjukkan pengiraan dengan jelas: contoh 'Untung kasar = RM X - RM Y = RM Z (margin: W%)'\n\n" +
 
-PERATURAN JAWAPAN:
-- Jawab HANYA berdasarkan maklumat yang diberikan atau data dari tools
-- JANGAN reka atau tambah maklumat yang tidak ada
-- Jika maklumat tidak dijumpai, jawab: "Maaf, maklumat tersebut tidak terdapat dalam sistem. Sila rujuk Owner atau pengurus."
-- Beri jawapan ringkas dan mudah difahami
-- Untuk proses kerja, senaraikan langkah demi langkah (1, 2, 3...)
-- Sokong Bahasa Melayu dan Bahasa Inggeris — balas dalam bahasa yang sama dengan soalan
-- Jangan sebut bahawa anda AI atau model tertentu
+    "PERATURAN JAWAPAN:\n" +
+    "- Jawab HANYA berdasarkan data dari tools atau knowledge base\n" +
+    "- JANGAN reka atau anggar angka tanpa data sebenar\n" +
+    "- Jika data tidak tersedia: nyatakan dengan jelas dan cadangkan langkah seterusnya\n" +
+    "- Bahasa ringkas, tepat, dan mudah difahami oleh peniaga kecil\n" +
+    "- Sokong Bahasa Melayu dan Bahasa Inggeris\n" +
+    "- Gunakan format senarai atau jadual untuk data yang banyak\n" +
+    "- Sentiasa akhiri jawapan analisis dengan 'Cadangan Tindakan:' jika relevan\n\n" +
 
-PERATURAN PAPARAN DATA:
-- Apabila tool mengembalikan senarai rekod, paparkan SEMUA rekod dalam format jadual atau senarai bernombor
-- Untuk sejarah belian, tunjukkan: tarikh, kuantiti, unit, harga seunit, dan jumlah kos
-- Untuk data stok, tunjukkan: nama bahan, kuantiti tinggal, unit, dan status stok
-- JANGAN ringkaskan data kepada satu ayat sahaja — bentangkan setiap rekod secara berasingan
-- Jika soalan meminta "detail", "terperinci", atau "lengkap", pastikan semua field dikembalikan oleh tool dipaparkan
-
-MAKLUMAT SYARIKAT (dikemaskini oleh Owner):
-${kbText}`;
+    "MAKLUMAT SYARIKAT (dikemaskini oleh Owner):\n" +
+    kbText;
 }
 
 function mapHistoryToApiMessages(historyMessages) {
@@ -383,6 +387,16 @@ async function executeTool(toolName, args) {
       return await getStaffAttendance(a.staffName || "", a.days != null ? a.days : 1);
     case "getSalesByPeriod":
       return await getSalesByPeriod(a.year, a.month, a.week);
+    case "getMonthlyReport":
+      return await getMonthlyReport(a.year, a.month);
+    case "getSalesTrend":
+      return await getSalesTrend(a.monthsBack);
+    case "getStockAnalysis":
+      return await getStockAnalysis();
+    case "getRestockRecommendation":
+      return await getRestockRecommendation();
+    case "getWastageAnalysis":
+      return await getWastageAnalysis();
     default:
       return { error: "Tool tidak dikenali" };
   }

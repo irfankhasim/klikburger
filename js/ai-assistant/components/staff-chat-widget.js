@@ -2,7 +2,6 @@
  * Floating AI chat widget — semua pengguna & halaman (OpenRouter + Firestore KB).
  */
 import { escapeHtml, formatDateTime } from "../utils.js";
-import { STAFF_QUICK_SUGGESTIONS } from "../mock-data.js";
 import { askAI, fetchKnowledgeBase } from "../ai-service.js";
 import { loadSession } from "../../pos-rbac-session.js";
 
@@ -43,7 +42,6 @@ export function mountGlobalAiChatWidget() {
     '<p class="ai-staff-drawer__sub">Tanya tentang SOP syarikat, produk dan cara guna sistem.</p></div>' +
     '<button type="button" class="ai-staff-drawer__close" aria-label="Tutup"><span aria-hidden="true">×</span></button>' +
     "</header>" +
-    '<div class="ai-staff-drawer__suggestions" data-ai-mount="suggestions"></div>' +
     '<div class="ai-staff-drawer__messages" data-ai-mount="messages" aria-live="polite"></div>' +
     '<div class="ai-staff-drawer__typing" data-ai-mount="typing" hidden><span></span><span></span><span></span></div>' +
     '<form class="ai-staff-drawer__composer">' +
@@ -61,7 +59,6 @@ export function mountGlobalAiChatWidget() {
   var drawer = wrap.querySelector("#kb-ai-staff-drawer");
   var closeBtn = wrap.querySelector(".ai-staff-drawer__close");
   var messagesEl = wrap.querySelector('[data-ai-mount="messages"]');
-  var suggestionsEl = wrap.querySelector('[data-ai-mount="suggestions"]');
   var typingEl = wrap.querySelector('[data-ai-mount="typing"]');
   var form = wrap.querySelector("form");
   var input = wrap.querySelector("#kb-ai-staff-input");
@@ -69,16 +66,6 @@ export function mountGlobalAiChatWidget() {
 
   var messages = [];
   var sending = false;
-
-  suggestionsEl.innerHTML = STAFF_QUICK_SUGGESTIONS.map(function (q) {
-    return (
-      '<button type="button" class="ai-suggestion-chip" data-suggestion="' +
-      escapeHtml(q) +
-      '">' +
-      escapeHtml(q) +
-      "</button>"
-    );
-  }).join("");
 
   function resizeInput() {
     if (!input) return;
@@ -109,7 +96,7 @@ export function mountGlobalAiChatWidget() {
   function renderMessages() {
     if (!messages.length) {
       messagesEl.innerHTML =
-        '<p class="ai-staff-drawer__empty">Hai! Tanya tentang bayaran balik, stok, promosi, atau clock in.</p>';
+        '<p class="ai-staff-drawer__empty">Hai! Tanya apa sahaja tentang operasi kedai.</p>';
       return;
     }
     messagesEl.innerHTML = messages
@@ -200,12 +187,6 @@ export function mountGlobalAiChatWidget() {
 
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && wrap.classList.contains("is-open")) closeDrawer();
-  });
-
-  suggestionsEl.addEventListener("click", function (e) {
-    var chip = e.target.closest("[data-suggestion]");
-    if (!chip) return;
-    send(chip.getAttribute("data-suggestion"));
   });
 
   input.addEventListener("input", resizeInput);

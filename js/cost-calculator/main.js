@@ -224,28 +224,88 @@ function ingredientStockStatusCellHtml(ing) {
 function formatIngredientStockLineHtml(ing) {
   var raw = batchesByIngredientId[ing.id] || [];
   var list = sortBatchesFifo(raw);
-  var active = getActiveFifoBatchFromList(list);
-  if (active) {
-    var when = active.purchaseOccurredAt || active.openedAt;
-    return (
-      '<p class="ing-stock-line js-ing-stock-line">Stok ini dibeli pada <strong>' +
-      escapeHtml(formatFsDate(when)) +
-      "</strong>.</p>"
-    );
+
+  // Filter keluar batch synthetic
+  var realBatches = list.filter(function (b) {
+    return !b.synthetic;
+  });
+
+  // Guna batch real terlama yang masih ada baki
+  var activeBatch = getActiveFifoBatchFromList(realBatches);
+
+  // Fallback ke semua batch jika tiada real batch
+  if (!activeBatch) {
+    activeBatch = getActiveFifoBatchFromList(list);
   }
+
+  if (activeBatch) {
+    // Paparan tarikh "Stok ini dibeli pada..." dibuang atas permintaan.
+    return '<p class="ing-stock-line js-ing-stock-line" hidden></p>';
+  }
+
   if (list.length) {
     return (
       '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada baki. <strong>Tambah belian</strong>.</p>'
     );
   }
+
   return '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada lot — <strong>Tambah belian</strong>.</p>';
 }
 
 function getActiveLedgerEntryIdForIngredient(ingId) {
-  var list = batchesByIngredientId[String(ingId)] || [];
-  var active = getActiveFifoBatchFromList(list);
-  if (!active || !active.ledgerEntryId) return null;
-  return String(active.ledgerEntryId);
+  var id = String(ingId || "");
+  if (!id) return null;
+
+  var list = batchesByIngredientId[id] || [];
+  var activeBatch = getActiveFifoBatchFromList(list);
+  if (!activeBatch) return null;
+
+  // Cuba guna ledgerEntryId dulu jika ada
+  if (activeBatch.ledgerEntryId) {
+    return String(activeBatch.ledgerEntryId);
+  }
+
+  // Fallback: match berdasarkan tarikh openedAt/purchaseOccurredAt
+  // dengan occurredAt dalam ledger snap terkini
+  if (!lastLedgerSnapForDrawer) return null;
+
+  var batchDate = activeBatch.purchaseOccurredAt || activeBatch.openedAt;
+  if (!batchDate) return null;
+
+  var batchMs = typeof batchDate.toMillis === "function"
+    ? batchDate.toMillis()
+    : (batchDate instanceof Date ? batchDate.getTime() : 0);
+
+  if (!batchMs) return null;
+
+  // Cari ledger entry yang paling hampir dengan tarikh batch aktif
+  var bestId = null;
+  var bestDiff = Infinity;
+  var TOLERANCE_MS = 24 * 60 * 60 * 1000; // 24 jam tolerance
+
+  lastLedgerSnapForDrawer.docs.forEach(function (d) {
+    var x = d.data();
+    var k = String(x.kind || "");
+    // Skip sale_consumption — kita cari purchase/initial sahaja
+    if (k === "sale_consumption") return;
+
+    var occurred = x.occurredAt;
+    if (!occurred) return;
+
+    var occMs = typeof occurred.toMillis === "function"
+      ? occurred.toMillis()
+      : (occurred instanceof Date ? occurred.getTime() : 0);
+
+    if (!occMs) return;
+
+    var diff = Math.abs(occMs - batchMs);
+    if (diff < bestDiff && diff <= TOLERANCE_MS) {
+      bestDiff = diff;
+      bestId = d.id;
+    }
+  });
+
+  return bestId;
 }
 
 function patchIngredientBatchDisplays() {
@@ -272,6 +332,12 @@ function patchIngredientBatchDisplays() {
         "</span>";
     }
   });
+
+  // Re-render ledger rows bila batch update
+  // supaya highlight FIFO sentiasa betul
+  if (lastLedgerSnapForDrawer && selectedLedgerIngredientId) {
+    renderLedgerRows(lastLedgerSnapForDrawer);
+  }
 }
 
 function setIngAddDraftError(text) {
@@ -658,16 +724,63 @@ function renderLedgerRows(snap) {
   if (!tbody) return;
   if (!snap || snap.empty) {
     tbody.innerHTML =
-      '<tr><td colspan="3" class="ing-ledger-empty">Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
+      '<tr><td colspan="3" class="ing-ledger-empty">' +
+      'Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
     return;
   }
+
   var activeLedgerId = selectedLedgerIngredientId
     ? getActiveLedgerEntryIdForIngredient(selectedLedgerIngredientId)
     : null;
+
+  if (!activeLedgerId && selectedLedgerIngredientId) {
+    // Cari lot aktif dari batchesByIngredientId
+    // Lot aktif = lot paling lama (FIFO) yang masih ada baki
+    var ingBatches = batchesByIngredientId[String(selectedLedgerIngredientId)] || [];
+    var activeBatch = getActiveFifoBatchFromList(ingBatches);
+
+    if (activeBatch && activeBatch.ledgerEntryId) {
+      // Guna ledgerEntryId dari batch untuk match dengan ledger
+      activeLedgerId = String(activeBatch.ledgerEntryId);
+    } else if (activeBatch) {
+      // Fallback: cuba match berdasarkan purchaseOccurredAt
+      // dengan occurredAt dalam ledger
+      var activeBatchDate = activeBatch.purchaseOccurredAt || activeBatch.openedAt;
+      if (activeBatchDate) {
+        var activeMs =
+          typeof activeBatchDate.toMillis === "function"
+            ? activeBatchDate.toMillis()
+            : new Date(activeBatchDate).getTime();
+
+        // Cari ledger entry yang paling hampir dengan tarikh batch
+        var bestMatch = null;
+        var bestDiff = Infinity;
+        snap.docs.forEach(function (d) {
+          var x = d.data();
+          var k = x.kind || "";
+          if (k !== "purchase" && k !== "initial") return;
+          var occurred = x.occurredAt;
+          if (!occurred) return;
+          var occMs =
+            typeof occurred.toMillis === "function" ? occurred.toMillis() : new Date(occurred).getTime();
+          var diff = Math.abs(occMs - activeMs);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestMatch = d.id;
+          }
+        });
+        if (bestMatch) activeLedgerId = bestMatch;
+      }
+    }
+    // Jika tiada lot aktif (activeBatch == null kerana stok sifar / habis
+    // digunakan), activeLedgerId kekal null — TIADA baris di-highlight.
+  }
+
   tbody.innerHTML = snap.docs
     .map(function (d) {
       var row = docToLedgerEntry(d);
       var isActive = activeLedgerId && String(row.id) === String(activeLedgerId);
+
       var pack =
         escapeHtml(String(row.purchaseQty)) +
         " " +
@@ -675,23 +788,15 @@ function renderLedgerRows(snap) {
         " · RM " +
         escapeHtml(String(row.purchasePrice));
 
-      var activeLabel = isActive
-        ? '<span style="font-size:11px;font-weight:600;' +
-          'background:#FEF08A;color:#854D0E;padding:2px 8px;' +
-          'border-radius:999px;margin-left:6px">Sedang digunakan</span>'
-        : "";
-
       return (
         "<tr" +
         (isActive
-          ? ' class="ing-ledger-row ing-ledger-row--active" ' +
-            'style="background:#FEFCE8;border-left:3px solid #EAB308"'
-          : ' class="ing-ledger-row"') +
+          ? ' style="background:#FEFCE8;border-left:3px solid #EAB308"'
+          : "") +
         '><td class="ing-ledger-date">' +
         escapeHtml(formatFsDate(row.occurredAt)) +
         '</td><td class="ing-ledger-pack">' +
         pack +
-        activeLabel +
         '</td><td class="num ing-ledger-cpu">' +
         escapeHtml(formatRM(row.costPerUnit)) +
         "</td></tr>"
@@ -2072,7 +2177,7 @@ function renderBulkRow(row) {
     '<button type="button" class="bulk-btn-del" data-rid="' +
     rid +
     '" ' +
-    'aria-label="Buang baris"><i class="ti ti-trash" aria-hidden="true"></i></button>' +
+    'aria-label="Buang baris">✕</button>' +
     "</div>"
   );
 }

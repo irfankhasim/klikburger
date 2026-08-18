@@ -576,6 +576,27 @@ html.kb-embed .sd-app .kb-page-title {
   border: 1px solid var(--border);
 }
 
+.sd-clock-active__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #378add;
+  display: inline-block;
+  animation: sd-clock-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sd-clock-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+
 @media (max-width: 720px) {
   .sd-table--drawer th,
   .sd-table--drawer td {

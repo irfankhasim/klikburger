@@ -345,6 +345,82 @@ export async function voidReceiptInHub(receiptNo, auth) {
   return { ok: true, receipt: Object.assign({}, base, { voided: true, voidedAt: new Date().toISOString() }) };
 }
 
+export async function refundReceiptInHub(receiptNo, auth) {
+  var opts = typeof auth === "object" && auth !== null ? auth : {};
+  var actor = opts.actor || {};
+  var refundNote = String(opts.refundNote || "Pemulangan wang").trim();
+
+  var rno = String(receiptNo).trim();
+
+  // 1. Dapatkan resit
+  var rq = query(collection(db, COL_POS_RECEIPTS), where("receiptNo", "==", rno), limit(1));
+  var rs = await getDocs(rq);
+  if (rs.empty) return { ok: false, error: "Resit tidak dijumpai." };
+
+  var rdoc = rs.docs[0];
+  var data = rdoc.data();
+
+  if (data.voided) return { ok: false, error: "Resit sudah dibatalkan." };
+  if (data.refunded) return { ok: false, error: "Resit sudah diproses refund." };
+
+  // 2. Semak drawer aktif (tiada PIN pengurus diperlukan untuk refund)
+  var countersRef = doc(db, COL_POS_META, "counters");
+  var cSnap = await getDoc(countersRef);
+  if (!cSnap.exists() || !cSnap.data().activeShiftDocId) {
+    return { ok: false, error: "Tiada drawer aktif. Buka drawer tunai dahulu." };
+  }
+
+  var subtotal = typeof data.subtotal === "number" ? data.subtotal : 0;
+  var paymentMethod = String(data.paymentMethod || "cash").toLowerCase();
+
+  // 4. Jika bayaran tunai — keluarkan dari drawer
+  if (paymentMethod === "cash" || paymentMethod === "tunai") {
+    var movResult = await shiftCashMovement(
+      "out",
+      subtotal,
+      "Refund resit " + rno + " — " + refundNote,
+      actor
+    );
+    if (!movResult.ok) {
+      return { ok: false, error: "Gagal keluarkan tunai dari drawer: " + movResult.error };
+    }
+  }
+
+  // 5. Kemaskini resit sebagai refunded
+  await updateDoc(rdoc.ref, {
+    refunded: true,
+    refundedAt: serverTimestamp(),
+    refundNote: refundNote,
+    refundMethod: paymentMethod === "cash" || paymentMethod === "tunai" ? "cash" : "manual",
+    voided: true,
+    voidedAt: serverTimestamp(),
+    voidReason: "refund"
+  });
+
+  // 6. Audit log
+  await appendPosAudit({
+    type: "refund_receipt",
+    message: "Refund resit " + rno + " RM " + subtotal.toFixed(2),
+    userId: actor.userId || "",
+    userName: actor.userName || "",
+    role: actor.role || "",
+    meta: {
+      receiptNo: rno,
+      subtotal: subtotal,
+      paymentMethod: paymentMethod,
+      refundNote: refundNote,
+      ownerBypass: !!opts.ownerBypass
+    }
+  });
+
+  return {
+    ok: true,
+    subtotal: subtotal,
+    paymentMethod: paymentMethod,
+    cashRefunded: paymentMethod === "cash" || paymentMethod === "tunai"
+  };
+}
+
 export async function removeVoidedReceiptFromHub(receiptNo, actor) {
   actor = actor || {};
   var rno = String(receiptNo).trim();

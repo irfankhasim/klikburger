@@ -1599,9 +1599,11 @@
         width: 100%;
         max-width: 720px;
         max-height: 90vh;
-        overflow-y: auto;
+        overflow: hidden;
         margin: auto;
         position: relative;
+        display: flex;
+        flex-direction: column;
         box-shadow: 0 20px 56px rgba(0, 0, 0, 0.22);
       }
 
@@ -1611,8 +1613,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        position: sticky;
-        top: 0;
+        flex-shrink: 0;
         background: var(--surface);
         z-index: 1;
       }
@@ -1641,6 +1642,26 @@
 
       .bulk-modal__body {
         padding: 16px 20px;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+      }
+
+      .bulk-modal__body::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .bulk-modal__body::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 8px;
+        border: 2px solid var(--surface);
+      }
+
+      .bulk-modal__body::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
       }
 
       .bulk-modal__foot {
@@ -1649,8 +1670,7 @@
         display: flex;
         justify-content: flex-end;
         gap: 8px;
-        position: sticky;
-        bottom: 0;
+        flex-shrink: 0;
         background: var(--surface);
       }
 

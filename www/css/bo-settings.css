@@ -190,3 +190,81 @@ html.kb-embed .bs-settings--shell.sd-app {
 #bs-payroll-fields[hidden] {
   display: none;
 }
+
+/* Toggle PIN aktif/nyahaktif */
+.bs-pin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bs-pin-head__title {
+  font-weight: 600;
+}
+
+.bs-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bs-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.bs-switch__track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border, #cbd5e1);
+  transition: background 0.18s ease;
+  flex: 0 0 auto;
+}
+
+.bs-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
+}
+
+.bs-switch input:checked + .bs-switch__track {
+  background: var(--brand, #f5a623);
+}
+
+.bs-switch input:checked + .bs-switch__track::after {
+  transform: translateX(18px);
+}
+
+.bs-switch input:focus-visible + .bs-switch__track {
+  outline: 2px solid var(--brand, #f5a623);
+  outline-offset: 2px;
+}
+
+.bs-switch input:disabled + .bs-switch__track {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bs-switch__text {
+  font-size: 0.85rem;
+  color: var(--muted, #64748b);
+}
+
+#bs-pin-fields[hidden] {
+  display: none;
+}

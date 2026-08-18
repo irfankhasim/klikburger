@@ -112,13 +112,13 @@ function renderSummary() {
     active +
     '</div><div class="sd-metric__hint">Daripada ' +
     staffList.length +
-    " rekod (nama unik)</div></article>" +
+    " rekod</div></article>" +
     '<article class="sd-metric"><div class="sd-metric__label">Rekod clock (bulan)</div><div class="sd-metric__value">' +
     clockN +
     '</div><div class="sd-metric__hint">Clock in / clock out</div></article>' +
     '<article class="sd-metric"><div class="sd-metric__label">Tutup shift (bulan)</div><div class="sd-metric__value">' +
     drawerN +
-    '</div><div class="sd-metric__hint">Penutupan drawer (<code>pos_shifts</code>)</div></article>' +
+    '</div><div class="sd-metric__hint">Penutupan drawer</div></article>' +
     '<article class="sd-metric"><div class="sd-metric__label">Bulan paparan</div><div class="sd-metric__value">' +
     ym.y +
     "-" +
@@ -133,50 +133,226 @@ function activityKindLabel(kind) {
   return k || "—";
 }
 
+function fmtClockTime(ms) {
+  if (!ms) return null;
+  var d = new Date(ms);
+  var h = d.getHours();
+  var m = d.getMinutes();
+  var ampm = h >= 12 ? "PTG" : "PG";
+  if (h === 0) {
+    h = 12;
+  } else if (h > 12) {
+    h -= 12;
+  } else if (h === 12) {
+    ampm = "TGH";
+  }
+  return pad2(h) + ":" + pad2(m) + " " + ampm;
+}
+
+function fmtClockDate(ms) {
+  if (!ms) return { day: "", date: "" };
+  var d = new Date(ms);
+  var days = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
+  var months = ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ogs", "Sep", "Okt", "Nov", "Dis"];
+  return {
+    day: days[d.getDay()],
+    date: d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear()
+  };
+}
+
+function pairClockSessions(activityRows) {
+  var sorted = activityRows.slice().sort(function (a, b) {
+    return tsToMillis(a.createdAt) - tsToMillis(b.createdAt);
+  });
+
+  var sessions = [];
+  var usedOut = Object.create(null);
+  var usedIn = Object.create(null);
+
+  var ins = sorted.filter(function (r) {
+    return r.kind === "clock_in";
+  });
+
+  var outs = sorted.filter(function (r) {
+    return r.kind === "clock_out";
+  });
+
+  ins.forEach(function (ci) {
+    var ciMs = tsToMillis(ci.createdAt);
+    var ciKey = ci.id != null ? String(ci.id) : String(ciMs);
+
+    if (usedIn[ciKey]) return;
+    usedIn[ciKey] = true;
+
+    var matchOut = null;
+    for (var i = 0; i < outs.length; i++) {
+      var co = outs[i];
+      var coKey = co.id != null ? String(co.id) : String(i);
+      if (usedOut[coKey]) continue;
+      if (String(co.staffId) !== String(ci.staffId)) continue;
+      if (tsToMillis(co.createdAt) <= ciMs) continue;
+      matchOut = co;
+      usedOut[coKey] = true;
+      break;
+    }
+
+    var outMs = matchOut ? tsToMillis(matchOut.createdAt) : null;
+
+    var duration = null;
+    if (outMs && ciMs) {
+      var diffMs = outMs - ciMs;
+      var totalMin = Math.floor(diffMs / 60000);
+      var hours = Math.floor(totalMin / 60);
+      var mins = totalMin % 60;
+      duration = {
+        text: hours + "j " + pad2(mins) + "m",
+        short: hours < 4
+      };
+    }
+
+    var staffMatch = staffList.find(function (s) {
+      return String(s.id) === String(ci.staffId) || String(s.staffId) === String(ci.staffId);
+    });
+    var staffName = staffMatch
+      ? staffDisplayNameWithOwnerSuffix(staffMatch)
+      : ci.staffName || ci.staffId || "—";
+    var isOwner = staffMatch ? staffMatch.isOwner : ci.staffId === "owner_01";
+    var initials = staffName
+      .split(" ")
+      .map(function (w) {
+        return w[0] || "";
+      })
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+    var dateInfo = fmtClockDate(ciMs);
+
+    sessions.push({
+      staffId: ci.staffId,
+      staffName: staffName,
+      isOwner: isOwner,
+      initials: initials,
+      date: dateInfo.date,
+      dayName: dateInfo.day,
+      clockInMs: ciMs,
+      clockOutMs: outMs,
+      clockInStr: fmtClockTime(ciMs),
+      clockOutStr: outMs ? fmtClockTime(outMs) : null,
+      duration: duration,
+      active: !matchOut,
+      source: "POS Terminal"
+    });
+  });
+
+  sessions.sort(function (a, b) {
+    return b.clockInMs - a.clockInMs;
+  });
+
+  return sessions;
+}
+
 function renderClockTable() {
   var tb = $("sd-clock-body");
   if (!tb) return;
   var ym = ymParts();
-  var rows = (activityRows || [])
-    .filter(function (r) {
-      if (!isClockActivityKind(r.kind)) return false;
-      return inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0);
-    })
-    .sort(function (a, b) {
-      return tsToMillis(b.createdAt) - tsToMillis(a.createdAt);
-    });
-  if (!rows.length) {
+
+  var allClockRows = (activityRows || []).filter(function (r) {
+    return isClockActivityKind(r.kind);
+  });
+
+  // Ambil clock_in dalam bulan ini sahaja.
+  var clockInsThisMonth = allClockRows.filter(function (r) {
+    return (
+      r.kind === "clock_in" &&
+      inCalendarMonth(tsToMillis(r.createdAt), ym.y, ym.m0)
+    );
+  });
+
+  // Ambil SEMUA clock_out (termasuk bulan lain) supaya clock_in di hujung
+  // bulan boleh dipadan dengan clock_out di awal bulan berikutnya.
+  var allClockOuts = allClockRows.filter(function (r) {
+    return r.kind === "clock_out";
+  });
+
+  var rowsForPairing = clockInsThisMonth.concat(allClockOuts);
+  var sessions = pairClockSessions(rowsForPairing);
+
+  if (!sessions.length) {
     tb.innerHTML =
-      '<tr><td colspan="4" class="sd-footnote">Tiada clock in/out pada bulan ini dalam <code>staff_activity</code>.</td></tr>';
+      '<tr><td colspan="5" class="sd-footnote" style="text-align:center;padding:20px">Tiada rekod kehadiran pada bulan ini.</td></tr>';
     return;
   }
-  tb.innerHTML = rows
-    .map(function (r) {
-      var ts = r.createdAt;
-      var t =
-        ts && typeof ts.toDate === "function"
-          ? ts.toDate().toLocaleString("ms-MY", { hour12: true })
-          : "—";
+
+  tb.innerHTML = sessions
+    .map(function (s) {
+      var rbBg = s.isOwner ? "#E6F1FB" : "#EAF3DE";
+      var rbColor = s.isOwner ? "#185FA5" : "#3B6D11";
+      var roleLabel = s.isOwner ? "Owner" : "Staff";
+      var roleBadge =
+        '<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:999px;background:' +
+        rbBg +
+        ";color:" +
+        rbColor +
+        ';margin-left:6px">' +
+        roleLabel +
+        "</span>";
+
+      var staffCell =
+        '<div style="display:flex;align-items:center">' +
+        '<span style="font-weight:500;font-size:13px">' +
+        escapeHtml(s.staffName.replace(/ \(Owner\)$/, "")) +
+        roleBadge +
+        "</span></div>";
+
+      var clockInCell = '<span style="font-weight:500;font-size:13px">' + escapeHtml(s.clockInStr) + "</span>";
+
+      var clockOutCell;
+      if (s.active) {
+        clockOutCell = '<span style="font-size:13px;color:var(--color-text-secondary)">—</span>';
+      } else {
+        clockOutCell = '<span style="font-weight:500;font-size:13px">' + escapeHtml(s.clockOutStr) + "</span>";
+      }
+
+      var durCell;
+      if (s.active) {
+        durCell =
+          '<span style="font-size:13px;color:var(--color-text-primary)">Sedang bertugas</span>';
+      } else if (s.duration) {
+        durCell =
+          '<span style="font-size:13px;color:var(--color-text-primary)">' +
+          escapeHtml(s.duration.text) +
+          "</span>";
+      } else {
+        durCell =
+          '<span style="font-size:13px;color:var(--color-text-secondary)">—</span>';
+      }
+
+      var dateCell =
+        '<div style="font-weight:500;font-size:13px">' +
+        escapeHtml(s.dayName) +
+        '</div><div style="font-size:11px;color:var(--color-text-secondary)">' +
+        escapeHtml(s.date) +
+        "</div>";
+
       return (
-        "<tr><td>" +
-        escapeHtml(t) +
-        "</td><td>" +
-        escapeHtml(
-          (function () {
-            var sid = String(r.staffId || "");
-            var match = staffList.find(function (s) {
-              return String(s.id) === sid || String(s.staffId) === sid;
-            });
-            if (match) return staffDisplayNameWithOwnerSuffix(match);
-            if (sid === "owner_01") return (r.staffName || "Pemilik") + " (Owner)";
-            return r.staffName || "";
-          })()
-        ) +
-        "</td><td>" +
-        escapeHtml(activityKindLabel(r.kind)) +
-        "</td><td>" +
-        escapeHtml(String(r.detail || "").slice(0, 140)) +
-        "</td></tr>"
+        "<tr>" +
+        "<td>" +
+        dateCell +
+        "</td>" +
+        "<td>" +
+        staffCell +
+        "</td>" +
+        "<td>" +
+        clockInCell +
+        "</td>" +
+        "<td>" +
+        clockOutCell +
+        "</td>" +
+        "<td>" +
+        durCell +
+        "</td>" +
+        "</tr>"
       );
     })
     .join("");

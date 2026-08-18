@@ -166,7 +166,15 @@ export function removeStaff(id) {
   return deleteDoc(doc(db, COL_STAFF, id));
 }
 
+/**
+ * Tambah satu baris `staff_activity`.
+ * `entry.atMs` (pilihan): masa peristiwa sebenar (epoch ms). Jika diberi, `createdAt`
+ * direkod pada masa tersebut (Timestamp tetap) — penting untuk tulisan tertangguh
+ * (cth. clock out yang gagal rangkaian lalu dicuba semula) supaya masa kehadiran kekal tepat.
+ * Jika tiada, guna `serverTimestamp()` seperti biasa.
+ */
 export function appendStaffActivity(entry) {
+  var atMs = entry && typeof entry.atMs === "number" && isFinite(entry.atMs) ? entry.atMs : null;
   return addDoc(collection(db, COL_STAFF_ACTIVITY), {
     staffId: entry.staffId != null ? String(entry.staffId) : "",
     staffName: entry.staffName != null ? String(entry.staffName) : "",
@@ -175,7 +183,7 @@ export function appendStaffActivity(entry) {
     detail: entry.detail != null ? String(entry.detail) : "",
     subtotal: typeof entry.subtotal === "number" ? entry.subtotal : null,
     orderCount: typeof entry.orderCount === "number" ? entry.orderCount : null,
-    createdAt: serverTimestamp()
+    createdAt: atMs != null ? Timestamp.fromMillis(atMs) : serverTimestamp()
   });
 }
 

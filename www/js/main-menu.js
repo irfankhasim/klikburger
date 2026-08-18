@@ -597,7 +597,7 @@ function showBoStaff() {
   iframe.title = "Kakitangan — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Kakitangan";
   setTopbarEmbedLead(
-    "<strong>Pemantauan</strong> — clock in/out, drawer tunai (audit POS), log aktiviti. <strong>Tetapan → Kakitangan</strong> untuk urus rekod staf (cth. 23 orang pasukan)."
+    "<strong>Pemantauan</strong> — clock in/out, drawer tunai (audit POS), log aktiviti."
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
@@ -663,7 +663,7 @@ function showBoMonthlyReports() {
   iframe.title = "Laporan penuh — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Laporan penuh";
   setTopbarEmbedLead(
-    '<strong>Paparan</strong> — mengikut <strong>tahun &amp; bulan</strong> kalendar. Sambungan data penuh boleh diaktifkan kemudian; gunakan <code class="topbar__embed-code">?demo=1</code> pada URL untuk <strong>pratonton UI</strong> tanpa Firestore.'
+    '<strong>Paparan</strong> — mengikut <strong>tahun &amp; bulan</strong> kalendar.'
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
@@ -682,7 +682,7 @@ function showBoDashboard() {
   iframe.title = "Papan pemuka — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Papan pemuka";
   setTopbarEmbedLead(
-    "<strong>Ringkasan pemilik</strong> — KPI, pesanan terkini, kakitangan &amp; drawer. <em>Fasa 1:</em> data pratonton; sambungan MCP pada fasa berikut."
+    "<strong>Ringkasan pemilik</strong> — KPI, pesanan terkini, kakitangan &amp; drawer."
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
@@ -1797,3 +1797,67 @@ async function bootMainMenu() {
 }
 
 bootMainMenu();
+
+// ==========================================
+// TABLET / ANDROID — back button, rotation, network status
+// ==========================================
+
+// Android back button — guna @capacitor/app melalui global Capacitor.Plugins.
+// (App ini ESM tanpa bundler, jadi bare import "@capacitor/app" tak boleh resolve
+//  dalam WebView; native plugin didedahkan melalui window.Capacitor.Plugins.App.)
+(function bindAndroidBackButton() {
+  var App =
+    (window.Capacitor &&
+      window.Capacitor.Plugins &&
+      window.Capacitor.Plugins.App) ||
+    null;
+  if (!App || typeof App.addListener !== "function") return;
+
+  App.addListener("backButton", function (data) {
+    var openModals = document.querySelectorAll(
+      '[role="dialog"]:not([hidden]), .is-open, [data-ai-backdrop]:not([hidden])'
+    );
+    if (openModals.length > 0) {
+      openModals.forEach(function (modal) {
+        modal.hidden = true;
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+      });
+      return;
+    }
+    if (!data || !data.canGoBack) {
+      if (typeof App.exitApp === "function") App.exitApp();
+      return;
+    }
+    window.history.back();
+  });
+})();
+
+// Handle orientation change untuk tablet
+window.addEventListener("orientationchange", function () {
+  setTimeout(function () {
+    window.scrollTo(0, 0);
+    var mainEl = document.querySelector(".app-main");
+    if (mainEl) {
+      mainEl.style.height = window.innerHeight + "px";
+    }
+  }, 300);
+});
+
+// Network status
+window.addEventListener("online", function () {
+  var banner = document.getElementById("offline-banner");
+  if (banner) banner.remove();
+});
+
+window.addEventListener("offline", function () {
+  if (document.getElementById("offline-banner")) return;
+  var banner = document.createElement("div");
+  banner.id = "offline-banner";
+  banner.style.cssText =
+    "position:fixed;top:0;left:0;right:0;z-index:9999;" +
+    "background:#854F0B;color:white;text-align:center;" +
+    "padding:10px;font-size:14px;font-weight:500";
+  banner.textContent = "Tiada sambungan internet. Data mungkin tidak terkini.";
+  document.body.prepend(banner);
+});

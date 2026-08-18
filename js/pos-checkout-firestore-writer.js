@@ -39,8 +39,8 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
   var orderId = orderRef.id;
   var receiptRef = doc(collection(db, COL_POS_RECEIPTS));
   var receiptDocId = receiptRef.id;
-  var orderNo = "KB-" + seqO;
-  var receiptNo = "R-" + seqR;
+  var orderNo = "RCP-" + seqO;
+  var receiptNo = "RCP-" + seqR;
   var now = serverTimestamp();
   var saleLines = params.saleLines || [];
   var subtotal = typeof params.subtotal === "number" ? params.subtotal : 0;
@@ -52,7 +52,7 @@ export function appendCheckoutInTransaction(transaction, countersSnap, params) {
   var grossProfit = Math.round((subtotal - totalCogs) * 100) / 100;
   var pay = normalizePaymentMethod(params.paymentMethod || "cash");
   var cust = String(params.customerName != null ? params.customerName : "").trim();
-  var kt = "KT-" + receiptNo.replace(/^R-/, "");
+  var kt = "KT-" + receiptNo.replace(/^(RCP|R)-/, "");
 
   var hubLines = saleLines.map(function (ln) {
     return {

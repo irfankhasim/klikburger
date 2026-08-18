@@ -406,3 +406,174 @@ body {
     padding: 1.5rem 1.25rem;
   }
 }
+
+/* ==========================================
+   TABLET SAMSUNG — RESPONSIVE LAYOUT
+   ========================================== */
+
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  box-sizing: border-box;
+}
+
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+button, a, input[type="submit"] {
+  touch-action: manipulation;
+}
+
+/* Tablet portrait — 600px ke atas */
+@media screen and (min-width: 600px) {
+  body {
+    font-size: 15px;
+  }
+
+  /* Sidebar lebih lebar dalam tablet */
+  .app-sidebar {
+    width: 220px !important;
+  }
+
+  /* Butang lebih besar untuk touch */
+  .btn {
+    min-height: 40px;
+    padding: 8px 16px;
+  }
+
+  /* Input field lebih besar */
+  input, select, textarea {
+    min-height: 40px;
+    font-size: 15px;
+  }
+
+  /* Grid POS lebih banyak kolum */
+  .order-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  }
+}
+
+/* Tablet landscape — 900px ke atas */
+@media screen and (min-width: 900px) {
+  body {
+    font-size: 16px;
+  }
+
+  .app-sidebar {
+    width: 240px !important;
+  }
+
+  /* POS layout landscape — cart di sebelah kanan */
+  .order-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+  }
+
+  /* Butang POS lebih besar */
+  .order-card {
+    min-height: 80px !important;
+    font-size: 15px !important;
+  }
+
+  /* Modal — saiz lalai tablet */
+  [role="dialog"] {
+    max-width: 560px !important;
+  }
+
+  /* Belian borong modal — lebih lebar */
+  #bulk-purchase-backdrop [role="dialog"],
+  .bulk-modal {
+    max-width: 760px !important;
+  }
+
+  /* AI chat drawer — kekal width asal */
+  #kb-ai-staff-drawer,
+  .ai-staff-drawer {
+    max-width: 420px !important;
+  }
+}
+
+/* Samsung tablet besar — 1200px ke atas */
+@media screen and (min-width: 1200px) {
+  .app-sidebar {
+    width: 260px !important;
+  }
+
+  .order-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  }
+
+  .order-card {
+    min-height: 90px !important;
+  }
+}
+
+/* Fix orientation change */
+@media screen and (orientation: landscape) {
+  .app-main {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Samsung DeX mode support */
+@media screen and (min-width: 1024px) and (pointer: fine) {
+  /* Cursor mode — hover effects */
+  .btn:hover {
+    opacity: 0.85;
+  }
+
+  .order-card:hover {
+    transform: scale(1.02);
+    transition: transform 0.1s ease;
+  }
+}
+
+/* ==========================================================================
+   Capacitor Android — WebView rendering parity with browser
+   ========================================================================== */
+
+/* Fix WebView rendering sama seperti browser */
+html, body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Prevent layout shift dalam WebView */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Fix flexbox dalam Android WebView */
+.app-layout,
+.app-sidebar,
+.app-main {
+  -webkit-flex: 1;
+  flex: 1;
+}
+
+/* Fix iframe dalam WebView */
+iframe {
+  width: 100%;
+  border: none;
+}
+
+/* Prevent font scaling dalam Android */
+* {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}

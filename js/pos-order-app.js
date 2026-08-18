@@ -15,7 +15,8 @@ import {
   getActiveFifoBatchFromList
 } from "./cost-calculator/ingredient-batch-repository.js";
 import { finalizePosSaleFifo, aggregateCartConsumption } from "./pos-sale-fifo.js";
-import { getPosHubState } from "./pos-operations-hub.js";
+import { usageBaseQty } from "./cost-calculator/core.js";
+import { getPosHubState, subscribePosHub } from "./pos-operations-hub.js";
 import { splitOrderAmounts } from "./pos-tax.js";
 import {
   subscribeRbac,
@@ -164,6 +165,32 @@ function menuItemCanAddOne(menuId) {
   return true;
 }
 
+/**
+ * Had maksimum unit menu `menuId` yang boleh dihasilkan dari stok PENUH semasa
+ * (tidak menolak item lain dalam troli). Logik & unit asas SAMA dengan AI
+ * (checkIngredientSufficiency → summary.maxProducibleUnits) supaya kedua-duanya selari.
+ * Nota: semakan troli sebenar tetap dikawal oleh cartLinesWithinStock().
+ */
+function maxProducibleForMenu(menuId) {
+  if (!batchesSnapshotReady) return 999;
+  var p = modifiersById[String(menuId)];
+  if (!p || !p.usage) return 999;
+  var keys = Object.keys(p.usage);
+  if (!keys.length) return 999;
+  var byIng = ingredientsByIdMap();
+  var maxUnits = Infinity;
+  keys.forEach(function (ingId) {
+    var ing = byIng[ingId];
+    if (!ing) return;
+    var perUnit = usageBaseQty(ing, p.usage[ingId]);
+    if (perUnit <= 0) return;
+    var available = totalBatchQtyRemaining(ingId);
+    var possible = Math.floor((available + 1e-9) / perUnit);
+    if (possible < maxUnits) maxUnits = possible;
+  });
+  return isFinite(maxUnits) ? maxUnits : 999;
+}
+
 /** `lines`: `{ id, qty }[]` ??? sama seperti troli untuk `aggregateCartConsumption`. */
 function cartLinesWithinStock(lines) {
   if (!batchesSnapshotReady) return true;
@@ -222,12 +249,7 @@ function updateOrderStockAlert() {
     return;
   }
   el.hidden = false;
-  el.textContent =
-    "Amaran stok rendah bagi bahan dalam pesanan ini: " +
-    names.join(", ") +
-    ". (Lot semasa ? " +
-    Math.round(LOW_STOCK_LOT_FRACTION * 100) +
-    "% daripada asal ? tambah belian jika perlu.)";
+  el.textContent = "Amaran stok rendah bagi bahan dalam pesanan ini!";
 }
 
 function renderGrid() {
@@ -332,6 +354,14 @@ function addToCart(id) {
     showToast("Bahan tidak mencukupi untuk tambah item ini.");
     return;
   }
+  var currentQty = (cart.find(function (x) {
+    return String(x.id) === sid;
+  }) || { qty: 0 }).qty;
+  var maxQty = maxProducibleForMenu(sid);
+  if (currentQty >= maxQty) {
+    showToast("Had maksimum " + maxQty + " unit untuk " + (m ? m.name : "item ini") + " berdasarkan stok semasa.");
+    return;
+  }
   var line = cart.find(function (x) {
     return String(x.id) === sid;
   });
@@ -349,6 +379,11 @@ function setQty(id, qty) {
   if (!posCatalogAllowed() && qty > line.qty) {
     showToast(staffLockMessage());
     return;
+  }
+  var maxQty = maxProducibleForMenu(sid);
+  if (qty > maxQty) {
+    qty = maxQty;
+    showToast("Had maksimum " + maxQty + " unit berdasarkan stok semasa.");
   }
   line.qty = Math.max(0, qty);
   cart = cart.filter(function (x) {
@@ -408,6 +443,14 @@ function renderCart() {
   list.innerHTML = cart
     .map(function (line) {
       var sub = line.price * line.qty;
+      var maxQty = maxProducibleForMenu(line.id);
+      var atMax = line.qty >= maxQty;
+      var plusBtn =
+        '<button type="button" class="js-qty-plus" aria-label="Tambah" data-max="' +
+        escapeAttr(String(maxQty)) +
+        '"' +
+        (atMax ? ' disabled title="Stok maksimum ' + escapeAttr(String(maxQty)) + ' unit"' : "") +
+        ">+</button>";
       return (
         '<div class="order-line" data-id="' +
         escapeAttr(String(line.id)) +
@@ -424,7 +467,7 @@ function renderCart() {
         "<span>" +
         line.qty +
         "</span>" +
-        '<button type="button" class="js-qty-plus" aria-label="Tambah">+</button>' +
+        plusBtn +
         "</span>" +
         '<button type="button" class="order-line__remove js-remove">Buang</button>' +
         "</div></div>"
@@ -841,7 +884,7 @@ function renderFlowSuccess(meta) {
   z.title.textContent = "Pembayaran berjaya";
   z.body.innerHTML =
     '<p style="margin:0 0 0.5rem;font-weight:700;color:var(--success)">Terima kasih ? pesanan <strong>' +
-    escapeHtml(meta.orderNo || "") +
+    escapeHtml(meta.receiptNo || "") +
     "</strong> telah direkodkan.</p>" +
     "<ul class=\"order-flow__success-list\">" +
     "<li>Pelanggan: <strong>" + escapeHtml(meta.customerName || "") + "</strong></li>" +
@@ -856,7 +899,7 @@ function renderFlowSuccess(meta) {
     " dihantar</li>" +
     "<li>Stok dikemas kini (ikut resipi)</li>" +
     "<li>Pesanan " +
-    escapeHtml(meta.orderNo) +
+    escapeHtml(meta.receiptNo) +
     " dalam <strong>Senarai pesanan</strong> (Menunggu)</li>" +
     "</ul>" +
     '<div class="ops-muted" style="margin:0.65rem 0 0;font-size:0.82rem;text-align:right">' +
@@ -1056,6 +1099,15 @@ async function init() {
       updatePosRbacChrome();
       renderGrid();
       renderCart();
+    })
+  );
+
+  // Langgan status drawer/syif — tanpa ini, Firestore shift listener tak bermula
+  // dalam konteks halaman ini, jadi hub.shift.isOpen kekal false (drawer dianggap tutup)
+  // walaupun drawer sudah dibuka di panel Clock In / Drawer.
+  posOrderFirestoreUnsubs.push(
+    subscribePosHub(function () {
+      updatePosRbacChrome();
     })
   );
 
