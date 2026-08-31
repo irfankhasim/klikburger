@@ -176,7 +176,14 @@ service cloud.firestore {
     // Counters updated in transaction by checkout; only reads from non-owner.
     match /pos_meta/{docId} {
       allow read:   if isStaff();
-      allow write:  if isStaff();   // checkout transaction needs write
+      allow write:  if isStaff() && docId != "store_location";   // checkout transaction needs write
+    }
+
+    // store_location: sekatan geo clock-in. Write hanya Cloud Function (Admin SDK,
+    // setStoreLocation/clearStoreLocation, owner-sahaja) — elak staf spoof lokasi GPS sendiri.
+    match /pos_meta/store_location {
+      allow read:  if isStaff();
+      allow write: if false;
     }
 
     // ─── pos_sales_transactions ───────────────────────────────────────────
@@ -219,12 +226,25 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // ─── staff_pins ───────────────────────────────────────────────────────
-    // PIN disimpan berasingan — hanya Owner boleh baca/tulis.
-    // Staff account tidak boleh akses collection ini langsung.
-    match /staff_pins/{staffId} {
-      allow read:  if isOwner();
-      allow write: if isOwner();
+    // ─── staff_totp / staff_totp_status ──────────────────────────────────
+    // 2FA clock-in Staff, ditogol per-staf oleh Owner. Secret TIDAK boleh dibaca
+    // client langsung — hanya Cloud Functions (Admin SDK). Status (enabled) boleh
+    // dibaca mana-mana pengguna log masuk supaya UI clock-in tahu papar field TOTP.
+    match /staff_totp/{staffId} {
+      allow read, write: if false;
+    }
+    match /staff_totp_status/{staffId} {
+      allow read:  if isStaff();
+      allow write: if false;
+    }
+
+    // ─── pos_active_shift ─────────────────────────────────────────────────
+    // Roster staf sedang bertugas (dok wujud selagi clock-in, dipadam bila clock-out).
+    // Cashier terhad kepada satu dokumen workRole=="cashier" pada satu masa (dikuatkuasa
+    // dalam Cloud Function verifyStaffClockIn, bukan rules). Write hanya Cloud Function.
+    match /pos_active_shift/{staffId} {
+      allow read:  if isStaff();
+      allow write: if false;
     }
 
     // ─── Catch-all: deny everything else ──────────────────────────────────

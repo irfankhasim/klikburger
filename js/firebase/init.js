@@ -15,6 +15,7 @@ import {
   onSnapshot,
   getDocs,
   getDoc,
+  getDocFromServer,
   writeBatch,
   runTransaction,
   query,
@@ -41,11 +42,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
 
 /**
- * Hanya port Hosting emulator Firebase (npm run dev).
- * Jangan auto-sambung pada 5500 (Live Server) — jika emulator tidak hidup, Auth gagal dengan auth/network-request-failed.
- * Untuk Live Server + emulator: jalankan `npm run dev`, kemudian `?fbEmu=1` atau `localStorage kb_fb_emu=1`.
+ * Port yang auto-sambung ke Firebase emulator: Hosting emulator (5000/5001) DAN
+ * port biasa VSCode Live Server (5500/5501) — pasangan Live Server + `npm run dev:emulators`
+ * ialah workflow biasa untuk repo ni. Kalau emulator tak hidup semasa buka port-port ni,
+ * Auth akan gagal dengan `auth/network-request-failed` — jalankan `npm run dev:emulators` dulu.
+ * Port localhost lain (elak paksa emulator pada production): guna `?fbEmu=1` sekali sahaja,
+ * ia melekat automatik (localStorage `kb_fb_emu`) untuk page localhost seterusnya.
  */
-var EMULATOR_HOSTING_PORTS = { "5000": true, "5001": true };
+var EMULATOR_HOSTING_PORTS = { "5000": true, "5001": true, "5500": true, "5501": true };
 
 /** Elak paksa emulator pada domain production — jika tidak, Auth cuba 127.0.0.1:9099 & boleh “loading” lama. */
 function isLocalBrowserHost() {
@@ -60,9 +64,35 @@ function isLocalBrowserHost() {
 function shouldUseFirebaseEmulators() {
   if (typeof window === "undefined") return false;
   try {
+    // ?fbProd=1 memaksa production walaupun pada port Live Server (5500/5501) yang
+    // biasanya auto-emulator — lekat dalam localStorage macam kb_fb_emu supaya tak perlu
+    // ulang tiap kali buka page localhost lain.
+    if (new URLSearchParams(window.location.search).get("fbProd") === "1") {
+      try {
+        if (window.localStorage) {
+          window.localStorage.setItem("kb_fb_prod", "1");
+          window.localStorage.removeItem("kb_fb_emu");
+        }
+      } catch (e3) {}
+      return false;
+    }
+    if (window.localStorage && window.localStorage.getItem("kb_fb_prod") === "1" && isLocalBrowserHost()) {
+      return false;
+    }
+
     var p = window.location.port || "";
     if (EMULATOR_HOSTING_PORTS[p]) return true;
-    if (new URLSearchParams(window.location.search).get("fbEmu") === "1") return isLocalBrowserHost();
+    if (new URLSearchParams(window.location.search).get("fbEmu") === "1") {
+      if (!isLocalBrowserHost()) return false;
+      // Lekatkan pilihan ni supaya page localhost lain (cth Live Server) tak perlu ?fbEmu=1 berulang kali.
+      try {
+        if (window.localStorage) {
+          window.localStorage.setItem("kb_fb_emu", "1");
+          window.localStorage.removeItem("kb_fb_prod");
+        }
+      } catch (e2) {}
+      return true;
+    }
     if (window.localStorage && window.localStorage.getItem("kb_fb_emu") === "1") return isLocalBrowserHost();
   } catch (e) {}
   return false;
@@ -71,7 +101,7 @@ function shouldUseFirebaseEmulators() {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-/** Sama dengan region `verifyStaffPin` dalam functions/index.js */
+/** Sama dengan REGION dalam functions/index.js */
 export const functions = getFunctions(app, "asia-southeast1");
 
 if (shouldUseFirebaseEmulators()) {
@@ -106,6 +136,7 @@ export {
   onSnapshot,
   getDocs,
   getDoc,
+  getDocFromServer,
   writeBatch,
   runTransaction,
   query,

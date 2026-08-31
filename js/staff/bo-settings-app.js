@@ -1,9 +1,9 @@
 /**
  * Tetapan pejabat belakang — sunting butiran staf (Firestore `staff`).
  */
-import { Timestamp, auth, db, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "../firebase/init.js";
+import { Timestamp, auth, db, doc, getDoc } from "../firebase/init.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
-import { isElevatedRole } from "../pos-rbac-session.js";
+import { isElevatedRole, isOwnerRole } from "../pos-rbac-session.js";
 import {
   docToStaff,
   normalizeStaffNameKey,
@@ -12,14 +12,21 @@ import {
   isOwnerStaffRecord,
   OWNER_STAFF_DOC_ID
 } from "./staff-mappers.js";
-import { subscribeStaff, addStaff, persistStaff, removeStaff, staffPinExists } from "./staff-repository.js";
+import { subscribeStaff, addStaff, persistStaff, removeStaff } from "./staff-repository.js";
+import {
+  enrollStaffTotp,
+  confirmStaffTotpEnrollment,
+  setStaffTotpEnabled,
+  setStoreLocation,
+  clearStoreLocation
+} from "./totp-callables.js";
+import { renderTotpQrCode } from "../totp-qr.js";
+import { notifyInnerHeight } from "./bo-settings-iframe-autosize.js";
 
 var staffList = [];
 var selectedId = "";
 var staffUnsub = null;
 var pagehideBound = false;
-var staffPinStatus = Object.create(null);
-var loadedPinValue = "";
 
 function defaultWeeklyRosterPagi() {
   var out = [];
@@ -97,73 +104,35 @@ function applyPayrollFieldsVisibility() {
   }
 }
 
-function applyPinToggleState() {
-  var t = $("bs-form-pin-enabled");
-  var box = $("bs-pin-fields");
-  var txt = $("bs-form-pin-enabled-text");
-  var on = t ? t.checked : false;
-  if (box) box.hidden = !on;
-  if (txt) txt.textContent = on ? "Aktif" : "Tidak aktif";
-}
-
-function setPinEnabled(on) {
-  var t = $("bs-form-pin-enabled");
-  if (!t) return;
-  t.checked = t.disabled ? true : !!on;
-  applyPinToggleState();
-}
-
-function pinStatusLabel(staffId) {
-  var has = staffPinStatus[String(staffId)];
-  if (has === true) return "PIN: ada";
-  if (has === false) return "PIN: tiada";
-  return "PIN: …";
-}
-
-async function refreshStaffPinStatusCache(rows) {
-  var next = Object.create(null);
-  await Promise.all(
-    (rows || []).map(async function (s) {
-      try {
-        next[String(s.id)] = await staffPinExists(s.id);
-      } catch (e) {
-        next[String(s.id)] = false;
-      }
-    })
-  );
-  staffPinStatus = next;
-  renderStaffList();
-}
-
 function renderStaffList() {
   var wrap = $("bs-staff-list");
   if (!wrap) return;
-  if (!staffList.length) {
+  // Owner urus profil sendiri di tempat lain — tak perlu (dan tak patut) muncul dalam
+  // senarai kakitangan yang diurus di sini (2FA, gaji, dsb. tak relevan untuk Owner).
+  var visibleStaff = staffList.filter(function (s) {
+    return !isOwnerStaffRecord(s);
+  });
+  if (!visibleStaff.length) {
     wrap.innerHTML = '<p class="sd-footnote">Tiada rekod staf. Klik <strong>Tambah kakitangan</strong> atau jalankan <code>node scripts/add-owner-staff.js</code>.</p>';
+    notifyInnerHeight();
     return;
   }
-  wrap.innerHTML = staffList
+  wrap.innerHTML = visibleStaff
     .map(function (s) {
       var active = String(s.id) === String(selectedId);
       var displayName = staffCanonicalDisplayName(s.name);
-      var owner = isOwnerStaffRecord(s);
-      var roleBadge = owner
-        ? '<span class="kb-badge kb-badge--owner">Owner</span>'
-        : "";
       return (
         '<button type="button" class="bs-staff-pick btn btn--outline' +
         (active ? " is-active" : "") +
-        (owner ? " bs-staff-pick--owner" : "") +
         '" data-staff-id="' +
         escapeHtml(s.id) +
         '"><span class="bs-staff-pick__name">' +
         escapeHtml(displayName) +
-        '</span><span class="bs-staff-pick__meta">' +
-        roleBadge +
         "</span></button>"
       );
     })
     .join("");
+  notifyInnerHeight();
 }
 
 function applyOwnerFormMode(s) {
@@ -196,13 +165,9 @@ function applyOwnerFormMode(s) {
   }
   if (addBtn) addBtn.hidden = ownerMode && !!selectedId;
   if (deleteBtn) deleteBtn.hidden = ownerMode || !selectedId;
-  var pinToggle = $("bs-form-pin-enabled");
-  if (pinToggle) {
-    // Butang On/Off PIN mesti sentiasa boleh ditekan untuk pengguna dibenarkan (termasuk Owner).
-    pinToggle.disabled = false;
-    applyPinToggleState();
-  }
   applyPayrollFieldsVisibility();
+  var totpBlock = $("bs-totp-block");
+  if (totpBlock) totpBlock.hidden = ownerMode || !selectedId;
 }
 
 async function fillFormForStaff(id) {
@@ -219,11 +184,7 @@ async function fillFormForStaff(id) {
     $("bs-form-started").value = "";
     $("bs-form-paytype").value = "hourly";
     $("bs-form-pay").value = "8";
-    $("bs-form-pin").value = "";
-    if ($("bs-form-pin-confirm")) $("bs-form-pin-confirm").value = "";
-    loadedPinValue = "";
     applyOwnerFormMode(null);
-    setPinEnabled(false);
     renderStaffList();
     return;
   }
@@ -248,19 +209,35 @@ async function fillFormForStaff(id) {
   $("bs-form-paytype").value = s.payType || "hourly";
   $("bs-form-pay").value = String(s.payAmount != null ? s.payAmount : "");
   applyOwnerFormMode(s);
-  // Load PIN from staff_pins
-  try {
-    var pinSnap = await getDoc(doc(db, "staff_pins", id));
-    $("bs-form-pin").value = pinSnap.exists() ? pinSnap.data().pin || "" : "";
-    staffPinStatus[String(id)] = !!String($("bs-form-pin").value || "").trim();
-  } catch (e) {
-    $("bs-form-pin").value = "";
-    staffPinStatus[String(id)] = false;
-  }
-  loadedPinValue = $("bs-form-pin").value || "";
-  setPinEnabled(!!String(loadedPinValue).trim());
-  if ($("bs-form-pin-confirm")) $("bs-form-pin-confirm").value = "";
+  await refreshTotpStatusForForm(id);
   renderStaffList();
+}
+
+async function refreshTotpStatusForForm(id) {
+  var toggle = $("bs-form-totp-enabled");
+  var text = $("bs-form-totp-enabled-text");
+  var statusText = $("bs-totp-status-text");
+  if (!toggle || !statusText) return;
+  toggle.checked = false;
+  if (text) text.textContent = "Tidak aktif";
+  statusText.textContent = "Memuat…";
+  try {
+    var snap = await getDoc(doc(db, "staff_totp_status", id));
+    var data = snap.exists() ? snap.data() : {};
+    var enrolled = !!data.enrolled;
+    var enabled = !!data.enabled;
+    toggle.checked = enabled;
+    toggle.disabled = !enrolled;
+    if (text) text.textContent = enabled ? "Aktif" : "Tidak aktif";
+    statusText.textContent = enrolled
+      ? enabled
+        ? "2FA disediakan dan aktif — wajib semasa clock in."
+        : "2FA disediakan tapi tidak aktif."
+      : "Belum disediakan — tekan “Setup / Reset 2FA” dahulu.";
+  } catch (e) {
+    console.error(e);
+    statusText.textContent = "Gagal muat status 2FA.";
+  }
 }
 
 function startedTimestampFromInput() {
@@ -287,20 +264,6 @@ async function saveStaffForm() {
     return;
   }
 
-  var pinEnabled = $("bs-form-pin-enabled") ? $("bs-form-pin-enabled").checked : true;
-  var pinVal = ($("bs-form-pin").value || "").trim();
-  var pinConfirm = ($("bs-form-pin-confirm") && $("bs-form-pin-confirm").value.trim()) || "";
-  if (pinEnabled) {
-    if (!/^\d{4}$/.test(pinVal)) {
-      setStatus("PIN mesti 4 digit angka.", "err");
-      return;
-    }
-    var pinChanged = pinVal !== String(loadedPinValue || "").trim();
-    if ((pinChanged || pinConfirm) && pinVal !== pinConfirm) {
-      setStatus("PIN dan pengesahan PIN tidak sepadan.", "err");
-      return;
-    }
-  }
   var nameKey = normalizeStaffNameKey(name);
   var dupOther = staffList.some(function (s) {
     return normalizeStaffNameKey(s.name) === nameKey && String(s.id) !== String(id);
@@ -350,21 +313,6 @@ async function saveStaffForm() {
       await persistStaff(id, payload);
       setStatus("Butiran staf dikemas kini.", "ok");
       selectedId = id;
-      if (pinEnabled && pinVal) {
-        await setDoc(doc(db, "staff_pins", id), {
-          pin: pinVal,
-          updatedAt: serverTimestamp()
-        });
-        staffPinStatus[String(id)] = true;
-        loadedPinValue = pinVal;
-      } else if (!pinEnabled) {
-        try {
-          await deleteDoc(doc(db, "staff_pins", id));
-        } catch (e) {}
-        staffPinStatus[String(id)] = false;
-        loadedPinValue = "";
-        $("bs-form-pin").value = "";
-      }
     } else {
       var ref = await addStaff(payload);
       selectedId = ref.id;
@@ -372,14 +320,6 @@ async function saveStaffForm() {
       $("bs-form-delete").hidden = false;
       setStatus("Kakitangan ditambah.", "ok");
       renderStaffList();
-      if (pinEnabled && pinVal) {
-        await setDoc(doc(db, "staff_pins", ref.id), {
-          pin: pinVal,
-          updatedAt: serverTimestamp()
-        });
-        staffPinStatus[String(ref.id)] = true;
-        loadedPinValue = pinVal;
-      }
     }
   } catch (e) {
     console.error(e);
@@ -427,22 +367,352 @@ function wireEvents() {
     fillFormForStaff("");
     $("bs-form-name").focus();
   });
-  $("bs-form-save").addEventListener("click", function () {
-    saveStaffForm();
+  $("bs-form-save").addEventListener("click", async function () {
+    var btn = $("bs-form-save");
+    setBtnLoading(btn, true);
+    try {
+      await saveStaffForm();
+    } finally {
+      setBtnLoading(btn, false);
+    }
   });
-  $("bs-form-delete").addEventListener("click", function () {
-    deleteStaffForm();
+  $("bs-form-delete").addEventListener("click", async function () {
+    var btn = $("bs-form-delete");
+    setBtnLoading(btn, true);
+    try {
+      await deleteStaffForm();
+    } finally {
+      setBtnLoading(btn, false);
+    }
   });
   $("bs-form-role").addEventListener("change", applyPayrollFieldsVisibility);
-  if ($("bs-form-pin-enabled")) {
-    $("bs-form-pin-enabled").addEventListener("change", applyPinToggleState);
-  }
   $("bs-staff-list").addEventListener("click", function (e) {
     var btn = e.target.closest(".bs-staff-pick");
     if (!btn) return;
     var sid = btn.getAttribute("data-staff-id");
     if (sid) fillFormForStaff(sid);
   });
+  wireTotpEvents();
+  wireStoreLocationEvents();
+}
+
+function logSecurityAudit(type, meta) {
+  import("../pos-firestore-hub.js")
+    .then(function (hub) {
+      return hub.appendPosAudit({
+        type: type,
+        message: type,
+        userId: (auth.currentUser && auth.currentUser.uid) || "",
+        role: "OWNER",
+        meta: meta || {}
+      });
+    })
+    .catch(function () {});
+}
+
+function getCurrentCoordsForOwner() {
+  return new Promise(function (resolve, reject) {
+    if (!navigator.geolocation) {
+      reject(new Error("Peranti/browser ini tidak menyokong GPS."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      function () {
+        reject(new Error("Tidak dapat akses lokasi. Benarkan kebenaran GPS dan cuba lagi."));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+}
+
+async function refreshStoreLocationPanel() {
+  var panel = $("bs-store-location-panel");
+  if (!panel) return;
+  if (!isOwnerRole()) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  var statusEl = $("bs-store-location-status");
+  var clearBtn = $("bs-btn-clear-store-location");
+  var radiusInput = $("bs-store-radius");
+  if (!statusEl) return;
+  statusEl.textContent = "Memuat…";
+  try {
+    var snap = await getDoc(doc(db, "pos_meta", "store_location"));
+    if (snap.exists()) {
+      var d = snap.data();
+      statusEl.textContent =
+        "Lokasi ditetapkan — radius " + d.radiusMeters + "m (" + d.lat.toFixed(5) + ", " + d.lng.toFixed(5) + "). Clock-in disekat di luar kawasan ini.";
+      if (clearBtn) clearBtn.hidden = false;
+      if (radiusInput && d.radiusMeters) radiusInput.value = d.radiusMeters;
+    } else {
+      statusEl.textContent = "Belum ditetapkan — clock-in staf tiada sekatan lokasi buat masa ini.";
+      if (clearBtn) clearBtn.hidden = true;
+    }
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Gagal muat status lokasi kedai.";
+  }
+}
+
+/** Kemaskini panel lokasi kedai terus dari keputusan yang dah diketahui — elak getDoc berlebihan. */
+function applyStoreLocationOptimistic(loc) {
+  var statusEl = $("bs-store-location-status");
+  var clearBtn = $("bs-btn-clear-store-location");
+  if (!statusEl) return;
+  if (loc) {
+    statusEl.textContent =
+      "Lokasi ditetapkan — radius " + loc.radiusMeters + "m (" + loc.lat.toFixed(5) + ", " + loc.lng.toFixed(5) + "). Clock-in disekat di luar kawasan ini.";
+    if (clearBtn) clearBtn.hidden = false;
+  } else {
+    statusEl.textContent = "Belum ditetapkan — clock-in staf tiada sekatan lokasi buat masa ini.";
+    if (clearBtn) clearBtn.hidden = true;
+  }
+}
+
+function wireStoreLocationEvents() {
+  var setBtn = $("bs-btn-set-store-location");
+  if (setBtn) {
+    setBtn.addEventListener("click", async function () {
+      setBtnLoading(setBtn, true);
+      try {
+        var coords = await getCurrentCoordsForOwner();
+        var radiusInput = $("bs-store-radius");
+        var radius = radiusInput ? parseFloat(radiusInput.value) || 150 : 150;
+        await setStoreLocation(coords.lat, coords.lng, radius);
+        setStatus("Lokasi kedai ditetapkan.", "ok");
+        applyStoreLocationOptimistic({ lat: coords.lat, lng: coords.lng, radiusMeters: radius });
+        logSecurityAudit("store_location_set", { lat: coords.lat, lng: coords.lng, radiusMeters: radius });
+      } catch (e) {
+        console.error(e);
+        setStatus("Gagal tetapkan lokasi: " + (e && e.message ? e.message : "ralat"), "err");
+      } finally {
+        setBtnLoading(setBtn, false);
+      }
+    });
+  }
+
+  var clearBtn = $("bs-btn-clear-store-location");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", async function () {
+      setBtnLoading(clearBtn, true);
+      try {
+        await clearStoreLocation();
+        setStatus("Sekatan lokasi dibuang.", "ok");
+        applyStoreLocationOptimistic(null);
+        logSecurityAudit("store_location_cleared", {});
+      } catch (e) {
+        console.error(e);
+        setStatus("Gagal buang sekatan lokasi: " + (e && e.message ? e.message : "ralat"), "err");
+      } finally {
+        setBtnLoading(clearBtn, false);
+      }
+    });
+  }
+}
+
+/** Tunjuk/sembunyi spinner dalam butang (elak "tak tahu proses jalan atau tidak"). */
+function setBtnLoading(btn, loading) {
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.classList.toggle("btn--loading", loading);
+}
+
+function totpStatusText(msg, kind) {
+  var el = $("bs-totp-modal-status");
+  if (!el) return;
+  if (!msg) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "bs-totp-modal-status";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = msg;
+  el.className = "bs-totp-modal-status" + (kind === "error" ? " bs-totp-modal-status--error" : kind === "ok" ? " bs-totp-modal-status--ok" : "");
+}
+
+/**
+ * Buka modal SERTA-MERTA (sebelum Cloud Function siap) supaya user nampak sesuatu
+ * berlaku dengan segera — QR dipaparkan dengan skeleton loading dahulu, ditukar
+ * bila enrollStaffTotp/enrollOwnerTotp resolve. Elak "tekan butang, tak nampak apa-apa".
+ */
+function openTotpModal(staffName) {
+  var titleEl = $("bs-totp-modal-title");
+  var leadEl = $("bs-totp-modal-lead");
+  if (titleEl) titleEl.textContent = "Setup 2FA — " + (staffName || "Staf");
+  if (leadEl) {
+    leadEl.textContent =
+      "Imbas kod QR ini dengan app authenticator pada telefon " +
+      (staffName ? staffName : "staf ini") +
+      ", atau masukkan kod secara manual.";
+  }
+  var qr = $("bs-totp-qr");
+  if (qr) qr.innerHTML = '<div class="bs-totp-qr--loading">Menjana kod QR…</div>';
+  var secretEl = $("bs-totp-secret-text");
+  if (secretEl) secretEl.textContent = "…";
+  var codeInput = $("bs-totp-confirm-code");
+  if (codeInput) {
+    codeInput.value = "";
+    codeInput.disabled = true;
+  }
+  var confirmBtn = $("bs-totp-modal-confirm");
+  if (confirmBtn) confirmBtn.disabled = true;
+  totpStatusText("", null);
+
+  var bd = $("bs-totp-modal-backdrop");
+  if (bd) {
+    bd.hidden = false;
+    bd.setAttribute("aria-hidden", "false");
+    // rAF: pastikan browser render state "hidden dibuang" dulu sebelum tambah kelas
+    // transisi — kalau tak, opacity terus 1 tanpa animasi fade-in.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        bd.classList.add("is-open");
+      });
+    });
+  }
+}
+
+/** Tukar modal dari skeleton loading ke QR sebenar bila Cloud Function dah siap. */
+function fillTotpModalReady(otpauthUrl, secret) {
+  var qr = $("bs-totp-qr");
+  if (qr) renderTotpQrCode(qr, otpauthUrl);
+  var secretEl = $("bs-totp-secret-text");
+  if (secretEl) secretEl.textContent = secret;
+  var codeInput = $("bs-totp-confirm-code");
+  if (codeInput) {
+    codeInput.disabled = false;
+    codeInput.focus();
+  }
+  var confirmBtn = $("bs-totp-modal-confirm");
+  if (confirmBtn) confirmBtn.disabled = false;
+}
+
+function closeTotpModal() {
+  var bd = $("bs-totp-modal-backdrop");
+  if (bd) {
+    bd.classList.remove("is-open");
+    bd.setAttribute("aria-hidden", "true");
+    setTimeout(function () {
+      bd.hidden = true;
+    }, 160);
+  }
+  var qr = $("bs-totp-qr");
+  if (qr) qr.innerHTML = "";
+  var secretEl = $("bs-totp-secret-text");
+  if (secretEl) secretEl.textContent = "";
+  var codeInput = $("bs-totp-confirm-code");
+  if (codeInput) codeInput.value = "";
+  totpStatusText("", null);
+}
+
+/** Kemaskini togol + teks status 2FA staf terus dari keputusan Cloud Function yang dah diketahui — elak getDoc berlebihan. */
+function applyTotpStatusOptimistic(enrolled, enabled) {
+  var toggle = $("bs-form-totp-enabled");
+  var text = $("bs-form-totp-enabled-text");
+  var statusText = $("bs-totp-status-text");
+  if (toggle) {
+    toggle.checked = enabled;
+    toggle.disabled = !enrolled;
+  }
+  if (text) text.textContent = enabled ? "Aktif" : "Tidak aktif";
+  if (statusText) {
+    statusText.textContent = enrolled
+      ? enabled
+        ? "2FA disediakan dan aktif — wajib semasa clock in."
+        : "2FA disediakan tapi tidak aktif."
+      : "Belum disediakan — tekan “Setup / Reset 2FA” dahulu.";
+  }
+}
+
+function wireTotpEvents() {
+  var toggle = $("bs-form-totp-enabled");
+  if (toggle) {
+    toggle.addEventListener("change", async function () {
+      var id = selectedId;
+      if (!id) return;
+      var wantEnabled = toggle.checked;
+      toggle.disabled = true;
+      try {
+        await setStaffTotpEnabled(id, wantEnabled);
+        applyTotpStatusOptimistic(true, wantEnabled);
+        setStatus(wantEnabled ? "2FA diaktifkan untuk staf ini." : "2FA dinyahaktifkan untuk staf ini.", "ok");
+        logSecurityAudit(wantEnabled ? "staff_totp_enabled" : "staff_totp_disabled", { staffId: id });
+      } catch (e) {
+        console.error(e);
+        toggle.checked = !wantEnabled;
+        toggle.disabled = false;
+        setStatus("Gagal kemaskini status 2FA: " + (e && e.message ? e.message : "ralat"), "err");
+      }
+    });
+  }
+
+  var setupBtn = $("bs-btn-setup-totp");
+  if (setupBtn) {
+    setupBtn.addEventListener("click", async function () {
+      var id = selectedId;
+      if (!id) {
+        setStatus("Pilih nama staf dari senarai di sebelah dahulu sebelum setup 2FA.", "err");
+        return;
+      }
+      var staffRec = staffList.find(function (x) {
+        return String(x.id) === id;
+      });
+      // Buka modal SERTA-MERTA dengan skeleton — jangan tunggu network dulu.
+      openTotpModal(staffRec ? staffRec.name : "");
+      setBtnLoading(setupBtn, true);
+      try {
+        var res = await enrollStaffTotp(id);
+        fillTotpModalReady(res.otpauthUrl, res.secret);
+      } catch (e) {
+        console.error(e);
+        totpStatusText("Gagal jana 2FA: " + (e && e.message ? e.message : "ralat"), "error");
+      } finally {
+        setBtnLoading(setupBtn, false);
+      }
+    });
+  }
+
+  var closeBtn = $("bs-totp-modal-close");
+  if (closeBtn) closeBtn.addEventListener("click", closeTotpModal);
+
+  var confirmBtn = $("bs-totp-modal-confirm");
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", async function () {
+      var id = selectedId;
+      var codeInput = $("bs-totp-confirm-code");
+      var code = codeInput ? codeInput.value.trim() : "";
+      if (!/^\d{6}$/.test(code)) {
+        totpStatusText("Masukkan kod 6 digit.", "error");
+        return;
+      }
+      setBtnLoading(confirmBtn, true);
+      try {
+        await confirmStaffTotpEnrollment(id, code);
+        totpStatusText("2FA disahkan & diaktifkan.", "ok");
+        applyTotpStatusOptimistic(true, true);
+        logSecurityAudit("staff_totp_enrolled", { staffId: id });
+        setTimeout(closeTotpModal, 700);
+      } catch (e) {
+        console.error(e);
+        totpStatusText(e && e.message ? e.message : "Kod tidak sepadan.", "error");
+      } finally {
+        setBtnLoading(confirmBtn, false);
+      }
+    });
+  }
+
+  var backdrop = $("bs-totp-modal-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeTotpModal();
+    });
+  }
 }
 
 async function main() {
@@ -458,6 +728,8 @@ async function main() {
     console.warn("[bo-settings] auth", e);
   }
 
+  refreshStoreLocationPanel();
+
   staffUnsub = subscribeStaff(
     function (snap) {
       var rawFiltered = [];
@@ -466,7 +738,6 @@ async function main() {
           return docToStaff(d);
         });
         staffList = dedupeStaffByNameKey(rawFiltered);
-        refreshStaffPinStatusCache(staffList);
       } catch (e) {
         console.error(e);
         staffList = [];

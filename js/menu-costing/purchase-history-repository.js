@@ -25,7 +25,8 @@ export function recordIngredientPurchaseHistory(opts) {
   var qty = typeof o.qty === "number" ? o.qty : parseFloat(o.qty) || 0;
   var cpu = typeof o.costPerUnit === "number" ? o.costPerUnit : parseFloat(o.costPerUnit) || 0;
   var total = typeof o.totalAmountRm === "number" ? o.totalAmountRm : parseFloat(o.totalAmountRm) || 0;
-  return addPurchaseRecord({
+  var taxAmount = typeof o.taxAmount === "number" ? o.taxAmount : parseFloat(o.taxAmount) || 0;
+  var payload = {
     createdAt: serverTimestamp(),
     totalAmount: Math.round(total * 100) / 100,
     supplier: String(o.supplier || "").slice(0, 80),
@@ -40,5 +41,7 @@ export function recordIngredientPurchaseHistory(opts) {
         lineTotal: Math.round(total * 100) / 100
       }
     ]
-  });
+  };
+  if (taxAmount > 0) payload.taxAmount = Math.round(taxAmount * 100) / 100;
+  return addPurchaseRecord(payload);
 }

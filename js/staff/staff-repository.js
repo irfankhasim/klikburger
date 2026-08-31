@@ -154,14 +154,6 @@ export async function getOwnerStaffDoc() {
   return { id: snap.id, data: snap.data() };
 }
 
-export async function staffPinExists(staffDocId) {
-  var sid = String(staffDocId || "").trim();
-  if (!sid) return false;
-  var snap = await getDoc(doc(db, "staff_pins", sid));
-  if (!snap.exists()) return false;
-  return !!String(snap.data().pin || "").trim();
-}
-
 export function removeStaff(id) {
   return deleteDoc(doc(db, COL_STAFF, id));
 }
@@ -183,6 +175,7 @@ export function appendStaffActivity(entry) {
     detail: entry.detail != null ? String(entry.detail) : "",
     subtotal: typeof entry.subtotal === "number" ? entry.subtotal : null,
     orderCount: typeof entry.orderCount === "number" ? entry.orderCount : null,
+    workRole: entry.workRole != null ? String(entry.workRole) : "",
     createdAt: atMs != null ? Timestamp.fromMillis(atMs) : serverTimestamp()
   });
 }

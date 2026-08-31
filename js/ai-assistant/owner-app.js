@@ -6,12 +6,12 @@ import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
 
 function showLoadError(root, message) {
   root.innerHTML =
-    '<div class="ai-app ai-app--error">' +
-    '<p class="ai-kb-load-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' +
+    '<div class="sd-status sd-status--err">' +
+    '<p class="bs-settings__load-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' +
     message +
     "</p>" +
-    '<p class="ai-kb-load-error__hint">Pastikan anda log masuk sebagai owner/admin.</p>' +
-    "</div>";
+    '<p class="sd-footnote">Pastikan anda log masuk sebagai owner/admin.</p></div>';
+  root.removeAttribute("aria-busy");
 }
 
 export async function bootOwnerAiAssistant() {
@@ -24,19 +24,14 @@ export async function bootOwnerAiAssistant() {
       root,
       "Sesi log masuk tidak dijumpai. Sila log masuk semula, kemudian buka Pangkalan data."
     );
-    document.body.classList.remove("ai-boot");
     return;
   }
 
-  root.innerHTML =
-    '<div class="ai-app ai-app--editor"><section class="ai-panel ai-panel--solo" data-ai-panel="kb"></section></div>';
-
-  var kbPanel = root.querySelector('[data-ai-panel="kb"]');
-  mountKnowledgeBase(kbPanel, {
+  root.innerHTML = "";
+  root.removeAttribute("aria-busy");
+  mountKnowledgeBase(root, {
     onItemsChange: function () {}
   });
-
-  document.body.classList.remove("ai-boot");
 }
 
 bootOwnerAiAssistant();

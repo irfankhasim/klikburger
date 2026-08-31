@@ -121,33 +121,6 @@
   filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.1));
 }
 
-.login-hero__trademark {
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  line-height: 1.2;
-  text-align: center;
-  white-space: nowrap;
-  font-size: clamp(0.72rem, 2.35vw, 1.42rem);
-  font-style: italic;
-  font-weight: 900;
-  font-family: "Arial Black", "Segoe UI Black", "Trebuchet MS", "Segoe UI", Arial, sans-serif;
-  letter-spacing: 0.04em;
-  color: #2a1706;
-  text-transform: none;
-  -webkit-text-stroke: 0.35px rgba(255, 247, 234, 0.75);
-  text-shadow:
-    -1px -1px 0 rgba(255, 247, 234, 0.95),
-    1px -1px 0 rgba(255, 247, 234, 0.95),
-    -1px 1px 0 rgba(255, 247, 234, 0.95),
-    1px 1px 0 rgba(255, 247, 234, 0.95),
-    0 1px 0 #cf7a11,
-    0 2px 0 #bd6d0c,
-    0 3px 0 #ab6108,
-    0 7px 12px rgba(0, 0, 0, 0.24);
-}
-
 /* Panel kanan — borang (tanpa “kad” berganda) */
 .page-login .login-card.login-split__main {
   position: relative;
@@ -528,10 +501,6 @@
     margin-bottom: -1.35rem;
     transform: scale(1.1);
     transform-origin: center top;
-  }
-
-  .login-hero__trademark {
-    font-size: clamp(0.65rem, 3.1vw, 1.05rem);
   }
 
   .page-login .login-card.login-split__main {

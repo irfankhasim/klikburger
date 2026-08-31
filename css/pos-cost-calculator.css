@@ -192,6 +192,54 @@
         color: #1e4d1e;
       }
 
+      .kb-status--warning {
+        border-color: #e8cf9a;
+        background: #fffaf0;
+        color: var(--warning);
+      }
+
+      .field-hint {
+        margin: 0.45rem 0 0;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        background: #f4f4f5;
+        border-radius: 6px;
+        line-height: 1.45;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.5rem;
+      }
+
+      .field-hint:empty {
+        display: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .field-hint button {
+        margin-left: 0;
+        padding: 0.15rem 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        font: inherit;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text);
+        text-decoration: none;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .field-hint button:hover {
+        background: #eee;
+      }
+
+      .field--price {
+        margin-bottom: 1.15rem;
+      }
+
       .page-panel {
         display: none;
       }
@@ -234,6 +282,10 @@
       }
 
       .ing-table tbody tr:hover {
+        background: #fafafa;
+      }
+
+      .ing-table tbody tr:hover .ing-cell-name {
         background: #fafafa;
       }
 
@@ -646,8 +698,8 @@
         background: var(--surface);
         border-radius: var(--radius);
         width: 100%;
-        max-width: 520px;
-        max-height: min(90vh, 640px);
+        max-width: 540px;
+        max-height: min(90vh, 680px);
         display: flex;
         flex-direction: column;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
@@ -674,9 +726,18 @@
       }
 
       .modal__body {
-        padding: 1rem 1.25rem;
+        padding: 1rem 1.25rem 1.15rem;
         overflow-y: auto;
         flex: 1;
+        min-height: 0;
+      }
+
+      .modal-panel-single {
+        margin-top: 0.15rem;
+      }
+
+      .modal-ing-section {
+        margin-top: 0.25rem;
       }
 
       .modal-ing-list-label {
@@ -686,10 +747,34 @@
         color: var(--text-muted);
       }
 
+      .modal-ing-scroll {
+        max-height: min(260px, 38vh);
+        overflow-y: auto;
+        overflow-x: hidden;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fafafa;
+        padding: 0.15rem 0.65rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .modal-ing-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .modal-ing-scroll::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 999px;
+      }
+
       .modal__foot {
-        padding: 1rem 1.25rem;
+        padding: 1rem 1.25rem 1.15rem;
         border-top: 1px solid var(--border);
         background: #fafafa;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        flex-shrink: 0;
       }
 
       .field {
@@ -715,12 +800,44 @@
 
       .ing-check-row {
         display: grid;
-        grid-template-columns: 1.25rem 1fr minmax(3.25rem, 4rem) minmax(3.25rem, 4.75rem) 5rem;
-        gap: 0.5rem 0.65rem;
-        align-items: center;
-        padding: 0.5rem 0;
+        grid-template-columns: 1.125rem minmax(0, 1fr) 4.25rem 2.75rem 4.75rem;
+        gap: 0.35rem 0.65rem;
+        align-items: start;
+        padding: 0.55rem 0;
         border-bottom: 1px solid #eee;
         font-size: 0.85rem;
+      }
+
+      .ing-check-row input[type="checkbox"] {
+        margin-top: 0.35rem;
+      }
+
+      .ing-check-row__label {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.12rem;
+        line-height: 1.3;
+        cursor: pointer;
+        padding-top: 0.2rem;
+      }
+
+      .ing-check-row__name {
+        font-weight: 500;
+        color: var(--text);
+        word-break: break-word;
+      }
+
+      .ing-check-row__unit-price {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+      }
+
+      .ing-check-row input[type="number"],
+      .ing-check-row select.js-modal-uom,
+      .ing-check-row__uom-na,
+      .ing-check-row .line-cost {
+        margin-top: 0.2rem;
       }
 
       .ing-check-row:last-child {
@@ -804,6 +921,17 @@
         font-weight: 700;
       }
 
+      .modal-stats .stat-sub {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.2rem 0.35rem;
+        font-size: 0.72rem;
+        font-weight: 400;
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+      }
+
       .modal-stats:has(> .modal-stats--hint:only-child) {
         display: block;
       }
@@ -826,7 +954,7 @@
         gap: 0.5rem;
         align-items: center;
         justify-content: flex-end;
-        margin-top: 1rem;
+        margin-top: 0;
       }
 
       .modal__actions #modal-delete {
@@ -994,7 +1122,7 @@
       }
 
       .ing-table--main {
-        min-width: 43rem;
+        min-width: 36rem;
       }
 
       .ing-table--main .ing-th-ing,
@@ -1003,12 +1131,12 @@
         left: 0;
         z-index: 1;
         background: var(--surface);
-        box-shadow: 6px 0 10px -8px rgba(0, 0, 0, 0.2);
+        box-shadow: 6px 0 10px -8px rgba(0, 0, 0, 0.12);
       }
 
       .ing-table--main thead .ing-th-ing {
         z-index: 2;
-        background: #f3f3f4;
+        background: #fafafa;
       }
 
       .ing-th-sub {
@@ -1020,9 +1148,14 @@
         opacity: 0.85;
       }
 
-      .ing-th-pack,
-      .ing-col-pack {
-        background: #f4f5f7;
+      .ing-th-baki,
+      .ing-col-baki {
+        white-space: nowrap;
+      }
+
+      .ing-th-unit,
+      .ing-col-unit {
+        white-space: nowrap;
       }
 
       .ing-th-cpu,
@@ -1110,17 +1243,20 @@
       }
 
       .ing-ref-pack {
-        display: block;
-        box-sizing: border-box;
-        min-width: 0;
-        padding: 0.32rem 0.45rem;
-        border: 1px solid #e4e4e4;
-        border-radius: var(--radius-sm, 4px);
-        background: #f7f7f8;
+        display: inline-block;
         font-size: 0.82rem;
         font-weight: 600;
+        font-variant-numeric: tabular-nums;
         color: var(--text);
-        line-height: 1.25;
+        line-height: 1.35;
+      }
+
+      .ing-ref-unit {
+        display: inline-block;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        line-height: 1.35;
       }
 
       .ing-col-num {
@@ -1303,10 +1439,14 @@
       }
 
       .ing-drawer-form__fields .field label {
+        display: block;
         font-size: 0.75rem;
         font-weight: 600;
         color: #6a6a6a;
         margin-bottom: 0.2rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .ing-drawer-form__fields .field input,
@@ -1513,7 +1653,7 @@
       }
 
       #modal-btn-add-ingredient {
-        margin-top: 0.65rem;
+        margin-top: 0.35rem;
       }
 
       @media (min-width: 1024px) {
@@ -1565,6 +1705,12 @@
         .app-sidebar__btn.is-active {
           border-left-color: transparent;
           border-bottom-color: var(--sidebar-accent);
+        }
+
+        .ing-check-row {
+          grid-template-columns: 1.125rem minmax(0, 1fr) 3.5rem 2.25rem 4rem;
+          gap: 0.3rem 0.45rem;
+          font-size: 0.8rem;
         }
 
         .modal-stats {

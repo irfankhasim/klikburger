@@ -9,7 +9,6 @@ import { FieldValue } from "firebase-admin/firestore";
 
 const OWNER_DOC_ID = "owner_01";
 const DEFAULT_OWNER_NAME = "Irfan Khasim";
-const DEFAULT_PIN = "0000";
 
 async function resolveOwnerDisplayName(db, auth) {
   try {
@@ -82,16 +81,7 @@ export async function addOwnerStaff() {
     seededFrom: "add-owner-staff.js"
   });
 
-  await db.collection("staff_pins").doc(OWNER_DOC_ID).set(
-    {
-      pin: DEFAULT_PIN,
-      updatedAt: FieldValue.serverTimestamp(),
-      seededFrom: "add-owner-staff.js"
-    },
-    { merge: true }
-  );
-
-  console.log("✓ staff/" + OWNER_DOC_ID + " dicipta (PIN default: " + DEFAULT_PIN + " — tukar selepas setup).");
+  console.log("✓ staff/" + OWNER_DOC_ID + " dicipta.");
   return { created: true, id: OWNER_DOC_ID, name: ownerName };
 }
 

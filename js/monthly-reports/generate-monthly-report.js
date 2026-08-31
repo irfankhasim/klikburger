@@ -29,11 +29,11 @@ import {
   COL_MONTHLY_REPORTS
 } from "../firebase/collections.js";
 import { varianceCategoryFromVariance } from "../drawer-variance.js";
-import {
-  staffSalaryForCalendarMonth,
-  staffAccumulatedSalaryToDate,
-  staffStartedAtIso
-} from "./staff-salary-calc.js";
+import { staffStartedAtIso } from "./staff-salary-calc.js";
+import { buildStaffPerformancePayload } from "./staff-performance-calc.js";
+
+/** Gaji rata semua staf bukan-owner dalam laporan (bukan prorate ikut jam/tarikh mula). */
+var FIXED_STAFF_SALARY_RM = 1000;
 
 var PAGE = 400;
 
@@ -66,6 +66,23 @@ export function lastCompletedCalendarMonthParts(now) {
 
 function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+function str(v) {
+  return String(v != null ? v : "").trim();
+}
+
+function num(v) {
+  return typeof v === "number" ? v : parseFloat(v) || 0;
+}
+
+function tsToMs(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toDate === "function") return ts.toDate().getTime();
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts === "number") return ts;
+  var d = new Date(ts);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
 export function round4(n) {
@@ -159,23 +176,40 @@ function varianceFromClosing(closing) {
  * @param {object} opts
  * @param {string} [opts.source] — "user_regenerate" | "auto_month_close" | "user_first_load"
  * @param {string} [opts.actorUid]
+ * @param {(msg: string) => void} [opts.onProgress]
  */
 export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var o = opts || {};
+  var progress = typeof o.onProgress === "function" ? o.onProgress : function () {};
   var bounds = localMonthBounds(year, month1to12);
   var tsStart = Timestamp.fromDate(bounds.start);
   var tsEnd = Timestamp.fromDate(new Date(year, month1to12, 1, 0, 0, 0)); // start of NEXT month
   var key = monthDocId(year, month1to12);
 
-  var receiptDocs = await fetchPagedByRange(COL_POS_RECEIPTS, "createdAt", tsStart, tsEnd);
-  var purchaseDocs = await fetchPagedByRange(COL_PURCHASE_HISTORY, "createdAt", tsStart, tsEnd);
-  var ledgerDocs = await fetchPagedByRange(COL_INGREDIENT_LEDGER, "occurredAt", tsStart, tsEnd);
-  var shiftDocs = await fetchClosedShiftsInRange(tsStart, tsEnd);
-  var activityDocs = await fetchPagedByRange(COL_STAFF_ACTIVITY, "createdAt", tsStart, tsEnd);
+  progress("Memuatkan data Firestore…");
+  var results = await Promise.all([
+    fetchPagedByRange(COL_POS_RECEIPTS, "createdAt", tsStart, tsEnd),
+    fetchPagedByRange(COL_PURCHASE_HISTORY, "createdAt", tsStart, tsEnd),
+    fetchPagedByRange(COL_INGREDIENT_LEDGER, "occurredAt", tsStart, tsEnd),
+    fetchClosedShiftsInRange(tsStart, tsEnd),
+    fetchPagedByRange(COL_STAFF_ACTIVITY, "createdAt", tsStart, tsEnd),
+    getDocs(collection(db, COL_INGREDIENTS)),
+    getDocs(collection(db, COL_INGREDIENT_BATCHES)),
+    getDocs(collection(db, COL_STAFF)),
+    fetchPagedByRange(COL_SALES, "createdAt", tsStart, tsEnd)
+  ]);
 
-  var ingSnap = await getDocs(collection(db, COL_INGREDIENTS));
-  // Ambil stok semasa dari ingredient_batches
-  var batchSnap = await getDocs(collection(db, COL_INGREDIENT_BATCHES));
+  var receiptDocs = results[0];
+  var purchaseDocs = results[1];
+  var ledgerDocs = results[2];
+  var shiftDocs = results[3];
+  var activityDocs = results[4];
+  var ingSnap = results[5];
+  var batchSnap = results[6];
+  var staffSnap = results[7];
+  var salesLegacySnap = results[8];
+
+  progress("Mengagregat jualan, stok & kakitangan…");
   var batchByIngredient = {};
   batchSnap.docs.forEach(function(d) {
     var x = d.data();
@@ -205,7 +239,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     var a = docSnap.data();
     var kind = String(a.kind || "");
     if (kind !== "clock_in" && kind !== "clock_out") return;
-    var sid = String(a.staffId || docSnap.id || "").trim();
+    var sid = str(a.staffId || docSnap.id || "");
     if (!sid) return;
     if (!clockByStaff[sid]) {
       clockByStaff[sid] = { clockIn: 0, clockOut: 0, events: [] };
@@ -223,7 +257,6 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     });
   });
 
-  var staffSnap = await getDocs(collection(db, COL_STAFF));
   var staffLines = [];
   var payrollTotal = 0;
   staffSnap.docs.forEach(function (d) {
@@ -232,12 +265,12 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     var role = String(x.role || "");
     var isOwner = !!(x.isOwner || role.toLowerCase() === "owner" || d.id === "owner_01");
     var baseName = String(x.name || x.staffName || "").trim() || "Tanpa nama";
-    var est = isOwner ? 0 : staffSalaryForCalendarMonth(x, year, month1to12);
+    var est = isOwner ? 0 : FIXED_STAFF_SALARY_RM;
     if (status === "active" && est > 0) payrollTotal += est;
     var clock = clockByStaff[d.id] || clockByStaff[String(x.staffId || "")] || { clockIn: 0, clockOut: 0, events: [] };
     staffLines.push({
       staffId: d.id,
-      name: isOwner ? baseName + " (Owner)" : baseName,
+      name: baseName,
       role: role,
       isOwner: isOwner,
       employmentStatus: status,
@@ -245,8 +278,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       payAmount: typeof x.payAmount === "number" ? x.payAmount : parseFloat(x.payAmount) || 0,
       startedAt: staffStartedAtIso(x),
       estimatedMonthlySalaryRm: est,
-      salaryDisplayRm: isOwner ? "N/A" : round2(est),
-      accumulatedSalaryRm: isOwner ? 0 : staffAccumulatedSalaryToDate(x, year, month1to12),
+      salaryDisplayRm: isOwner ? "tiada" : round2(est),
+      accumulatedSalaryRm: est,
       clockInCount: clock.clockIn,
       clockOutCount: clock.clockOut,
       clockEvents: clock.events.slice(0, 40)
@@ -258,6 +291,20 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     return String(a.name).localeCompare(String(b.name), "ms");
   });
   payrollTotal = round2(payrollTotal);
+
+  var staffPerf = buildStaffPerformancePayload(activityDocs, receiptDocs, staffLines);
+  var attendanceBySid = {};
+  staffPerf.attendance.lines.forEach(function (l) {
+    attendanceBySid[l.staffId] = l;
+  });
+  staffLines.forEach(function (sl) {
+    var a = attendanceBySid[sl.staffId];
+    if (!a) return;
+    sl.totalHoursWorked = a.totalHoursWorked;
+    sl.totalSessions = a.totalSessions;
+    sl.cashierHoursWorked = a.cashierHoursWorked;
+    sl.kitchenHoursWorked = a.kitchenHoursWorked;
+  });
 
   var grossSales = 0;
   var totalCogs = 0;
@@ -283,7 +330,6 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     else pm = "qr";
     byPay[pm] = (byPay[pm] || 0) + sub;
 
-    // Kira menu paling laris
     var lines = Array.isArray(x.lines) ? x.lines : [];
     lines.forEach(function (line) {
       var itemName = String(line.name || "").trim();
@@ -331,12 +377,15 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   totalVarianceRm = round2(totalVarianceRm);
 
   var purchaseTotalRm = 0;
+  var purchaseTaxTotalRm = 0;
   var purchaseCount = purchaseDocs.length;
   var purchaseTop = [];
   purchaseDocs.forEach(function (d) {
     var x = d.data();
     var t = typeof x.totalAmount === "number" ? x.totalAmount : parseFloat(x.totalAmount) || 0;
+    var tax = typeof x.taxAmount === "number" ? x.taxAmount : parseFloat(x.taxAmount) || 0;
     purchaseTotalRm += t;
+    purchaseTaxTotalRm += tax;
     purchaseTop.push({
       id: d.id,
       totalAmountRm: round2(t),
@@ -345,6 +394,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     });
   });
   purchaseTotalRm = round2(purchaseTotalRm);
+  purchaseTaxTotalRm = round2(purchaseTaxTotalRm);
   purchaseTop.sort(function (a, b) {
     return b.totalAmountRm - a.totalAmountRm;
   });
@@ -426,37 +476,13 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     })
     .sort(function (a, b) { return b.totalCostConsumed - a.totalCostConsumed; });
 
-  // Kira penggunaan kumulatif SEHINGGA akhir bulan ini sahaja
-  var consumptionUpToThisMonth = {};
-
-  // Ambil semua sale_consumption dari ingredient_ledger sehingga akhir bulan ini
-  var consumptionLedgerSnap = await getDocs(
-    query(
-      collection(db, COL_INGREDIENT_LEDGER),
-      where("kind", "==", "sale_consumption"),
-      where("occurredAt", "<=", tsEnd)
-    )
-  );
-
-  consumptionLedgerSnap.docs.forEach(function(d) {
-    var x = d.data();
-    var iid = String(x.ingredientId || "");
-    if (!iid) return;
-    var qty = typeof x.purchaseQty === "number" ? Math.abs(x.purchaseQty) : parseFloat(x.purchaseQty) || 0;
-    consumptionUpToThisMonth[iid] = round4((consumptionUpToThisMonth[iid] || 0) + qty);
-  });
-
-  // Bina ingredientStockSummary
-  // qtyRemaining = stok asal - semua penggunaan sehingga akhir bulan ini
+  // Stok semasa dari ingredient_batches (elak query ledger sejarah penuh).
   var ingredientStockSummary = Object.keys(batchByIngredient).map(function(ingId) {
     var b = batchByIngredient[ingId];
     var name = ingNameById[ingId] || ingId;
     var unit = ingUnitById[ingId] || "unit";
     var qtyOriginal = round4(b.totalOriginal);
-    var qtyUsedUpToThisMonth = round4(consumptionUpToThisMonth[ingId] || 0);
-    var qtyRemaining = round4(Math.max(0, qtyOriginal - qtyUsedUpToThisMonth));
-
-    // Penggunaan bulan ini sahaja (dari consumptionAgg)
+    var qtyRemaining = round4(b.totalRemaining);
     var thisMonthConsumption = ledgerConsumptionByIngredient[ingId];
     var qtyUsedThisMonth = thisMonthConsumption ? round4(thisMonthConsumption.totalQtyConsumed || 0) : 0;
 
@@ -466,7 +492,6 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       unit: unit,
       qtyOriginal: qtyOriginal,
       qtyUsedThisMonth: qtyUsedThisMonth,
-      qtyUsedUpToThisMonth: qtyUsedUpToThisMonth,
       qtyRemaining: qtyRemaining,
       status: qtyRemaining <= 0 ? "habis" : qtyRemaining <= 5 ? "rendah" : "ok"
     };
@@ -504,7 +529,6 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     return b.costBought - a.costBought;
   });
 
-  var salesLegacySnap = await fetchPagedByRange(COL_SALES, "createdAt", tsStart, tsEnd);
   var legacySalesTotal = 0;
   var legacyCount = 0;
   salesLegacySnap.forEach(function (d) {
@@ -520,6 +544,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   // untuk masa hadapan, bukan kos operasi terus bulan ini (COGS sudah dalam grossProfit)
   var netOperating = round2(grossProfit - payrollTotal - otherExpensesRm);
 
+  progress("Menyimpan laporan…");
   var payload = {
     monthKey: key,
     calendarYear: year,
@@ -533,6 +558,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     rawMaterials: {
       purchaseHistoryDocumentCount: purchaseCount,
       purchaseHistoryTotalRm: purchaseTotalRm,
+      purchaseHistoryTaxTotalRm: purchaseTaxTotalRm,
       purchaseTop: purchaseTop,
       ingredientLedgerEntriesInRange: ledgerDocs.length,
       ledgerSpendInitialPurchaseAdjustRm: ledgerPurchaseRm,
@@ -566,11 +592,14 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     },
     staffSalary: {
       note:
-        "Anggaran gaji bulan ini prorata mengikut tarikh mula kerja. Gaji tetap = payAmount sebulan; gaji jam = kadar × 160 jam. Medan accumulatedSalaryRm = jumlah terkumpul dari tarikh mula hingga akhir bulan laporan.",
+        "Bahagian B — Kehadiran & Gaji (semua tugas). Gaji rata RM" +
+        FIXED_STAFF_SALARY_RM +
+        " sebulan setiap staf bukan-owner. totalHoursWorked/totalSessions dikira dari pasangan clock_in/clock_out sebenar (semua tugas).",
       staffCount: staffLines.length,
       activeStaffPayrollEstimateRm: payrollTotal,
       lines: staffLines
     },
+    staffSalesPerformance: staffPerf.salesPerformance,
     company: {
       revenuePosReceiptsRm: grossSales,
       costOfGoodsFifoRm: totalCogs,

@@ -51,7 +51,7 @@ function mountModalShell(title, bodyHtml, footHtml) {
     '<h2 class="ai-modal__title">' +
     escapeHtml(title) +
     "</h2>" +
-    '<button type="button" class="ai-modal__close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>' +
+    '<button type="button" class="ai-modal__close btn-close-x" aria-label="Tutup">✕</button>' +
     "</div>" +
     '<div class="ai-modal__body">' +
     bodyHtml +
@@ -184,12 +184,7 @@ export function openKnowledgeFormModal(item, onSave) {
 }
 
 export function openKnowledgeViewModal(item) {
-  var shell = mountModalShell(
-    "Lihat maklumat",
-    formFieldsHtml(item, true),
-    '<button type="button" class="btn btn--primary ai-modal-cancel">Tutup</button>'
-  );
-  shell.dialog.querySelector(".ai-modal-cancel").addEventListener("click", shell.close);
+  var shell = mountModalShell("Lihat maklumat", formFieldsHtml(item, true), "");
   var details = shell.dialog.querySelector(".ai-form-advanced");
   if (details) details.open = true;
 }

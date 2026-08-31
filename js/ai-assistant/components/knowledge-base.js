@@ -16,26 +16,30 @@ export function mountKnowledgeBase(root, options) {
   var saving = false;
   var lastSavedBody = "";
 
+  if (loadError) {
+    root.innerHTML =
+      '<div class="sd-status sd-status--err" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' +
+      escapeHtml(loadError) +
+      "</div>";
+    return;
+  }
+
   root.innerHTML =
-    (loadError
-      ? '<div class="ai-kb-alert" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' +
-        escapeHtml(loadError) +
-        "</div>"
-      : "") +
-    '<header class="ai-kb-header ai-kb-header--editor">' +
-    '<div class="ai-kb-header__text">' +
-    "<h2 class=\"ai-kb-header__title\">Pangkalan data</h2>" +
-    '<p class="ai-kb-header__desc">Baca maklumat dalam mod paparan. Klik <strong>Edit</strong> untuk ubah, kemudian <strong>Simpan</strong>.</p>' +
-    "</div></header>" +
-    '<section class="ai-kb-editor-wrap">' +
-    '<label class="ai-kb-editor-label" for="ai-kb-editor">Maklumat untuk Pembantu AI</label>' +
-    '<textarea id="ai-kb-editor" class="ai-kb-editor ai-kb-editor--readonly" data-ai-editor readonly spellcheck="true" ' +
-    'placeholder="## Soalan atau topik&#10;Jawapan penuh di sini…"></textarea>' +
-    '<div class="ai-kb-editor-bar">' +
-    '<div class="ai-kb-editor-actions">' +
+    '<header class="kb-page-header">' +
+    '<div class="kb-page-header__row">' +
+    '<h1 class="kb-page-title">Pangkalan data</h1>' +
+    '<div class="bs-settings__header-actions ai-kb-editor-actions">' +
     '<button type="button" class="btn btn--outline" data-ai-action="edit"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</button>' +
     '<button type="button" class="btn btn--primary" data-ai-action="save" disabled><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan</button>' +
-    "</div></div></section>";
+    "</div></div>" +
+    '<p class="kb-page-lead">Maklumat rujukan untuk Pembantu AI. Baca dalam mod paparan; klik <strong>Edit</strong> untuk ubah.</p>' +
+    "</header>" +
+    '<section class="sd-panel bs-kb-editor-panel">' +
+    '<label class="sd-field sd-field--full" for="ai-kb-editor">' +
+    "Kandungan pengetahuan" +
+    '<textarea id="ai-kb-editor" class="ai-kb-editor ai-kb-editor--readonly" data-ai-editor readonly spellcheck="true" ' +
+    'placeholder="## Soalan atau topik&#10;Jawapan penuh di sini…"></textarea>' +
+    "</label></section>";
 
   var editor = root.querySelector("[data-ai-editor]");
   var btnEdit = root.querySelector('[data-ai-action="edit"]');

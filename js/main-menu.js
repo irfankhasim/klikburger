@@ -1,8 +1,9 @@
-import { auth, signOut, db, collection, query, limit, onSnapshot } from "./firebase/init.js";
+import { auth, signOut, db, collection, query, limit, where, onSnapshot, getDocs, doc, getDoc } from "./firebase/init.js";
 
 var LOGIN_PAGE_HREF = new URL("../html/login.html", import.meta.url).href;
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
 import { COL_STAFF } from "./firebase/collections.js";
+import { OWNER_STAFF_DOC_ID } from "./staff/staff-mappers.js";
 import { subscribePosHub } from "./pos-operations-hub.js";
 import {
   subscribeRbac,
@@ -615,9 +616,11 @@ function showBoSettings() {
   var tab = readBoSettingsSubTab();
   iframe.src = "bo-settings.html#" + tab;
   iframe.title = "Tetapan — TAB KAUNTER";
-  if (topbarTitle) topbarTitle.textContent = "Tetapan";
+  if (topbarTitle) topbarTitle.textContent = tab === "database" ? "Pangkalan data" : "Kakitangan";
   setTopbarEmbedLead(
-    "<strong>Kakitangan</strong> — sunting rekod staf. <strong>Pangkalan data</strong> — pengetahuan AI."
+    tab === "database"
+      ? "<strong>Pangkalan data</strong> — maklumat rujukan untuk Pembantu AI."
+      : "<strong>Kakitangan</strong> — sunting rekod staf operasi."
   );
   if (panelTitle) panelTitle.textContent = "";
   if (panelBody) panelBody.textContent = "";
@@ -637,6 +640,14 @@ function wireContentEmbedChildMessages() {
         try {
           sessionStorage.setItem(SETTINGS_TAB_SS, tab);
         } catch (e1) {}
+        if (topbarTitle) {
+          topbarTitle.textContent = tab === "database" ? "Pangkalan data" : "Kakitangan";
+        }
+        setTopbarEmbedLead(
+          tab === "database"
+            ? "<strong>Pangkalan data</strong> — maklumat rujukan untuk Pembantu AI."
+            : "<strong>Kakitangan</strong> — sunting rekod staf operasi."
+        );
         persistShellForce({ v: 1, r: "bo-settings", module: "bo", settingsTab: tab });
         return;
       }
@@ -659,7 +670,7 @@ function showBoMonthlyReports() {
   resetContentEmbedSizing();
   def.hidden = true;
   wrap.hidden = false;
-  iframe.src = "bo-monthly-reports.html";
+  iframe.src = "bo-monthly-reports.html?v=" + Date.now();
   iframe.title = "Laporan penuh — TAB KAUNTER";
   if (topbarTitle) topbarTitle.textContent = "Laporan penuh";
   setTopbarEmbedLead(
@@ -910,7 +921,7 @@ function staffRowsBuildOptionsHtml(rows, curSelectedId, emptyOptionLabel) {
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     var idEsc = escapeHtml(r.id);
-    var label = r.isOwner ? r.name + " (Owner)" : r.name;
+    var label = r.name;
     opts +=
       '<option value="' +
       idEsc +
@@ -1116,8 +1127,165 @@ function tryConsumePosEmbedClick(t, navRoot, e) {
 }
 
 /**
- * Modal: pilih rekod `staff` — dipaparkan selepas tekan Clock in (akaun kongsi).
- * @param {(picked: { id: string, name: string } | null) => void} onClose — null jika batal
+ * Ambil GPS semasa (kalau boleh) untuk sekatan lokasi kedai di clock-in.
+ * Pulang null senyap kalau geolocation tak tersedia/ditolak/timeout — server yang tentukan
+ * sama ada lokasi diperlukan (kalau Owner belum tetapkan lokasi kedai, null diterima).
+ * @returns {Promise<{ lat: number, lng: number } | null>}
+ */
+function getCurrentCoords() {
+  return new Promise(function (resolve) {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      function () {
+        resolve(null);
+      },
+      // enableHighAccuracy:false + timeout pendek — kita cuma perlukan ketepatan tahap
+      // bangunan (radius kedai), bukan navigasi. GPS ketepatan tinggi boleh ambil 5-8 saat
+      // dalam bangunan; lokasi rangkaian (WiFi/sel) biasanya balas < 2 saat.
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
+    );
+  });
+}
+
+var totpEnabledCache = {};
+
+/**
+ * Semak (dengan cache dalam memori) sama ada 2FA diaktifkan Owner untuk staf ini.
+ * Rekod Owner sendiri tidak pernah tertakluk Staff-2FA — sentiasa false.
+ */
+async function staffTotpEnabledCached(staffId) {
+  var id = String(staffId || "").trim();
+  if (!id || id === OWNER_STAFF_DOC_ID) return false;
+  if (Object.prototype.hasOwnProperty.call(totpEnabledCache, id)) return totpEnabledCache[id];
+  try {
+    var snap = await getDoc(doc(db, "staff_totp_status", id));
+    var enabled = snap.exists() && snap.data().enabled === true;
+    totpEnabledCache[id] = enabled;
+    return enabled;
+  } catch (e) {
+    console.warn("[clock-in] staff_totp_status check error:", e);
+    return false;
+  }
+}
+
+/**
+ * Modal: sahkan kod 2FA sebelum clock-out (dipaparkan hanya kalau staf tu ada 2FA diaktifkan).
+ * @param {string} staffId
+ * @param {string} staffName
+ * @param {() => void} onConfirmed — dipanggil selepas kod sah
+ * @param {() => void} [onCancel]
+ */
+function showClockOutTotpModal(staffId, staffName, onConfirmed, onCancel) {
+  var backdrop = document.createElement("div");
+  backdrop.className = "kb-clock-in-staff-modal__backdrop";
+  backdrop.setAttribute("aria-hidden", "false");
+
+  var dialog = document.createElement("div");
+  dialog.className = "kb-clock-in-staff-modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "kb-clockout-totp-title");
+
+  dialog.innerHTML =
+    '<h2 id="kb-clockout-totp-title" class="kb-clock-in-staff-modal__title">Sahkan Clock Out — ' +
+    escapeHtml(staffName || "") +
+    "</h2>" +
+    '<p class="kb-clock-in-staff-modal__lead">Masukkan kod 2FA dari app authenticator untuk sahkan clock out.</p>' +
+    '<label class="kb-clock-in-staff-modal__label" for="kb-clockout-totp-input">Kod 2FA (6 digit)</label>' +
+    '<input type="text" inputmode="numeric" id="kb-clockout-totp-input" maxlength="6" placeholder="Kod dari app authenticator" autocomplete="off" style="width:100%;padding:0.5rem;font-size:1rem;border:1px solid var(--border);border-radius:6px;" />' +
+    '<p id="kb-clockout-totp-error" style="color:var(--color-danger,#c0392b);font-size:0.82rem;margin-top:0.35rem;display:none;"></p>' +
+    '<div class="kb-clock-in-staff-modal__actions">' +
+    '<button type="button" class="btn btn--ghost" id="kb-clockout-totp-cancel">Batal</button>' +
+    '<button type="button" class="btn btn--primary" id="kb-clockout-totp-ok">Sahkan clock out</button>' +
+    "</div>";
+
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  // Prefetch GPS + modul callable SEKARANG (selari dengan pengguna masuk kod 2FA) —
+  // elak freeze bila klik Sahkan.
+  var coordsPromise = getCurrentCoords();
+  var totpCallablesPromise = import("./staff/totp-callables.js");
+
+  var input = dialog.querySelector("#kb-clockout-totp-input");
+  var err = dialog.querySelector("#kb-clockout-totp-error");
+  var btnOk = dialog.querySelector("#kb-clockout-totp-ok");
+  var btnCancel = dialog.querySelector("#kb-clockout-totp-cancel");
+
+  function cleanup() {
+    document.removeEventListener("keydown", onKey);
+    try {
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    } catch (e) {}
+  }
+  function onKey(e) {
+    if (e.key === "Escape") {
+      cleanup();
+      if (onCancel) onCancel();
+    }
+  }
+  document.addEventListener("keydown", onKey);
+  backdrop.addEventListener("click", function (e) {
+    if (e.target === backdrop) {
+      cleanup();
+      if (onCancel) onCancel();
+    }
+  });
+  btnCancel.onclick = function () {
+    cleanup();
+    if (onCancel) onCancel();
+  };
+
+  btnOk.onclick = async function () {
+    var code = String(input.value || "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      err.textContent = "Masukkan kod 2FA 6 digit.";
+      err.style.display = "block";
+      return;
+    }
+    btnOk.disabled = true;
+    btnOk.textContent = "Mengesahkan…";
+    try {
+      var coords = await coordsPromise;
+      var { verifyStaffClockIn } = await totpCallablesPromise;
+      var result = await verifyStaffClockIn(staffId, code, coords, { action: "clock_out" });
+      if (!result.verified) {
+        err.textContent = result.error || "Kod 2FA tidak sepadan.";
+        err.style.display = "block";
+        input.value = "";
+        input.focus();
+        btnOk.disabled = false;
+        btnOk.textContent = "Sahkan clock out";
+        return;
+      }
+      cleanup();
+      onConfirmed();
+    } catch (e2) {
+      console.warn("[clock-out] verify error:", e2);
+      err.textContent = "Tidak dapat sahkan 2FA sekarang. Sila cuba lagi.";
+      err.style.display = "block";
+      btnOk.disabled = false;
+      btnOk.textContent = "Sahkan clock out";
+    }
+  };
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      btnOk.click();
+    }
+  });
+  input.focus();
+}
+
+/**
+ * Modal: pilih rekod `staff` + tugas (Cashier/Kitchen) — dipaparkan selepas tekan Clock in (akaun kongsi).
+ * @param {(picked: { id: string, name: string, workRole: string } | null) => void} onClose — null jika batal
  */
 function showClockInStaffPickerModal(onClose) {
   var backdrop = document.createElement("div");
@@ -1136,13 +1304,20 @@ function showClockInStaffPickerModal(onClose) {
     '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-staff-sel">Kakitangan</label>' +
     '<select id="kb-clock-in-staff-sel" class="kb-clock-in-staff-modal__select" aria-label="Pilih kakitangan">' +
     '<option value="">' + escapeHtml("Memuat senarai…") + "</option></select>" +
-    '<div id="kb-pin-section" style="margin-top:1rem;display:none;">' +
-    '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-pin-input">PIN Clock In</label>' +
-    '<div style="display:flex;gap:8px;align-items:center;">' +
-    '<input type="password" id="kb-clock-in-pin-input" maxlength="6" placeholder="Masukkan PIN" autocomplete="off" style="flex:1;padding:0.5rem;font-size:1rem;border:1px solid var(--border);border-radius:6px;" />' +
-    '<button type="button" id="kb-pin-toggle" style="padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;" aria-label="Tunjuk PIN"><i class="fa-solid fa-eye"></i></button>' +
+    '<div id="kb-role-section" style="margin-top:1rem;display:none;">' +
+    '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-role-sel">Tugas untuk sesi ini</label>' +
+    '<select id="kb-clock-in-role-sel" class="kb-clock-in-staff-modal__select" aria-label="Pilih tugas">' +
+    '<option value="">— Pilih tugas —</option>' +
+    '<option value="cashier" id="kb-role-opt-cashier">Cashier</option>' +
+    '<option value="kitchen">Kitchen</option>' +
+    "</select>" +
+    '<p id="kb-role-cashier-taken" style="color:var(--text-muted);font-size:0.78rem;margin-top:0.35rem;display:none;"></p>' +
+    '<p id="kb-role-error" style="color:var(--color-danger,#c0392b);font-size:0.82rem;margin-top:0.35rem;display:none;">Sila pilih tugas (Cashier/Kitchen).</p>' +
     "</div>" +
-    '<p id="kb-pin-error" style="color:var(--color-danger,#c0392b);font-size:0.82rem;margin-top:0.35rem;display:none;">PIN tidak betul. Sila cuba lagi.</p>' +
+    '<div id="kb-totp-section" style="margin-top:1rem;display:none;">' +
+    '<label class="kb-clock-in-staff-modal__label" for="kb-clock-in-totp-input">Kod 2FA (6 digit)</label>' +
+    '<input type="text" inputmode="numeric" id="kb-clock-in-totp-input" maxlength="6" placeholder="Kod dari app authenticator" autocomplete="off" style="width:100%;padding:0.5rem;font-size:1rem;border:1px solid var(--border);border-radius:6px;" />' +
+    '<p id="kb-totp-error" style="color:var(--color-danger,#c0392b);font-size:0.82rem;margin-top:0.35rem;display:none;">Kod 2FA tidak sepadan.</p>' +
     "</div>" +
     '<div class="kb-clock-in-staff-modal__actions">' +
     '<button type="button" class="btn btn--ghost" id="kb-clock-in-staff-cancel">Batal</button>' +
@@ -1152,37 +1327,71 @@ function showClockInStaffPickerModal(onClose) {
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
 
+  // Prefetch GPS + modul callable SEKARANG (selari dengan pengguna pilih nama/tugas/masuk
+  // kod 2FA) — elak pengguna nampak "Mengesahkan…" freeze tunggu GPS lock / muat modul
+  // bila klik Sahkan.
+  var coordsPromise = getCurrentCoords();
+  var totpCallablesPromise = import("./staff/totp-callables.js");
+
   var sel = dialog.querySelector("#kb-clock-in-staff-sel");
   var btnOk = dialog.querySelector("#kb-clock-in-staff-ok");
   var btnCancel = dialog.querySelector("#kb-clock-in-staff-cancel");
   var actionsRow = dialog.querySelector(".kb-clock-in-staff-modal__actions");
-  var pinSection = dialog.querySelector("#kb-pin-section");
-  var pinInput = dialog.querySelector("#kb-clock-in-pin-input");
-  var pinToggle = dialog.querySelector("#kb-pin-toggle");
-  var pinError = dialog.querySelector("#kb-pin-error");
+  var roleSection = dialog.querySelector("#kb-role-section");
+  var roleSel = dialog.querySelector("#kb-clock-in-role-sel");
+  var roleOptCashier = dialog.querySelector("#kb-role-opt-cashier");
+  var roleCashierTaken = dialog.querySelector("#kb-role-cashier-taken");
+  var roleError = dialog.querySelector("#kb-role-error");
+  var totpSection = dialog.querySelector("#kb-totp-section");
+  var totpInput = dialog.querySelector("#kb-clock-in-totp-input");
+  var totpError = dialog.querySelector("#kb-totp-error");
+  var selectedStaffRequiresTotp = false;
 
-  // Show/hide PIN section when staff is selected
+  // Semak sekali bila modal dibuka: kalau dah ada Cashier bertugas, sekat opsyen tu.
+  // Semakan ni cuma untuk UX (elak klik sia-sia) — server (verifyStaffClockIn) tetap
+  // penentu muktamad, jadi tak jadi masalah kalau data ni lapuk sedikit (race condition).
+  getDocs(query(collection(db, "pos_active_shift"), where("workRole", "==", "cashier"), limit(1)))
+    .then(function (snap) {
+      if (snap.empty) return;
+      var d = snap.docs[0].data();
+      if (roleOptCashier) {
+        roleOptCashier.disabled = true;
+        roleOptCashier.textContent = "Cashier (sudah bertugas)";
+      }
+      if (roleCashierTaken) {
+        roleCashierTaken.textContent = "Cashier sekarang: " + String(d.staffName || "staf lain") + ". Pilih Kitchen.";
+        roleCashierTaken.style.display = "block";
+      }
+    })
+    .catch(function (e) {
+      console.warn("[clock-in] cashier-slot check error:", e);
+    });
+
+  // Show/hide tugas + 2FA section bila staf dipilih
   sel.addEventListener("change", function () {
     var v = String(sel.value || "").trim();
+    selectedStaffRequiresTotp = false;
+    totpSection.style.display = "none";
+    totpInput.value = "";
+    totpError.style.display = "none";
+    roleSection.style.display = v ? "block" : "none";
+    roleSel.value = "";
+    roleError.style.display = "none";
     if (v) {
-      pinSection.style.display = "block";
-      pinInput.value = "";
-      pinError.style.display = "none";
-      pinInput.focus();
-    } else {
-      pinSection.style.display = "none";
+      staffTotpEnabledCached(v).then(function (enabled) {
+        if (String(sel.value || "").trim() !== v) return; // pilihan dah berubah semasa fetch
+        selectedStaffRequiresTotp = enabled;
+        totpSection.style.display = enabled ? "block" : "none";
+      });
     }
   });
 
-  // Toggle PIN visibility
-  pinToggle.addEventListener("click", function () {
-    var isHidden = pinInput.type === "password";
-    pinInput.type = isHidden ? "text" : "password";
-    pinToggle.querySelector("i").className = isHidden ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+  roleSel.addEventListener("change", function () {
+    if (roleSel.value) roleError.style.display = "none";
   });
 
-  // Allow Enter key in PIN input to submit
-  pinInput.addEventListener("keydown", function (e) {
+  // Allow Enter key in 2FA input to submit
+  totpInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       e.preventDefault();
       btnOk.click();
@@ -1301,37 +1510,90 @@ function showClockInStaffPickerModal(onClose) {
       return;
     }
 
-    var enteredPin = String(pinInput ? pinInput.value || "" : "").trim();
+    var workRole = String(roleSel ? roleSel.value || "" : "").trim();
+    if (!workRole) {
+      if (roleError) roleError.style.display = "block";
+      try {
+        roleSel.focus();
+      } catch (e) {}
+      return;
+    }
+
+    var enteredTotp = String(totpInput ? totpInput.value || "" : "").trim();
+
+    if (selectedStaffRequiresTotp && !/^\d{6}$/.test(enteredTotp)) {
+      if (totpError) {
+        totpError.textContent = "Masukkan kod 2FA 6 digit dari app authenticator.";
+        totpError.style.display = "block";
+      }
+      if (totpInput) totpInput.focus();
+      return;
+    }
 
     btnOk.disabled = true;
     btnOk.textContent = "Mengesahkan…";
 
     try {
-      var { verifyStaffPinCallable } = await import("./staff/verify-staff-pin-callable.js");
-      var pinResult = await verifyStaffPinCallable(v, enteredPin);
+      var coords = await coordsPromise;
+      var { verifyStaffClockIn } = await totpCallablesPromise;
+      var result = await verifyStaffClockIn(v, enteredTotp, coords, { workRole: workRole, action: "clock_in" });
 
-      if (!pinResult.verified) {
-        if (pinError) {
-          pinError.textContent = pinResult.error || "PIN tidak betul. Sila cuba lagi.";
-          pinError.style.display = "block";
+      if (!result.verified) {
+        var isCashierTaken = /[Cc]ashier sudah bertugas/.test(result.error || "");
+        // Ralat bukan tentang kod 2FA (slot Cashier diambil, "Sudah clock in.", dll.) — papar
+        // di seksyen tugas (sentiasa nampak) bukan seksyen 2FA (mungkin tersembunyi/tak relevan
+        // bila staf ni tak diaktifkan 2FA langsung, elak nampak macam minta kod 2FA).
+        if ((isCashierTaken || !selectedStaffRequiresTotp) && roleError) {
+          roleError.textContent = result.error || "Tidak dapat clock in.";
+          roleError.style.display = "block";
+          if (isCashierTaken && roleOptCashier) {
+            roleOptCashier.disabled = true;
+            roleOptCashier.textContent = "Cashier (sudah bertugas)";
+          }
+        } else if (totpError) {
+          totpError.textContent = result.error || "Kod 2FA tidak sepadan.";
+          totpError.style.display = "block";
+          if (totpSection) totpSection.style.display = "block";
+          if (selectedStaffRequiresTotp && totpInput) {
+            totpInput.value = "";
+            totpInput.focus();
+          }
         }
-        if (pinInput) {
-          pinInput.value = "";
-          pinInput.focus();
-        }
+        var optFail = sel.options[sel.selectedIndex];
+        import("./pos-firestore-hub.js")
+          .then(function (hub) {
+            return hub.appendPosAudit({
+              type: "clockin_totp_failed",
+              message: "Kod 2FA salah semasa cuba clock in.",
+              meta: { staffId: v, staffName: optFail ? String(optFail.text || "").trim() : "" }
+            });
+          })
+          .catch(function () {});
         btnOk.disabled = false;
         btnOk.textContent = "Sahkan clock in";
         return;
       }
       var opt = sel.options[sel.selectedIndex];
       var name = opt ? String(opt.text || "").trim() : "";
-      cleanup({ id: v, name: name });
+      cleanup({ id: v, name: name, workRole: workRole });
     } catch (err) {
-      console.warn("[clock-in] PIN check error:", err);
-      // Log masuk ialah lapisan keselamatan utama — jika semakan PIN tidak tersedia, benarkan clock-in.
+      console.warn("[clock-in] verify error:", err);
+      if (selectedStaffRequiresTotp || workRole !== "cashier") {
+        // 2FA diaktifkan, ATAU tugas bukan-cashier (roster + staff_activity ditulis di server,
+        // tiada rekod tempatan sandaran) — fail-CLOSED, jangan benarkan clock-in tanpa pengesahan.
+        if (totpError) {
+          totpError.textContent = "Tidak dapat sahkan clock in sekarang. Sila cuba lagi.";
+          totpError.style.display = "block";
+        }
+        btnOk.disabled = false;
+        btnOk.textContent = "Sahkan clock in";
+        return;
+      }
+      // Cashier + 2FA tak diaktifkan — log masuk ialah lapisan keselamatan utama,
+      // benarkan clock-in walaupun semakan tak tersedia (tingkah laku sedia ada).
       var opt2 = sel.options[sel.selectedIndex];
       var name2 = opt2 ? String(opt2.text || "").trim() : "";
-      cleanup({ id: v, name: name2 });
+      cleanup({ id: v, name: name2, workRole: workRole });
     } finally {
       try {
         btnOk.disabled = false;
@@ -1341,6 +1603,105 @@ function showClockInStaffPickerModal(onClose) {
   };
 
   loadStaffIntoSelect();
+}
+
+var activeShiftDocs = [];
+var activeShiftUnsub = null;
+
+/** Langganan realtime pos_active_shift (satu kali) — roster siapa sedang bertugas serentak. */
+function ensureActiveShiftRealtimeSub() {
+  if (activeShiftUnsub) return;
+  activeShiftUnsub = onSnapshot(
+    collection(db, "pos_active_shift"),
+    function (snap) {
+      activeShiftDocs = snap.docs.map(function (d) {
+        return Object.assign({ id: d.id }, d.data());
+      });
+      renderActiveShiftRoster();
+    },
+    function (e) {
+      console.warn("[roster] pos_active_shift sub error:", e);
+    }
+  );
+}
+
+function renderActiveShiftRoster() {
+  var el = document.getElementById("kb-active-roster");
+  if (!el) return;
+  // Papar SEMUA (termasuk Cashier) — device lain (cth tablet dapur) tak nampak ringkasan
+  // "Sedang bertugas" tu, ia cuma wujud di device Cashier sendiri (session tempatan). Tapi
+  // baris Cashier TIADA butang "Clock out" di sini — clock-out Cashier mesti di device asal
+  // (session tempatan dia), kalau tidak roster Firestore clear tapi session tempatan tersekat
+  // "masih clock-in" (dua sumber kebenaran tak sync).
+  var rows = activeShiftDocs.slice();
+  if (!rows.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML =
+    '<p class="kb-active-roster__title" style="margin:1rem 0 0.4rem;font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Staf bertugas (' +
+    rows.length +
+    ")</p>" +
+    rows
+      .map(function (x) {
+        var isCashier = String(x.workRole || "") === "cashier";
+        return (
+          '<div class="kb-active-roster__row" style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">' +
+          '<span style="font-size:0.88rem;">' +
+          escapeHtml(x.staffName || x.staffId || "") +
+          ' <span style="color:var(--text-muted);font-size:0.78rem;">(' +
+          escapeHtml(x.workRole || "") +
+          ")</span></span>" +
+          (isCashier
+            ? '<span style="font-size:0.75rem;color:var(--text-muted);">Clock out di terminal asal</span>'
+            : '<button type="button" class="btn btn--ghost btn--sm js-roster-clockout" data-staff-id="' +
+              escapeHtml(x.staffId || x.id) +
+              '" data-staff-name="' +
+              escapeHtml(x.staffName || "") +
+              '">Clock out</button>') +
+          "</div>"
+        );
+      })
+      .join("");
+
+  el.querySelectorAll(".js-roster-clockout").forEach(function (btn) {
+    btn.onclick = function () {
+      var staffId = btn.getAttribute("data-staff-id");
+      var staffName = btn.getAttribute("data-staff-name");
+      function doRosterClockOut(code) {
+        btn.disabled = true;
+        getCurrentCoords()
+          .then(function (coords) {
+            return import("./staff/totp-callables.js").then(function (m) {
+              return m.verifyStaffClockIn(staffId, code || "", coords, { action: "clock_out" });
+            });
+          })
+          .then(function (result) {
+            if (!result.verified) {
+              window.alert(result.error || "Tidak dapat clock out sekarang.");
+              btn.disabled = false;
+              return;
+            }
+            // Panel akan auto-kemas kini bila listener pos_active_shift terima perubahan.
+          })
+          .catch(function (e) {
+            console.warn("[roster] clock-out error:", e);
+            window.alert("Tidak dapat clock out sekarang. Sila cuba lagi.");
+            btn.disabled = false;
+          });
+      }
+      staffTotpEnabledCached(staffId).then(function (enabled) {
+        if (!enabled) {
+          doRosterClockOut("");
+          return;
+        }
+        showClockOutTotpModal(staffId, staffName, function () {
+          // showClockOutTotpModal dah sahkan kod & panggil verifyStaffClockIn(action:"clock_out") sendiri —
+          // roster akan auto-kemas kini dari listener, tiada tindakan tambahan diperlukan di sini.
+        });
+      });
+    };
+  });
 }
 
 function renderClockPanel() {
@@ -1392,7 +1753,11 @@ function renderClockPanel() {
       "</p>" +
       "</div>" +
       "</div>" +
-      getShiftPanelHtml();
+      getShiftPanelHtml() +
+      '<div id="kb-active-roster" class="kb-active-roster"></div>';
+
+    ensureActiveShiftRealtimeSub();
+    renderActiveShiftRoster();
 
     var ci = document.getElementById("kb-clock-in");
     if (ci && !clockInBlocked) {
@@ -1409,7 +1774,14 @@ function renderClockPanel() {
         if (requiresOperationalStaffPicker()) {
           showClockInStaffPickerModal(function (picked) {
             if (!picked || !picked.id) return;
-            setPosOperationalStaff(picked.id, picked.name);
+            if (picked.workRole !== "cashier") {
+              // Laluan bukan-cashier (cth Kitchen): server dah urus roster + staff_activity
+              // dalam verifyStaffClockIn — device ni TAK dikunci, jangan sentuh sesi tempatan.
+              window.alert("Clock in berjaya — " + picked.name + " (" + picked.workRole + ").");
+              renderClockPanel();
+              return;
+            }
+            setPosOperationalStaff(picked.id, picked.name, picked.workRole);
             var r = clockIn();
             if (!r.ok) {
               window.alert(r.error);
@@ -1430,14 +1802,49 @@ function renderClockPanel() {
     var co = document.getElementById("kb-clock-out");
     if (co && !co.disabled) {
       co.onclick = function () {
-        var r = clockOut();
-        if (!r.ok) {
-          window.alert(r.error);
+        function doClockOut() {
+          var r = clockOut();
+          if (!r.ok) {
+            window.alert(r.error);
+            return;
+          }
+          renderClockPanel();
+          renderStatusBar();
+          applyPosLinkLocks();
+        }
+        // Lepaskan slot roster pos_active_shift (kalau ada) — best-effort, tak sekat clock-out
+        // tempatan kalau gagal (fail-open sama macam tingkah laku PIN lama).
+        function releaseShiftSlotThenClockOut(staffId) {
+          getCurrentCoords()
+            .then(function (coords) {
+              return import("./staff/totp-callables.js").then(function (m) {
+                return m.verifyStaffClockIn(staffId, "", coords, { action: "clock_out" });
+              });
+            })
+            .catch(function (e) {
+              console.warn("[clock-out] release shift slot error:", e);
+            })
+            .finally(function () {
+              doClockOut();
+            });
+        }
+        var sess = loadSession();
+        var staffId = String(sess.operationalStaffId || "").trim();
+        if (!staffId) {
+          doClockOut();
           return;
         }
-        renderClockPanel();
-        renderStatusBar();
-        applyPosLinkLocks();
+        if (staffId === OWNER_STAFF_DOC_ID) {
+          releaseShiftSlotThenClockOut(staffId);
+          return;
+        }
+        staffTotpEnabledCached(staffId).then(function (enabled) {
+          if (!enabled) {
+            releaseShiftSlotThenClockOut(staffId);
+            return;
+          }
+          showClockOutTotpModal(staffId, sess.operationalStaffName || "", doClockOut);
+        });
       };
     }
     renderShiftPanelUI(hub);
@@ -1799,39 +2206,8 @@ async function bootMainMenu() {
 bootMainMenu();
 
 // ==========================================
-// TABLET / ANDROID — back button, rotation, network status
+// TABLET — rotation, network status
 // ==========================================
-
-// Android back button — guna @capacitor/app melalui global Capacitor.Plugins.
-// (App ini ESM tanpa bundler, jadi bare import "@capacitor/app" tak boleh resolve
-//  dalam WebView; native plugin didedahkan melalui window.Capacitor.Plugins.App.)
-(function bindAndroidBackButton() {
-  var App =
-    (window.Capacitor &&
-      window.Capacitor.Plugins &&
-      window.Capacitor.Plugins.App) ||
-    null;
-  if (!App || typeof App.addListener !== "function") return;
-
-  App.addListener("backButton", function (data) {
-    var openModals = document.querySelectorAll(
-      '[role="dialog"]:not([hidden]), .is-open, [data-ai-backdrop]:not([hidden])'
-    );
-    if (openModals.length > 0) {
-      openModals.forEach(function (modal) {
-        modal.hidden = true;
-        modal.classList.remove("is-open");
-        modal.setAttribute("aria-hidden", "true");
-      });
-      return;
-    }
-    if (!data || !data.canGoBack) {
-      if (typeof App.exitApp === "function") App.exitApp();
-      return;
-    }
-    window.history.back();
-  });
-})();
 
 // Handle orientation change untuk tablet
 window.addEventListener("orientationchange", function () {

@@ -574,16 +574,12 @@ function renderIngTable() {
       "</span>" +
       formatIngredientStockLineHtml(ing) +
       "</td>" +
-      '<td class="ing-col-pack ing-col-num ing-col--readonly" title="Baca sahaja">' +
-      '<span class="ing-ref-pack" aria-label="Harga pakej (RM)">' +
-      escapeHtml(String(ing.purchasePrice)) +
-      "</span></td>" +
-      '<td class="ing-col-pack ing-col-num ing-col-baki ing-col--readonly" title="Baki / asal (ikut giliran lot)">' +
+      '<td class="ing-col-num ing-col-baki ing-col--readonly" title="Baki / asal (ikut giliran lot)">' +
       '<span class="ing-ref-pack ing-ref-pack--baki js-ing-baki-pack" aria-label="Baki berbanding asal">' +
       escapeHtml(formatIngredientBakiPackDisplay(ing)) +
       "</span></td>" +
-      '<td class="ing-col-pack ing-col--readonly" title="Baca sahaja">' +
-      '<span class="ing-ref-pack" aria-label="Unit pakej rujukan">' +
+      '<td class="ing-col-unit ing-col--readonly" title="Unit pakej rujukan">' +
+      '<span class="ing-ref-unit">' +
       escapeHtml(ing.unit || "—") +
       "</span></td>" +
       '<td class="num ing-col-cpu" data-label="Kos / unit" title="Kos seunit">' +

@@ -17,6 +17,7 @@ import {
   canBypassStaffRestrictions,
   canAccessOperationalModules,
   canUseFinancialControls,
+  canOpenCashDrawer,
   isReadOnlyMode,
   getActorForAudit,
   clearManagerPinFailures,
@@ -134,7 +135,7 @@ function applyShiftActionGates(state) {
   var btnOpen = document.getElementById("btn-shift-open");
   if (btnOpen) {
     btnOpen.hidden = !!sh.isOpen;
-    btnOpen.disabled = sh.isOpen ? true : !ops || ro;
+    btnOpen.disabled = sh.isOpen ? true : !ops || ro || !canOpenCashDrawer();
   }
   setDis("btn-cash-in", !fin || ro || !sh.isOpen);
   setDis("btn-cash-out", !fin || ro || !sh.isOpen);
@@ -264,6 +265,10 @@ function handleShiftOpen() {
   }
   if (isReadOnlyMode() && !canBypassStaffRestrictions()) {
     window.alert("Mod baca sahaja — clock out atau tunggu drawer baharu.");
+    return;
+  }
+  if (!canOpenCashDrawer()) {
+    window.alert("Hanya staf bertugas sebagai Cashier dibenarkan membuka drawer tunai.");
     return;
   }
   showModal(

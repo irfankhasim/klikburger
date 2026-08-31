@@ -121,6 +121,9 @@ export function createPurchaseBatch(p) {
   if (p.supplierBatchCode != null && String(p.supplierBatchCode) !== "") {
     doc.supplierBatchCode = String(p.supplierBatchCode);
   }
+  if (typeof p.taxAmount === "number" && p.taxAmount > 0) {
+    doc.taxAmount = Math.round(p.taxAmount * 10000) / 10000;
+  }
   return addDoc(collection(db, COL_INGREDIENT_BATCHES), doc);
 }
 

@@ -39,8 +39,7 @@ export function sortStaffOwnerFirst(staffRows) {
 }
 
 export function staffDisplayNameWithOwnerSuffix(s) {
-  var name = staffCanonicalDisplayName(s && s.name);
-  return isOwnerStaffRecord(s) ? name + " (Owner)" : name;
+  return staffCanonicalDisplayName(s && s.name);
 }
 
 export function docToStaff(d) {
@@ -175,6 +174,7 @@ export function docToStaffActivity(d) {
     staffId: String(data.staffId || ""),
     staffName: String(data.staffName || ""),
     kind: String(data.kind || ""),
+    workRole: data.workRole != null ? String(data.workRole) : "",
     detail: data.detail != null ? String(data.detail) : "",
     createdAt: data.createdAt || null
   };

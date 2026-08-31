@@ -10,6 +10,8 @@
 /* Iframe Tetapan / BO — jangan paksa tinggi skrin penuh; scroll utama di induk */
 html.kb-embed body.staff-dash {
   min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 html.kb-embed .staff-dash .sd-app {
@@ -18,6 +20,7 @@ html.kb-embed .staff-dash .sd-app {
 
 html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   padding-bottom: 0.65rem;
+  min-height: 0;
 }
 
 .sd-app {
@@ -257,6 +260,64 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   font-size: 0.82rem;
 }
 
+/* ——— Jadual Kehadiran (sel & lencana seragam) ——— */
+.sd-cell-strong {
+  font-weight: 500;
+  font-size: 0.81rem;
+  color: var(--text);
+}
+
+.sd-cell-muted {
+  font-size: 0.81rem;
+  color: var(--text-muted);
+}
+
+.sd-cell-muted--sm {
+  font-size: 0.7rem;
+}
+
+.sd-staff-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.sd-staff-cell__name {
+  font-weight: 500;
+  font-size: 0.81rem;
+}
+
+.sd-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sd-badge--owner {
+  background: #e6f1fb;
+  color: #185fa5;
+}
+
+.sd-badge--cashier {
+  background: #eaf3de;
+  color: #3b6d11;
+}
+
+.sd-badge--kitchen {
+  background: #fdeee0;
+  color: #b3540a;
+}
+
+.sd-badge--active {
+  background: #fff8e1;
+  color: #8a6100;
+}
+
 .sd-tier {
   display: inline-block;
   padding: 0.15rem 0.45rem;
@@ -410,6 +471,13 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   display: none !important;
 }
 
+/* .sd-field set display:flex terus — tanpa override ni, atribut hidden diabaikan (author CSS
+   menang berbanding UA default [hidden]). Bahagian macam #bs-totp-block guna .hidden=true
+   untuk sembunyi (cth 2FA untuk Owner) — mesti eksplisit di sini. */
+.sd-field[hidden] {
+  display: none !important;
+}
+
 .sd-modal {
   width: 100%;
   max-width: 520px;
@@ -428,13 +496,29 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
+.sd-modal__head .btn {
+  width: auto;
+  margin-top: 0;
+  flex: 0 0 auto;
+}
+
 .sd-modal__head h2 {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 1.1rem;
+  line-height: 1.35;
+  padding-right: 0.25rem;
+}
+
+.sd-modal__foot .btn {
+  width: auto;
+  margin-top: 0;
 }
 
 .sd-modal__body {

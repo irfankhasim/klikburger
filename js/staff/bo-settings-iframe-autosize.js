@@ -20,6 +20,10 @@ function postInnerHeight() {
   window.parent.postMessage({ type: "fyp-bs-inner-height", height: measureInnerHeight() }, "*");
 }
 
+export function notifyInnerHeight() {
+  requestAnimationFrame(postInnerHeight);
+}
+
 function init() {
   if (window.parent === window) return;
 
@@ -40,6 +44,10 @@ function init() {
     });
     ro.observe(document.documentElement);
     if (document.body) ro.observe(document.body);
+    var layout = document.querySelector(".bs-settings__layout");
+    if (layout) ro.observe(layout);
+    var staffList = document.getElementById("bs-staff-list");
+    if (staffList) ro.observe(staffList);
   } catch (e) {}
 }
 

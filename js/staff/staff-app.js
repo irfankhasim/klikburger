@@ -1,8 +1,9 @@
 /**
  * Dashboard Kakitangan — pemantauan kehadiran & drawer tunai (BO).
  */
-import { auth } from "../firebase/init.js";
+import { auth, db, collection, query, where, getDocs, Timestamp } from "../firebase/init.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
+import { COL_POS_RECEIPTS } from "../firebase/collections.js";
 import {
   docToStaff,
   docToStaffActivity,
@@ -13,10 +14,12 @@ import {
 import { isClockActivityKind } from "./staff-analytics.js";
 import { subscribeStaff, subscribeStaffActivity, subscribeClosedPosShifts } from "./staff-repository.js";
 import { roundMoney, varianceCategoryFromVariance, varianceLabelMs } from "../drawer-variance.js";
+import { buildStaffPerformancePayload } from "../monthly-reports/staff-performance-calc.js";
 
 var staffList = [];
 var activityRows = [];
 var posShiftRows = [];
+var receiptRows = [];
 var filterMonthStr = "";
 
 var staffFirestoreUnsubs = [];
@@ -115,7 +118,7 @@ function renderSummary() {
     " rekod</div></article>" +
     '<article class="sd-metric"><div class="sd-metric__label">Rekod clock (bulan)</div><div class="sd-metric__value">' +
     clockN +
-    '</div><div class="sd-metric__hint">Clock in / clock out</div></article>' +
+    '</div><div class="sd-metric__hint">Clock in + clock out</div></article>' +
     '<article class="sd-metric"><div class="sd-metric__label">Tutup shift (bulan)</div><div class="sd-metric__value">' +
     drawerN +
     '</div><div class="sd-metric__hint">Penutupan drawer</div></article>' +
@@ -228,10 +231,13 @@ function pairClockSessions(activityRows) {
 
     var dateInfo = fmtClockDate(ciMs);
 
+    var workRole = String(ci.workRole || "").trim().toLowerCase() === "kitchen" ? "kitchen" : "cashier";
+
     sessions.push({
       staffId: ci.staffId,
       staffName: staffName,
       isOwner: isOwner,
+      workRole: workRole,
       initials: initials,
       date: dateInfo.date,
       dayName: dateInfo.day,
@@ -280,58 +286,48 @@ function renderClockTable() {
 
   if (!sessions.length) {
     tb.innerHTML =
-      '<tr><td colspan="5" class="sd-footnote" style="text-align:center;padding:20px">Tiada rekod kehadiran pada bulan ini.</td></tr>';
+      '<tr><td colspan="6" class="sd-footnote" style="text-align:center;padding:20px">Tiada rekod kehadiran pada bulan ini.</td></tr>';
     return;
   }
 
   tb.innerHTML = sessions
     .map(function (s) {
-      var rbBg = s.isOwner ? "#E6F1FB" : "#EAF3DE";
-      var rbColor = s.isOwner ? "#185FA5" : "#3B6D11";
-      var roleLabel = s.isOwner ? "Owner" : "Staff";
-      var roleBadge =
-        '<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:999px;background:' +
-        rbBg +
-        ";color:" +
-        rbColor +
-        ';margin-left:6px">' +
-        roleLabel +
-        "</span>";
-
+      var ownerBadge = s.isOwner ? '<span class="sd-badge sd-badge--owner">Owner</span>' : "";
       var staffCell =
-        '<div style="display:flex;align-items:center">' +
-        '<span style="font-weight:500;font-size:13px">' +
+        '<div class="sd-staff-cell">' +
+        '<span class="sd-staff-cell__name">' +
         escapeHtml(s.staffName.replace(/ \(Owner\)$/, "")) +
-        roleBadge +
-        "</span></div>";
+        "</span>" +
+        ownerBadge +
+        "</div>";
 
-      var clockInCell = '<span style="font-weight:500;font-size:13px">' + escapeHtml(s.clockInStr) + "</span>";
+      var taskBadge =
+        s.workRole === "kitchen"
+          ? '<span class="sd-badge sd-badge--kitchen">Kitchen</span>'
+          : '<span class="sd-badge sd-badge--cashier">Cashier</span>';
+
+      var clockInCell = '<span class="sd-cell-strong">' + escapeHtml(s.clockInStr) + "</span>";
 
       var clockOutCell;
       if (s.active) {
-        clockOutCell = '<span style="font-size:13px;color:var(--color-text-secondary)">—</span>';
+        clockOutCell = '<span class="sd-cell-muted">—</span>';
       } else {
-        clockOutCell = '<span style="font-weight:500;font-size:13px">' + escapeHtml(s.clockOutStr) + "</span>";
+        clockOutCell = '<span class="sd-cell-strong">' + escapeHtml(s.clockOutStr) + "</span>";
       }
 
       var durCell;
       if (s.active) {
-        durCell =
-          '<span style="font-size:13px;color:var(--color-text-primary)">Sedang bertugas</span>';
+        durCell = '<span class="sd-badge sd-badge--active">Sedang bertugas</span>';
       } else if (s.duration) {
-        durCell =
-          '<span style="font-size:13px;color:var(--color-text-primary)">' +
-          escapeHtml(s.duration.text) +
-          "</span>";
+        durCell = '<span class="sd-cell-strong">' + escapeHtml(s.duration.text) + "</span>";
       } else {
-        durCell =
-          '<span style="font-size:13px;color:var(--color-text-secondary)">—</span>';
+        durCell = '<span class="sd-cell-muted">—</span>';
       }
 
       var dateCell =
-        '<div style="font-weight:500;font-size:13px">' +
+        '<div class="sd-cell-strong">' +
         escapeHtml(s.dayName) +
-        '</div><div style="font-size:11px;color:var(--color-text-secondary)">' +
+        '</div><div class="sd-cell-muted sd-cell-muted--sm">' +
         escapeHtml(s.date) +
         "</div>";
 
@@ -342,6 +338,9 @@ function renderClockTable() {
         "</td>" +
         "<td>" +
         staffCell +
+        "</td>" +
+        "<td>" +
+        taskBadge +
         "</td>" +
         "<td>" +
         clockInCell +
@@ -420,6 +419,47 @@ function renderDrawerTable() {
     .join("");
 }
 
+function renderPerformanceTables() {
+  var salesBody = $("sd-perf-sales-body");
+  if (!salesBody) return;
+
+  var staffLines = staffList.filter(function (s) {
+    return s.employmentStatus === "active";
+  });
+  var payload = buildStaffPerformancePayload(activityRows, receiptRows, staffLines);
+  var salesLines = payload.salesPerformance.lines;
+
+  if (!salesLines.length) {
+    salesBody.innerHTML =
+      '<tr><td colspan="5" class="sd-footnote" style="text-align:center;padding:20px">Tiada data jualan pada bulan ini.</td></tr>';
+  } else {
+    salesBody.innerHTML = salesLines
+      .slice()
+      .sort(function (a, b) {
+        return b.totalSalesRm - a.totalSalesRm;
+      })
+      .map(function (l) {
+        var ownerBadge = l.isOwner ? '<span class="sd-badge sd-badge--owner">Owner</span>' : "";
+        return (
+          "<tr><td><div class=\"sd-staff-cell\"><span class=\"sd-staff-cell__name\">" +
+          escapeHtml(l.staffName.replace(/ \(Owner\)$/, "")) +
+          "</span>" +
+          ownerBadge +
+          "</div></td><td class=\"sd-cell-strong\">" +
+          escapeHtml(l.cashierHoursWorked.toFixed(1)) +
+          " j</td><td class=\"sd-cell-strong\">" +
+          l.totalOrders +
+          "</td><td class=\"sd-cell-strong\">RM " +
+          escapeHtml(l.totalSalesRm.toFixed(2)) +
+          "</td><td class=\"sd-cell-strong\">RM " +
+          escapeHtml(l.salesPerHourRm.toFixed(2)) +
+          "/j</td></tr>"
+        );
+      })
+      .join("");
+  }
+}
+
 function refreshAll() {
   try {
     renderSummary();
@@ -433,6 +473,11 @@ function refreshAll() {
   }
   try {
     renderDrawerTable();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    renderPerformanceTables();
   } catch (e) {
     console.error(e);
   }
@@ -502,11 +547,29 @@ function subscribeClosedPosShiftsForFilterMonth() {
   staffFirestoreUnsubs.push(staffShiftsUnsub);
 }
 
+/** Ambil sekali (bukan realtime) resit dalam bulan filter — cukup untuk jadual prestasi. */
+async function fetchReceiptsForFilterMonth() {
+  var ym = ymParts();
+  var start = Timestamp.fromDate(new Date(ym.y, ym.m0, 1));
+  var end = Timestamp.fromDate(new Date(ym.y, ym.m0 + 1, 1));
+  try {
+    var snap = await getDocs(
+      query(collection(db, COL_POS_RECEIPTS), where("createdAt", ">=", start), where("createdAt", "<", end))
+    );
+    receiptRows = snap.docs;
+  } catch (e) {
+    console.error("[staff-dashboard] fetch receipts", e);
+    receiptRows = [];
+  }
+  refreshAll();
+}
+
 function wireEvents() {
   $("sd-filter-month").addEventListener("change", function () {
     filterMonthStr = $("sd-filter-month").value;
     subscribeStaffActivityForFilterMonth();
     subscribeClosedPosShiftsForFilterMonth();
+    fetchReceiptsForFilterMonth();
     refreshAll();
   });
 }
@@ -551,6 +614,7 @@ async function main() {
 
   subscribeStaffActivityForFilterMonth();
   subscribeClosedPosShiftsForFilterMonth();
+  fetchReceiptsForFilterMonth();
 
   refreshAll();
 }

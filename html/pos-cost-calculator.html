@@ -58,7 +58,7 @@
                 <select id="ing-draft-unit" name="unit" aria-label="Unit pakej"></select>
               </div>
               <div class="field">
-                <label for="ing-draft-price">Jumlah (RM) pakej</label>
+                <label for="ing-draft-price" title="Jumlah (RM) pakej — termasuk cukai jika ada">Jumlah (RM)</label>
                 <input type="number" id="ing-draft-price" name="price" min="0" step="0.01" value="0" required />
               </div>
               <div class="field">
@@ -82,9 +82,8 @@
             <thead>
               <tr>
                 <th scope="col" class="ing-th-ing">Bahan</th>
-                <th scope="col" class="ing-th-pack">Harga pakej<br /><span class="ing-th-sub">(RM)</span></th>
-                <th scope="col" class="ing-th-pack">Baki / asal</th>
-                <th scope="col" class="ing-th-pack ing-th-pack-end">Unit</th>
+                <th scope="col" class="ing-th-baki">Baki / asal</th>
+                <th scope="col" class="ing-th-unit">Unit</th>
                 <th scope="col" class="num ing-th-cpu">Kos / unit</th>
                 <th scope="col" class="ing-th-status">Status</th>
                 <th scope="col" class="ing-th-actions">Tindakan</th>
@@ -116,24 +115,27 @@
       >
         <div class="modal__head">
           <h2 class="modal__title" id="modal-title">Sunting produk</h2>
-          <button type="button" class="btn btn--ghost btn--sm" id="modal-close" aria-label="Tutup">✕</button>
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x" id="modal-close" aria-label="Tutup">✕</button>
         </div>
         <div class="modal__body">
           <div class="field">
             <label for="modal-name">Nama</label>
             <input type="text" id="modal-name" autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field field--price">
             <label for="modal-price">Harga jual (RM)</label>
             <input type="number" id="modal-price" min="0" step="0.01" />
+            <p id="modal-price-suggestion" class="field-hint"></p>
           </div>
           <div id="modal-panel-package" hidden>
             <p class="modal-package-help">Pilih produk untuk tab pakej di kaunter.</p>
             <div id="modal-package-lines" class="pkg-member-list" aria-label="Produk"></div>
           </div>
-          <div id="modal-panel-single">
-            <p class="modal-ing-list-label">Bahan</p>
-            <div id="modal-ing-list"></div>
+          <div id="modal-panel-single" class="modal-panel-single">
+            <div class="modal-ing-section">
+              <p class="modal-ing-list-label">Bahan</p>
+              <div id="modal-ing-list" class="modal-ing-scroll"></div>
+            </div>
             <div id="ing-quick-add" class="ing-quick-add" hidden>
               <p class="ing-quick-add__title">Bahan baharu</p>
               <div class="ing-quick-add__grid">
@@ -187,7 +189,7 @@
           <h2 class="ing-drawer__title" id="ing-drawer-title">—</h2>
           <p id="ing-drawer-sub" class="ing-drawer__meta" role="status"></p>
         </div>
-        <button type="button" class="btn btn--ghost btn--sm ing-drawer__close" id="ing-drawer-close" aria-label="Tutup panel">Tutup</button>
+        <button type="button" class="btn btn--ghost btn--sm ing-drawer__close btn-close-x" id="ing-drawer-close" aria-label="Tutup panel">✕</button>
       </header>
 
       <div class="ing-drawer__body">
@@ -205,7 +207,7 @@
                 <input type="number" id="ing-log-qty" min="0.001" step="any" required />
               </div>
               <div class="field">
-                <label for="ing-log-price">Jumlah (RM)</label>
+                <label for="ing-log-price" title="Jumlah (RM) — termasuk cukai jika ada">Jumlah (RM)</label>
                 <input type="number" id="ing-log-price" min="0" step="0.01" required />
               </div>
               <div class="field">
@@ -220,6 +222,7 @@
           </div>
 
           <p id="ing-drawer-log-status" class="kb-status kb-status--hidden ing-drawer-form__status" role="status"></p>
+          <p id="ing-drawer-impact-status" class="kb-status kb-status--hidden ing-drawer-form__status" role="status"></p>
           <div class="ing-drawer-form__actions">
             <button type="button" class="btn btn--outline ing-drawer-submit ing-drawer-submit--secondary" id="ing-drawer-save-name-only">
               Simpan nama
@@ -230,6 +233,10 @@
 
         <div class="ing-drawer-history" aria-labelledby="ing-drawer-ledger-title">
           <h3 class="ing-drawer-history__title" id="ing-drawer-ledger-title">Sejarah belian</h3>
+          <p class="ing-drawer-history__legend" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin:0 0 8px;">
+            <span style="display:inline-block;width:12px;height:12px;background:#FEFCE8;border-left:3px solid #EAB308;flex-shrink:0;"></span>
+            Batch/lot yang sedang digunakan sekarang (FIFO aktif)
+          </p>
           <div class="ing-drawer-table-wrap">
             <table class="ing-table ing-ledger-table">
               <thead>
@@ -237,6 +244,7 @@
                   <th>Tarikh</th>
                   <th>Pakej</th>
                   <th class="num">Kos / unit</th>
+                  <th class="num">Perubahan</th>
                 </tr>
               </thead>
               <tbody id="ing-ledger-tbody"></tbody>
@@ -255,7 +263,7 @@
             <h2 id="bulk-modal-title" class="bulk-modal__title">Belian borong</h2>
             <p class="bulk-modal__sub">Rekod pembelian bahan mentah dalam satu transaksi</p>
           </div>
-          <button type="button" class="bulk-modal__close" id="btn-bulk-close" aria-label="Tutup">✕</button>
+          <button type="button" class="bulk-modal__close btn-close-x" id="btn-bulk-close" aria-label="Tutup">✕</button>
         </div>
 
         <div class="bulk-modal__body">

@@ -268,6 +268,20 @@ body {
   cursor: not-allowed;
 }
 
+/** Butang tutup modal/panel — paparan ✕ seragam; kekalkan aria-label="Tutup" untuk aksesibiliti. */
+.btn-close-x {
+  width: auto;
+  margin-top: 0;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+  flex-shrink: 0;
+}
+
 /**
  * Butang segmen / tab lebar permukaan (penapis papan pemuka, tab laporan, dll.)
  * Gabung dengan .is-active atau aria-selected="true" untuk keadaan pilihan.
@@ -540,40 +554,4 @@ button, a, input[type="submit"] {
     transform: scale(1.02);
     transition: transform 0.1s ease;
   }
-}
-
-/* ==========================================================================
-   Capacitor Android — WebView rendering parity with browser
-   ========================================================================== */
-
-/* Fix WebView rendering sama seperti browser */
-html, body {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-
-/* Prevent layout shift dalam WebView */
-img, video, canvas, svg {
-  max-width: 100%;
-  height: auto;
-}
-
-/* Fix flexbox dalam Android WebView */
-.app-layout,
-.app-sidebar,
-.app-main {
-  -webkit-flex: 1;
-  flex: 1;
-}
-
-/* Fix iframe dalam WebView */
-iframe {
-  width: 100%;
-  border: none;
-}
-
-/* Prevent font scaling dalam Android */
-* {
-  -webkit-text-size-adjust: none;
-  text-size-adjust: none;
 }

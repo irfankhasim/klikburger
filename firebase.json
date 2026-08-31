@@ -31,9 +31,7 @@
       "**/*.class",
       "**/*.jar",
       "**/*.bin",
-      "android/**",
-      "functions/**",
-      "www/**"
+      "functions/**"
     ]
   },
   "emulators": {

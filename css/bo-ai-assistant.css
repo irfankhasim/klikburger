@@ -892,6 +892,12 @@ html.kb-embed .ai-kb-editor-wrap {
   border-top: 1px solid var(--border);
 }
 
+.ai-modal__foot:empty {
+  display: none;
+  padding: 0;
+  border-top: none;
+}
+
 .ai-modal__lead {
   margin: 0;
   line-height: 1.5;

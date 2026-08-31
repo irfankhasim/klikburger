@@ -8,8 +8,8 @@ import { ensureAdminInitialized, getAdminAuth, getAdminFirestore, isEmulatorEnv 
 import { readDefaultFirebaseProjectId } from "./lib/read-project-id.mjs";
 
 var DEMO_USERS = [
-  { email: "irfan@gmail.com", password: "irfan123", displayName: "Irfan", role: "owner" },
-  { email: "ikhwan@gmail.com", password: "ikhwan123", displayName: "Ikhwan", role: "staff" }
+  { email: "owner@gmail.com", password: "owner123", displayName: "Owner", role: "owner" },
+  { email: "staff@gmail.com", password: "staff123", displayName: "Staff", role: "staff" }
 ];
 
 export async function seedDemoAuthUsers() {

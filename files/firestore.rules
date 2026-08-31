@@ -9,8 +9,9 @@
 //   - Admin SDK (MCP) bypasses all rules — control is at MCP permission-gate layer
 //   - Catch-all: deny everything not explicitly allowed
 //
-// Role hierarchy: OWNER > ADMIN > SHIFT_LEAD > CASHIER
-// (Matches js/pos-rbac-session.js ROLES constant)
+// Role hierarchy (Firestore `users/{uid}.role` — STORED lowercase; see seed + pos-firebase-auth-bridge):
+//   owner > admin > shift_lead > staff|cashier (counter staff)
+// Client maps these to js/pos-rbac-session.js ROLES (OWNER, ADMIN, …) after login — rules read raw Firestore only.
 
 rules_version = '2';
 service cloud.firestore {
@@ -23,13 +24,31 @@ service cloud.firestore {
     }
 
     function userRole() {
-      // Read role from users/{uid} — cached by Firestore per request
+      // Raw string on users/{uid}.role — seeds + bridge use lowercase (owner, staff, admin, shift_lead).
+      // Also accept legacy uppercase if ever migrated back.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    function isOwner()     { return isSignedIn() && userRole() == 'OWNER'; }
-    function isAdmin()     { return isSignedIn() && (userRole() == 'OWNER' || userRole() == 'ADMIN'); }
-    function isShiftLead() { return isSignedIn() && (userRole() == 'OWNER' || userRole() == 'ADMIN' || userRole() == 'SHIFT_LEAD'); }
+    function isOwner() {
+      return isSignedIn() && (
+        userRole() == 'owner' || userRole() == 'OWNER' ||
+        userRole() == 'pemilik' || userRole() == 'PEMILIK'
+      );
+    }
+    function isAdmin() {
+      return isSignedIn() && (
+        isOwner() ||
+        userRole() == 'admin' || userRole() == 'ADMIN' ||
+        userRole() == 'pentadbir' || userRole() == 'PENTADBIR'
+      );
+    }
+    function isShiftLead() {
+      return isSignedIn() && (
+        isAdmin() ||
+        userRole() == 'shift_lead' || userRole() == 'SHIFT_LEAD' ||
+        userRole() == 'shiftlead' || userRole() == 'SHIFTLEAD'
+      );
+    }
     function isStaff()     { return isSignedIn(); }  // any authenticated user = staff
 
     function isOwnerOfDoc(field) {
@@ -100,11 +119,9 @@ service cloud.firestore {
     }
 
     // ─── staff ────────────────────────────────────────────────────────────
-    // Selaras `firestore.rules` di root: semua pengguna log masuk perlu baca senarai
-    // untuk “bertugas sebagai” / clock in terminal kongsi (bukan hanya admin).
     match /staff/{docId} {
-      allow read:   if isStaff();
-      allow write:  if isAdmin();
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
 
     // ─── staff_activity ───────────────────────────────────────────────────
@@ -116,7 +133,7 @@ service cloud.firestore {
 
     // ─── staff_settings ───────────────────────────────────────────────────
     match /staff_settings/{docId} {
-      allow read:  if isAdmin();
+      allow read:  if isStaff();
       allow write: if isOwner();
     }
 
@@ -159,7 +176,14 @@ service cloud.firestore {
     // Counters updated in transaction by checkout; only reads from non-owner.
     match /pos_meta/{docId} {
       allow read:   if isStaff();
-      allow write:  if isStaff();   // checkout transaction needs write
+      allow write:  if isStaff() && docId != "store_location";   // checkout transaction needs write
+    }
+
+    // store_location: sekatan geo clock-in. Write hanya Cloud Function (Admin SDK,
+    // setStoreLocation/clearStoreLocation, owner-sahaja) — elak staf spoof lokasi GPS sendiri.
+    match /pos_meta/store_location {
+      allow read:  if isStaff();
+      allow write: if false;
     }
 
     // ─── pos_sales_transactions ───────────────────────────────────────────
@@ -184,10 +208,43 @@ service cloud.firestore {
       allow write: if isOwner();    // only owner can write; generation via MCP
     }
 
+    // ─── yearly_reports ───────────────────────────────────────────────────
+    match /yearly_reports/{reportId} {
+      allow read:  if isAdmin();
+      allow write: if isOwner();
+    }
+
     // ─── modifiers (legacy) ───────────────────────────────────────────────
     match /modifiers/{docId} {
       allow read:  if isStaff();
       allow write: if isAdmin();
+    }
+
+    // ─── knowledge_base (AI Assistant) ─────────────────────────────────────
+    match /knowledge_base/{docId} {
+      allow read:  if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── staff_totp / staff_totp_status ──────────────────────────────────
+    // 2FA clock-in Staff, ditogol per-staf oleh Owner. Secret TIDAK boleh dibaca
+    // client langsung — hanya Cloud Functions (Admin SDK). Status (enabled) boleh
+    // dibaca mana-mana pengguna log masuk supaya UI clock-in tahu papar field TOTP.
+    match /staff_totp/{staffId} {
+      allow read, write: if false;
+    }
+    match /staff_totp_status/{staffId} {
+      allow read:  if isStaff();
+      allow write: if false;
+    }
+
+    // ─── pos_active_shift ─────────────────────────────────────────────────
+    // Roster staf sedang bertugas (dok wujud selagi clock-in, dipadam bila clock-out).
+    // Cashier terhad kepada satu dokumen workRole=="cashier" pada satu masa (dikuatkuasa
+    // dalam Cloud Function verifyStaffClockIn, bukan rules). Write hanya Cloud Function.
+    match /pos_active_shift/{staffId} {
+      allow read:  if isStaff();
+      allow write: if false;
     }
 
     // ─── Catch-all: deny everything else ──────────────────────────────────

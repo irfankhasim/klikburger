@@ -40,7 +40,7 @@ export function mountGlobalAiChatWidget() {
     '<header class="ai-staff-drawer__head">' +
     '<div><h2 id="kb-ai-staff-title" class="ai-staff-drawer__title">Pembantu AI</h2>' +
     '<p class="ai-staff-drawer__sub">Tanya tentang SOP syarikat, produk dan cara guna sistem.</p></div>' +
-    '<button type="button" class="ai-staff-drawer__close" aria-label="Tutup"><span aria-hidden="true">×</span></button>' +
+    '<button type="button" class="ai-staff-drawer__close btn-close-x" aria-label="Tutup">✕</button>' +
     "</header>" +
     '<div class="ai-staff-drawer__messages" data-ai-mount="messages" aria-live="polite"></div>' +
     '<div class="ai-staff-drawer__typing" data-ai-mount="typing" hidden><span></span><span></span><span></span></div>' +

@@ -63,6 +63,8 @@ function buildEntry(opts) {
     }),
     subtotal: null,
     orderCount: null,
+    /** Tugas sesi (cashier/kitchen) dipilih semasa clock-in — lihat pos-rbac-session.js setPosOperationalStaff. */
+    workRole: String(s.operationalWorkRole || "").trim().toLowerCase() || "cashier",
     atMs: atMs
   };
 }

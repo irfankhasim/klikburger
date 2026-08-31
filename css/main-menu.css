@@ -218,7 +218,10 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
+  max-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   position: relative;
   z-index: 1;
   background: var(--content-bg);
@@ -651,6 +654,20 @@
   flex-shrink: 0;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.module-layer__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.module-layer__head .module-layer__title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .module-layer__cancel {

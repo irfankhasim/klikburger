@@ -255,7 +255,10 @@
         aria-labelledby="module-layer-title"
         aria-describedby="module-layer-desc"
       >
-        <h2 id="module-layer-title" class="module-layer__title">Pilih modul</h2>
+        <div class="module-layer__head">
+          <h2 id="module-layer-title" class="module-layer__title">Pilih modul</h2>
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x js-module-close" aria-label="Tutup">✕</button>
+        </div>
         <p id="module-layer-desc" class="module-layer__desc">
           Setiap modul mempunyai menu yang berbeza di bar sisi.
         </p>
@@ -277,7 +280,6 @@
             <i class="fa-solid fa-chevron-right module-choice__go" aria-hidden="true"></i>
           </button>
         </div>
-        <button type="button" class="module-layer__cancel btn btn--ghost js-module-close">Tutup</button>
       </div>
     </div>
 
@@ -286,7 +288,7 @@
       <div class="order-flow__panel rc-modal-panel" role="dialog" aria-modal="true" aria-labelledby="kb-shift-modal-title">
         <div class="order-flow__head">
           <h2 class="order-flow__title" id="kb-shift-modal-title">Modal</h2>
-          <button type="button" class="rc-btn rc-btn--line rc-btn--sm" id="kb-shift-modal-x">Tutup</button>
+          <button type="button" class="rc-btn rc-btn--line rc-btn--icon rc-btn--sm btn-close-x" id="kb-shift-modal-x" aria-label="Tutup">✕</button>
         </div>
         <div class="order-flow__body" id="kb-shift-modal-body"></div>
         <div class="order-flow__foot" id="kb-shift-modal-foot"></div>

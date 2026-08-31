@@ -29,17 +29,28 @@
       <header class="kb-page-header">
         <h1 class="kb-page-title">Tetapan</h1>
         <p class="kb-page-lead">
-          Urus rekod kakitangan di bawah. Lebih banyak sub-tetapan boleh ditambah kemudian.
+          Urus rekod kakitangan dan pangkalan pengetahuan AI untuk pembantu digital.
         </p>
       </header>
 
       <div class="bs-settings-shell">
+        <nav class="bs-settings-subnav" aria-label="Sub-tetapan">
+          <button type="button" class="bs-settings-subnav__btn" data-tab="staff">
+            <i class="fa-solid fa-users" aria-hidden="true"></i>
+            Kakitangan
+          </button>
+          <button type="button" class="bs-settings-subnav__btn" data-tab="database">
+            <i class="fa-solid fa-database" aria-hidden="true"></i>
+            Pangkalan data
+          </button>
+        </nav>
         <div class="bs-settings-shell__frame-wrap">
           <iframe
             id="bs-sub-iframe"
             class="bs-settings-shell__frame"
             title="Kakitangan — Tetapan"
             src="about:blank"
+            scrolling="auto"
           ></iframe>
         </div>
       </div>

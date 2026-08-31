@@ -1,9 +1,10 @@
-/* Tetapan BO — shell sub-menu + iframe / sunting staf */
+/* Tetapan BO — shell, sub-menu, kakitangan, pangkalan data, modal seragam */
+
+/* ——— Shell (iframe induk) ——— */
 .bs-settings--shell .kb-page-header {
   margin-bottom: 0.75rem;
 }
 
-/* Dalam iframe main-menu: tajuk/perihalan di topbar induk — elak scroll berlebihan */
 html.kb-embed .bs-settings--shell .kb-page-header {
   display: none !important;
 }
@@ -27,9 +28,10 @@ html.kb-embed .bs-settings--shell.sd-app {
   align-items: stretch;
   gap: 0.35rem;
   padding: 0.35rem;
-  border-radius: var(--radius, 10px);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  background: var(--surface-muted);
+  box-shadow: var(--shadow);
 }
 
 .bs-settings-subnav__btn {
@@ -41,32 +43,38 @@ html.kb-embed .bs-settings--shell.sd-app {
   min-width: min(12rem, 100%);
   text-align: center;
   padding: 0.55rem 0.85rem;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
-  color: inherit;
+  color: var(--text);
   font: inherit;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .bs-settings-subnav__btn:hover {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .bs-settings-subnav__btn.is-active {
-  border-color: var(--sidebar-accent, #c9a227);
-  background: var(--surface, #fff);
-  box-shadow: 0 0 0 1px var(--accent-ring, rgba(201, 162, 39, 0.35));
+  border-color: var(--sidebar-accent);
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--sidebar-accent);
 }
 
 .bs-settings-shell__frame-wrap {
   min-height: 0;
-  border-radius: var(--radius, 10px);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   overflow: visible;
-  background: var(--surface, #fff);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .bs-settings-shell__frame {
@@ -75,29 +83,188 @@ html.kb-embed .bs-settings--shell.sd-app {
   min-height: 0;
   height: 16rem;
   border: 0;
-  background: var(--surface-muted, #fafafa);
+  background: var(--content-bg);
+}
+
+/* ——— Halaman dalaman (staff / KB) ——— */
+html.kb-embed .bs-settings:not(.bs-settings--shell) .kb-page-header {
+  display: none !important;
+}
+
+html.kb-embed .bs-settings:not(.bs-settings--shell) {
+  padding-top: 0.15rem;
+}
+
+.bs-settings__header-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.bs-settings__header-actions .btn {
+  margin-top: 0;
+  width: auto;
+}
+
+.bs-settings__loading {
+  margin: 0;
+  padding: 1.25rem 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.bs-settings__load-error {
+  margin: 0 0 0.35rem;
 }
 
 .bs-settings__layout {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
+  --bs-settings-pane-max: min(72vh, 720px);
+}
+
+html.kb-embed .bs-settings__layout {
+  --bs-settings-pane-max: min(68vh, calc(100dvh - 4.5rem));
 }
 
 @media (max-width: 52rem) {
   .bs-settings__layout {
     grid-template-columns: 1fr;
+    --bs-settings-pane-max: none;
   }
+
+  html.kb-embed .bs-settings__layout {
+    --bs-settings-pane-max: none;
+  }
+
+  .bs-settings__list-panel {
+    max-height: min(42vh, 360px);
+  }
+
+  .bs-settings__form-panel {
+    max-height: none;
+  }
+
+  .bs-settings__form-panel .sd-form-grid {
+    overflow-y: visible;
+    max-height: none;
+  }
+}
+
+.bs-settings__list-panel,
+.bs-settings__form-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: var(--bs-settings-pane-max);
+  margin-bottom: 0;
+}
+
+.bs-settings__list-panel .sd-panel__title,
+.bs-settings__form-panel .sd-panel__title {
+  flex-shrink: 0;
+}
+
+.bs-settings__list-panel .sd-panel__hint,
+.bs-settings__form-panel .sd-panel__hint,
+.bs-settings__form-panel .bs-owner-note {
+  flex-shrink: 0;
 }
 
 .bs-staff-list {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  margin-top: 0.5rem;
+  margin-top: 0.15rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.15rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
+.bs-staff-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bs-staff-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.bs-settings__form-panel .sd-form-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 0.15rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.bs-settings__form-panel .sd-form-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bs-settings__form-panel .sd-form-grid::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.bs-settings__form-panel .bs-settings__actions {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.bs-settings__list-panel .sd-panel__title,
+.bs-settings__form-panel .sd-panel__title {
+  margin-bottom: 0.35rem;
+}
+
+.bs-settings__list-panel .sd-panel__hint,
+.bs-settings__form-panel .sd-panel__hint {
+  margin: 0 0 0.65rem;
+}
+
+/* ——— Lokasi kedai ——— */
+.bs-store-panel .sd-panel__title {
+  margin-bottom: 0.35rem;
+}
+
+.bs-store-panel .sd-panel__hint {
+  margin: 0 0 0.65rem;
+}
+
+.bs-store-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.bs-store-panel__radius {
+  min-width: 8.5rem;
+  max-width: 10rem;
+}
+
+.bs-inline-status {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0 0 0.35rem;
+}
+
+/* ——— Senarai staf ——— */
 .bs-staff-pick {
   display: flex;
   flex-direction: column;
@@ -106,6 +273,7 @@ html.kb-embed .bs-settings--shell.sd-app {
   text-align: left;
   width: 100%;
   padding: 0.55rem 0.65rem;
+  margin-top: 0;
 }
 
 .bs-staff-pick.is-active {
@@ -157,14 +325,14 @@ html.kb-embed .bs-settings--shell.sd-app {
   font-size: 0.68rem;
   font-weight: 600;
   color: var(--text-muted);
-  background: var(--surface-muted, #f4f4f5);
+  background: var(--surface-muted);
   border: 1px solid var(--border);
 }
 
 .bs-owner-note {
   margin: 0 0 0.85rem;
   padding: 0.65rem 0.75rem;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   border: 1px solid rgba(245, 166, 35, 0.35);
   background: rgba(255, 251, 235, 0.75);
 }
@@ -178,11 +346,15 @@ html.kb-embed .bs-settings--shell.sd-app {
   border-top: 1px solid var(--border);
 }
 
+.bs-settings__actions .btn {
+  margin-top: 0;
+  width: auto;
+}
+
 .bs-settings__actions .btn--danger {
   margin-right: auto;
 }
 
-/* Medan payroll dalam grid borang staf — sembunyi untuk jawatan Pemilik */
 #bs-payroll-fields {
   display: contents;
 }
@@ -191,7 +363,7 @@ html.kb-embed .bs-settings--shell.sd-app {
   display: none;
 }
 
-/* Toggle PIN aktif/nyahaktif */
+/* ——— Toggle 2FA ——— */
 .bs-pin-head {
   display: flex;
   align-items: center;
@@ -202,6 +374,7 @@ html.kb-embed .bs-settings--shell.sd-app {
 
 .bs-pin-head__title {
   font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .bs-switch {
@@ -224,7 +397,7 @@ html.kb-embed .bs-settings--shell.sd-app {
   width: 42px;
   height: 24px;
   border-radius: 999px;
-  background: var(--border, #cbd5e1);
+  background: var(--border);
   transition: background 0.18s ease;
   flex: 0 0 auto;
 }
@@ -243,7 +416,7 @@ html.kb-embed .bs-settings--shell.sd-app {
 }
 
 .bs-switch input:checked + .bs-switch__track {
-  background: var(--brand, #f5a623);
+  background: var(--sidebar-accent);
 }
 
 .bs-switch input:checked + .bs-switch__track::after {
@@ -251,7 +424,7 @@ html.kb-embed .bs-settings--shell.sd-app {
 }
 
 .bs-switch input:focus-visible + .bs-switch__track {
-  outline: 2px solid var(--brand, #f5a623);
+  outline: 2px solid var(--sidebar-accent);
   outline-offset: 2px;
 }
 
@@ -262,9 +435,260 @@ html.kb-embed .bs-settings--shell.sd-app {
 
 .bs-switch__text {
   font-size: 0.85rem;
-  color: var(--muted, #64748b);
+  color: var(--text-muted);
+}
+
+.sd-section-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.9rem 0 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.sd-section-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.sd-section-label i {
+  color: var(--sidebar-accent);
+  font-size: 0.85rem;
+}
+
+.bs-security-card {
+  grid-column: 1 / -1;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+}
+
+.bs-security-card > .sd-field + .sd-field,
+.bs-security-card > div + div {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--border);
+}
+
+.bs-security-card .sd-footnote {
+  margin-top: 0.5rem;
+}
+
+/* ——— Modal 2FA (sd-modal + animasi) ——— */
+.sd-modal--narrow {
+  max-width: 420px;
+}
+
+.sd-modal-backdrop.bs-totp-modal-backdrop {
+  z-index: 1000;
+  align-items: center;
+  padding: 1rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s ease, visibility 0.16s ease;
+}
+
+.sd-modal-backdrop.bs-totp-modal-backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sd-modal-backdrop.bs-totp-modal-backdrop .bs-totp-modal {
+  width: 100%;
+  max-width: 420px;
+  transform: scale(0.96);
+  transition: transform 0.16s ease;
+}
+
+.sd-modal-backdrop.bs-totp-modal-backdrop.is-open .bs-totp-modal {
+  transform: scale(1);
+}
+
+.bs-totp-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.bs-totp-modal__lead {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.bs-totp-modal__qr-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.bs-totp-qr {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+}
+
+.bs-totp-qr svg {
+  width: 180px;
+  height: 180px;
+}
+
+.bs-totp-modal__secret-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.bs-totp-secret {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-md);
+  display: block;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bs-totp-modal-status {
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.bs-totp-modal-status[hidden] {
+  display: none;
+}
+
+.bs-totp-modal-status--error {
+  border-color: #e8b4b0;
+  background: #fff5f4;
+  color: var(--danger);
+}
+
+.bs-totp-modal-status--ok {
+  border-color: #b8d4b0;
+  background: #f4faf3;
+  color: var(--success);
+}
+
+/* ——— Pangkalan data (editor) ——— */
+.bs-settings--kb .bs-kb-editor-panel {
+  margin-bottom: 0;
+}
+
+.bs-settings--kb .bs-kb-editor-panel .sd-field textarea {
+  min-height: min(52vh, 480px);
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.bs-settings--kb .ai-kb-editor {
+  min-height: min(52vh, 480px);
+  box-shadow: none;
+}
+
+.bs-settings--kb .ai-kb-editor--readonly {
+  background: var(--surface-muted);
+}
+
+/* ——— Utiliti ——— */
+.btn--loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.btn--loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  border-top-color: rgba(0, 0, 0, 0.75);
+  border-radius: 50%;
+  animation: bs-spin 0.6s linear infinite;
+}
+
+.btn--primary.btn--loading::after,
+.btn--danger.btn--loading::after {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
+@keyframes bs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bs-totp-qr--loading {
+  width: 180px;
+  height: 180px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, #f0f0f0 25%, #f7f7f7 37%, #f0f0f0 63%);
+  background-size: 400% 100%;
+  animation: bs-shimmer 1.4s ease infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1rem;
+}
+
+@keyframes bs-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
 }
 
 #bs-pin-fields[hidden] {
   display: none;
+}
+
+@media (max-width: 640px) {
+  .bs-settings__header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .bs-settings__header-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .bs-store-panel__row .btn {
+    width: 100%;
+  }
 }

@@ -17,6 +17,7 @@ import { auditLog } from '../../lib/audit-logger.mjs';
 import { checkPermission } from '../../middleware/permission-gate.mjs';
 import { validateMonthlyReport } from '../../lib/validators.mjs';
 import { writeMonthlyReportAdmin } from '../../lib/monthly-report-generate-admin.mjs';
+import { buildStaffPerformancePayload } from '../../../js/monthly-reports/staff-performance-calc.js';
 
 function ok(data)  { return { success: true,  ...data }; }
 function fail(msg) { return { success: false, error: msg }; }
@@ -111,13 +112,11 @@ export const reportTools = [
       const to   = new Date(input.dateTo);
       to.setHours(23, 59, 59);
 
-      const [salesSnap, ordersSnap] = await Promise.all([
-        db.collection(COL.SALES).where('createdAt', '>=', from).where('createdAt', '<=', to).get(),
-        db.collection(COL.POS_ORDERS).where('createdAt', '>=', from).where('createdAt', '<=', to).get(),
-      ]);
-
-      const sales  = snapToArray(salesSnap);
-      const orders = snapToArray(ordersSnap);
+      // pos_receipts — transaksi sebenar (COL.SALES ialah collection legacy, boleh lapuk/kosong
+      // untuk data terkini; ikut corak js/monthly-reports/generate-monthly-report.js).
+      const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
+        .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
+      const sales = snapToArray(receiptsSnap).filter((x) => !x.voided);
 
       // Hourly breakdown
       const hourly = Array(24).fill(0).map((_, h) => ({ hour: h, count: 0, revenue: 0 }));
@@ -128,13 +127,13 @@ export const reportTools = [
         hourly[h].revenue += s.subtotal ?? 0;
       }
 
-      // Payment method breakdown
+      // Payment method breakdown (medan `paymentMethod` sedia ada terus pada setiap resit)
       const paymentMethods = {};
-      for (const o of orders) {
-        const pm = o.paymentMethod ?? 'unknown';
+      for (const s of sales) {
+        const pm = s.paymentMethod ?? 'unknown';
         if (!paymentMethods[pm]) paymentMethods[pm] = { count: 0, total: 0 };
         paymentMethods[pm].count++;
-        paymentMethods[pm].total += o.subtotal ?? 0;
+        paymentMethods[pm].total += s.subtotal ?? 0;
       }
 
       // Item frequency from sales lines
@@ -164,7 +163,10 @@ export const reportTools = [
   // ── 3. get_staff_performance ──────────────────────────────────────────────
   {
     name: 'get_staff_performance',
-    description: 'Get staff performance metrics: sales count, revenue, shifts worked for a period.',
+    description:
+      'Get staff performance for a period: sales revenue/profit AND cashier-hours-based productivity ' +
+      '(Bahagian A — jam dikira dari pasangan clock_in/clock_out ber-workRole "cashier" sahaja; kitchen ' +
+      'hours/sessions tak masuk kira produktiviti, sama macam laporan bulanan js/monthly-reports/staff-performance-calc.js).',
     inputSchema: {
       type: 'object',
       required: ['dateFrom', 'dateTo'],
@@ -179,30 +181,56 @@ export const reportTools = [
       const from = new Date(input.dateFrom);
       const to   = new Date(input.dateTo); to.setHours(23, 59, 59);
 
-      let salesQ = db.collection(COL.SALES).where('createdAt', '>=', from).where('createdAt', '<=', to);
-      if (input.staffId) salesQ = salesQ.where('staffId', '==', input.staffId);
-      const salesSnap = await salesQ.get();
-      const sales = snapToArray(salesSnap);
+      // pos_receipts — transaksi sebenar (bukan COL.SALES legacy, boleh lapuk/kosong untuk data terkini).
+      const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
+        .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
+      let receipts = snapToArray(receiptsSnap).filter((x) => !x.voided);
+      if (input.staffId) receipts = receipts.filter((x) => (x.staffId ?? x.operationalStaffId) === input.staffId);
 
-      const perf = {};
-      for (const s of sales) {
-        const sid = s.staffId ?? 'unknown';
-        if (!perf[sid]) perf[sid] = { staffId: sid, staffName: s.staffName ?? sid, salesCount: 0, totalRevenue: 0, totalProfit: 0 };
-        perf[sid].salesCount++;
-        perf[sid].totalRevenue += s.subtotal ?? 0;
-        perf[sid].totalProfit  += s.totalGrossProfitFifo ?? 0;
+      const [activitySnap, staffSnap] = await Promise.all([
+        db.collection(COL.STAFF_ACTIVITY)
+          .where('createdAt', '>=', from).where('createdAt', '<=', to).get(),
+        db.collection(COL.STAFF).get(),
+      ]);
+
+      const staffLines = staffSnap.docs
+        .map((d) => {
+          const x = d.data();
+          const role = String(x.role ?? '');
+          const isOwner = !!(x.isOwner || role.toLowerCase() === 'owner' || d.id === 'owner_01');
+          return { staffId: d.id, staffName: String(x.name ?? x.staffName ?? '').trim(), isOwner };
+        })
+        .filter((sl) => !input.staffId || sl.staffId === input.staffId);
+
+      const perfPayload = buildStaffPerformancePayload(activitySnap.docs, receipts, staffLines);
+
+      // Untung kasar per staf — buildStaffPerformancePayload tak jejak profit, kira berasingan dari resit sama.
+      const profitByStaff = {};
+      for (const r of receipts) {
+        const sid = r.staffId ?? r.operationalStaffId ?? 'unknown';
+        profitByStaff[sid] = (profitByStaff[sid] ?? 0) + (r.totalGrossProfitFifo ?? 0);
       }
 
-      for (const p of Object.values(perf)) {
-        p.totalRevenue = +p.totalRevenue.toFixed(2);
-        p.totalProfit  = +p.totalProfit.toFixed(2);
-        p.avgSaleValue = p.salesCount > 0 ? +(p.totalRevenue / p.salesCount).toFixed(2) : 0;
-      }
+      const performance = perfPayload.salesPerformance.lines
+        .map((l) => ({
+          staffId: l.staffId,
+          staffName: l.staffName,
+          isOwner: l.isOwner,
+          salesCount: l.totalOrders,
+          totalRevenue: l.totalSalesRm,
+          totalProfit: +((profitByStaff[l.staffId] ?? 0).toFixed(2)),
+          avgSaleValue: l.totalOrders > 0 ? +(l.totalSalesRm / l.totalOrders).toFixed(2) : 0,
+          cashierHoursWorked: l.cashierHoursWorked,
+          cashierSessions: l.cashierSessions,
+          salesPerHourRm: l.salesPerHourRm,
+        }))
+        .filter((p) => p.salesCount > 0 || p.cashierHoursWorked > 0)
+        .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
       return {
         period:      { from: from.toISOString(), to: to.toISOString() },
-        staffCount:  Object.keys(perf).length,
-        performance: Object.values(perf).sort((a, b) => b.totalRevenue - a.totalRevenue),
+        staffCount:  performance.length,
+        performance,
       };
     },
   },
@@ -224,9 +252,10 @@ export const reportTools = [
       const from = new Date(input.dateFrom);
       const to   = new Date(input.dateTo); to.setHours(23, 59, 59);
 
-      const salesSnap = await db.collection(COL.SALES)
+      // pos_receipts — transaksi sebenar (bukan COL.SALES legacy, boleh lapuk/kosong untuk data terkini).
+      const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
         .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
-      const sales = snapToArray(salesSnap);
+      const sales = snapToArray(receiptsSnap).filter((x) => !x.voided);
 
       const totalRevenue = sales.reduce((s, x) => s + (x.subtotal ?? 0), 0);
       const totalCOGS    = sales.reduce((s, x) => s + (x.totalCogsFifo ?? 0), 0);

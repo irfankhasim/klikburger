@@ -52,7 +52,7 @@
                 <select id="ing-draft-unit" name="unit" aria-label="Unit pakej"></select>
               </div>
               <div class="field">
-                <label for="ing-draft-price">Jumlah (RM) pakej</label>
+                <label for="ing-draft-price">Jumlah (RM) pakej — termasuk cukai jika ada</label>
                 <input type="number" id="ing-draft-price" name="price" min="0" step="0.01" value="0" required />
               </div>
               <div class="field">
@@ -76,9 +76,8 @@
             <thead>
               <tr>
                 <th scope="col" class="ing-th-ing">Bahan</th>
-                <th scope="col" class="ing-th-pack">Harga pakej<br /><span class="ing-th-sub">(RM)</span></th>
-                <th scope="col" class="ing-th-pack">Baki / asal</th>
-                <th scope="col" class="ing-th-pack ing-th-pack-end">Unit</th>
+                <th scope="col" class="ing-th-baki">Baki / asal</th>
+                <th scope="col" class="ing-th-unit">Unit</th>
                 <th scope="col" class="num ing-th-cpu">Kos / unit</th>
                 <th scope="col" class="ing-th-status">Status</th>
                 <th scope="col" class="ing-th-actions">Tindakan</th>
@@ -181,7 +180,7 @@
           <h2 class="ing-drawer__title" id="ing-drawer-title">—</h2>
           <p id="ing-drawer-sub" class="ing-drawer__meta" role="status"></p>
         </div>
-        <button type="button" class="btn btn--ghost btn--sm ing-drawer__close" id="ing-drawer-close" aria-label="Tutup panel">Tutup</button>
+        <button type="button" class="btn btn--ghost btn--sm ing-drawer__close btn-close-x" id="ing-drawer-close" aria-label="Tutup panel">✕</button>
       </header>
 
       <div class="ing-drawer__body">
@@ -199,7 +198,7 @@
                 <input type="number" id="ing-log-qty" min="0.001" step="any" required />
               </div>
               <div class="field">
-                <label for="ing-log-price">Jumlah (RM)</label>
+                <label for="ing-log-price">Jumlah (RM) — termasuk cukai jika ada</label>
                 <input type="number" id="ing-log-price" min="0" step="0.01" required />
               </div>
               <div class="field">

@@ -45,6 +45,7 @@ function setLineStatus(elementId, text, kind) {
   el.textContent = text;
   if (kind === "error") el.className = "kb-status kb-status--error";
   else if (kind === "ok") el.className = "kb-status kb-status--ok";
+  else if (kind === "warning") el.className = "kb-status kb-status--warning";
   else el.className = "kb-status";
 }
 
@@ -645,16 +646,12 @@ function renderIngTable() {
       "</span>" +
       formatIngredientStockLineHtml(ing) +
       "</td>" +
-      '<td class="ing-col-pack ing-col-num ing-col--readonly" title="Baca sahaja">' +
-      '<span class="ing-ref-pack" aria-label="Harga pakej (RM)">' +
-      escapeHtml(String(ing.purchasePrice)) +
-      "</span></td>" +
-      '<td class="ing-col-pack ing-col-num ing-col-baki ing-col--readonly" title="Baki / asal (ikut giliran lot)">' +
+      '<td class="ing-col-num ing-col-baki ing-col--readonly" title="Baki / asal (ikut giliran lot)">' +
       '<span class="ing-ref-pack ing-ref-pack--baki js-ing-baki-pack" aria-label="Baki berbanding asal">' +
       escapeHtml(formatIngredientBakiPackDisplay(ing)) +
       "</span></td>" +
-      '<td class="ing-col-pack ing-col--readonly" title="Baca sahaja">' +
-      '<span class="ing-ref-pack" aria-label="Unit pakej rujukan">' +
+      '<td class="ing-col-unit ing-col--readonly" title="Unit pakej rujukan">' +
+      '<span class="ing-ref-unit">' +
       escapeHtml(ing.unit || "—") +
       "</span></td>" +
       '<td class="num ing-col-cpu" data-label="Kos / unit" title="Kos seunit">' +
@@ -697,6 +694,41 @@ function setDrawerLogStatus(text, kind) {
   setLineStatus("ing-drawer-log-status", text, kind);
 }
 
+var LOW_MARGIN_THRESHOLD_PCT = 20;
+
+/** Produk yang guna bahan `id` dan margin jatuh di bawah threshold selepas kos naik dari oldCpu ke newCpu. */
+function affectedProductsBelowMargin(id, ing, oldCpu, newCpu) {
+  return products
+    .filter(function (p) {
+      return p.usage && p.usage[id] != null && p.sellingPrice > 0;
+    })
+    .map(function (p) {
+      var baseQty = usageBaseQty(ing, p.usage[id]);
+      var oldCost = productCost(ingredients, p);
+      var newCost = oldCost + (newCpu - oldCpu) * baseQty;
+      var newMarginPct = ((p.sellingPrice - newCost) / p.sellingPrice) * 100;
+      return { name: p.name, newMarginPct: newMarginPct };
+    })
+    .filter(function (x) {
+      return x.newMarginPct < LOW_MARGIN_THRESHOLD_PCT;
+    });
+}
+
+function renderIngredientImpactStatus(affected) {
+  if (!affected.length) {
+    setLineStatus("ing-drawer-impact-status", "", null);
+    return;
+  }
+  var names = affected.map(function (x) {
+    return x.name;
+  });
+  setLineStatus(
+    "ing-drawer-impact-status",
+    "Kos naik — " + affected.length + " produk kini margin rendah (<" + LOW_MARGIN_THRESHOLD_PCT + "%): " + names.join(", "),
+    "warning"
+  );
+}
+
 function closeIngredientDrawer() {
   selectedLedgerIngredientId = null;
   lastLedgerSnapForDrawer = null;
@@ -717,6 +749,7 @@ function closeIngredientDrawer() {
     errEl.className = "kb-status kb-status--hidden";
   }
   setDrawerLogStatus("", null);
+  renderIngredientImpactStatus([]);
 }
 
 function renderLedgerRows(snap) {
@@ -724,7 +757,7 @@ function renderLedgerRows(snap) {
   if (!tbody) return;
   if (!snap || snap.empty) {
     tbody.innerHTML =
-      '<tr><td colspan="3" class="ing-ledger-empty">' +
+      '<tr><td colspan="4" class="ing-ledger-empty">' +
       'Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
     return;
   }
@@ -777,7 +810,7 @@ function renderLedgerRows(snap) {
   }
 
   tbody.innerHTML = snap.docs
-    .map(function (d) {
+    .map(function (d, i) {
       var row = docToLedgerEntry(d);
       var isActive = activeLedgerId && String(row.id) === String(activeLedgerId);
 
@@ -787,6 +820,28 @@ function renderLedgerRows(snap) {
         escapeHtml(row.unit || "") +
         " · RM " +
         escapeHtml(String(row.purchasePrice));
+
+      // "Perubahan" hanya bandingkan antara rekod penetapan harga (purchase/initial/price_adjust) —
+      // langkau rekod "sale_consumption" (kos FIFO batch dijual, bukan titik harga baharu).
+      var changeHtml = "-";
+      var isPriceEvent = row.kind !== "sale_consumption";
+      if (isPriceEvent) {
+        var prevRow = null;
+        for (var j = i + 1; j < snap.docs.length; j++) {
+          var candidate = docToLedgerEntry(snap.docs[j]);
+          if (candidate.kind !== "sale_consumption") {
+            prevRow = candidate;
+            break;
+          }
+        }
+        if (prevRow && prevRow.costPerUnit > 0) {
+          var pctChange = ((row.costPerUnit - prevRow.costPerUnit) / prevRow.costPerUnit) * 100;
+          var rounded = Math.round(pctChange * 10) / 10;
+          var color = rounded > 0 ? "var(--danger)" : rounded < 0 ? "var(--success)" : "var(--text-muted)";
+          var sign = rounded > 0 ? "+" : "";
+          changeHtml = '<span style="color:' + color + '">' + sign + rounded + "%</span>";
+        }
+      }
 
       return (
         "<tr" +
@@ -799,6 +854,8 @@ function renderLedgerRows(snap) {
         pack +
         '</td><td class="num ing-ledger-cpu">' +
         escapeHtml(formatRM(row.costPerUnit)) +
+        '</td><td class="num ing-ledger-change">' +
+        changeHtml +
         "</td></tr>"
       );
     })
@@ -927,6 +984,25 @@ function renderPackageMemberCheckboxes() {
   });
 }
 
+var MARGIN_THRESHOLD_DANGER = 20;
+var MARGIN_THRESHOLD_WARNING = 30;
+
+function marginBadgeClass(marginPct) {
+  return marginPct == null || marginPct < MARGIN_THRESHOLD_DANGER
+    ? "badge--danger"
+    : marginPct < MARGIN_THRESHOLD_WARNING
+    ? "badge--warning"
+    : "badge--success";
+}
+
+/** Label ringkas bahasa manusia untuk margin — bantu Owner faham tanpa perlu kira sendiri. */
+function marginQualitativeLabel(marginPct) {
+  if (marginPct == null) return "-";
+  if (marginPct < MARGIN_THRESHOLD_DANGER) return "Rendah";
+  if (marginPct < MARGIN_THRESHOLD_WARNING) return "Sederhana";
+  return "Baik";
+}
+
 function productTileHtml(p) {
   if (p.menuKind === "package") {
     var mids = p.packageMemberIds && p.packageMemberIds.length ? p.packageMemberIds : [];
@@ -961,6 +1037,8 @@ function productTileHtml(p) {
   }
   var cost = productCost(ingredients, p);
   var profit = p.sellingPrice - cost;
+  var marginPct = p.sellingPrice > 0 ? Math.round((profit / p.sellingPrice) * 1000) / 10 : null;
+  var marginBadgeCls = marginBadgeClass(marginPct);
   var lines = ingredients
     .map(function (ing) {
       var uv = p.usage[ing.id];
@@ -989,7 +1067,11 @@ function productTileHtml(p) {
     (profit >= 0 ? "var(--success)" : "var(--danger)") +
     '">' +
     formatRM(profit) +
-    "</strong></div>" +
+    '</strong><span class="badge ' +
+    marginBadgeCls +
+    '">' +
+    (marginPct == null ? "-" : marginPct + "%") +
+    "</span></div>" +
     '<div class="product-tile__footer-actions">' +
     '<button type="button" class="btn btn--ghost btn--sm js-edit-product" data-id="' +
     escapeAttr(String(p.id)) +
@@ -1252,15 +1334,16 @@ function renderModalBody() {
         '"' +
         (checked ? " checked" : "") +
         " />" +
-        '<label for="chk-' +
+        '<label class="ing-check-row__label" for="chk-' +
         safeId +
         '">' +
+        '<span class="ing-check-row__name">' +
         escapeHtml(ing.name) +
-        " <small style=\"color:#888\">(" +
+        '</span><span class="ing-check-row__unit-price">' +
         formatRM(costPerUnit(ing)) +
         "/" +
         escapeHtml(ing.unit) +
-        ")</small></label>" +
+        "</span></label>" +
         '<input type="number" class="js-modal-qty" min="0" step="0.001" value="' +
         (checked ? part.guna : 0) +
         '" ' +
@@ -1397,19 +1480,47 @@ function updateModalStats() {
     if (bq > 0) cost += costPerUnit(ing) * bq;
   });
   var profit = price - cost;
+  var foodCostPct = price > 0 ? Math.round((cost / price) * 1000) / 10 : null;
+  var marginPct = price > 0 ? Math.round((profit / price) * 1000) / 10 : null;
 
   document.getElementById("modal-ing-list").querySelectorAll(".ing-check-row").forEach(syncModalLineCost);
 
   document.getElementById("modal-stats").innerHTML =
     '<div><span>Jumlah harga modal</span><strong>' +
     formatRM(cost) +
-    '</strong></div><div class="stat-sell"><span>Harga jual</span><strong>' +
+    '<span class="stat-sub">' +
+    (foodCostPct == null ? "-" : foodCostPct + "% kos bahan") +
+    '</span></strong></div><div class="stat-sell"><span>Harga jual</span><strong>' +
     formatRM(price) +
     '</strong></div><div class="stat-profit' +
     (profit < 0 ? " is-loss" : "") +
     '"><span>Untung</span><strong>' +
     formatRM(profit) +
-    "</strong></div>";
+    '<span class="stat-sub">' +
+    (marginPct == null ? "-" : marginPct + "% margin") +
+    (marginPct == null
+      ? ""
+      : ' <span class="badge ' + marginBadgeClass(marginPct) + '">' + marginQualitativeLabel(marginPct) + "</span>") +
+    "</span></strong></div>";
+
+  renderModalPriceSuggestion(cost);
+}
+
+function renderModalPriceSuggestion(cost) {
+  var el = document.getElementById("modal-price-suggestion");
+  if (!el) return;
+  if (!(cost > 0)) {
+    el.textContent = "";
+    return;
+  }
+  var TARGET_MARGIN = 0.3;
+  var suggested = Math.ceil((cost / (1 - TARGET_MARGIN)) * 10) / 10;
+  el.innerHTML =
+    "Cadangan (30% margin): " +
+    formatRM(suggested) +
+    '<button type="button" id="modal-price-use-suggestion" data-value="' +
+    suggested +
+    '">Guna</button>';
 }
 
 function packageMembersValid(ids) {
@@ -1812,6 +1923,12 @@ async function init() {
   });
   document.getElementById("modal-name").addEventListener("input", updateModalStats);
   document.getElementById("modal-price").addEventListener("input", updateModalStats);
+  document.getElementById("modal-price-suggestion").addEventListener("click", function (e) {
+    if (e.target.id !== "modal-price-use-suggestion") return;
+    var priceInput = document.getElementById("modal-price");
+    priceInput.value = e.target.dataset.value;
+    updateModalStats();
+  });
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
@@ -1932,6 +2049,7 @@ async function init() {
       sortIndex: sortIdx
     };
     var cpu = costPerUnit(draft);
+    var oldCpu = costPerUnit(ing);
     var submitBtn = document.getElementById("ing-log-submit");
     if (submitBtn) submitBtn.disabled = true;
     if (nameOnlyBtn) nameOnlyBtn.disabled = true;
@@ -1978,6 +2096,7 @@ async function init() {
       if (titleEl) titleEl.textContent = newName;
       setDrawerLogStatus("Disimpan.", "ok");
       patchIngredientBatchDisplays();
+      renderIngredientImpactStatus(cpu > oldCpu ? affectedProductsBelowMargin(id, ing, oldCpu, cpu) : []);
     } catch (err) {
       console.error(err);
       setDrawerLogStatus(firestoreErrorMessage(err), "error");
@@ -2433,6 +2552,7 @@ async function saveBulkPurchase() {
         purchaseQty: r.qty,
         unit: r.unit,
         costPerUnit: cpu,
+        taxAmount: share,
         notes:
           taxVal > 0
             ? "Belian borong. Cukai diagihkan: RM " + share.toFixed(2)
@@ -2446,7 +2566,8 @@ async function saveBulkPurchase() {
         costPerUnit: cpu,
         openedAt: new Date(),
         purchaseOccurredAt: new Date(),
-        purchaseTotalRm: finalPrice
+        purchaseTotalRm: finalPrice,
+        taxAmount: share
       });
 
       await recordIngredientPurchaseHistory({
@@ -2459,7 +2580,8 @@ async function saveBulkPurchase() {
         qty: r.qty,
         unit: r.unit,
         costPerUnit: cpu,
-        totalAmountRm: finalPrice
+        totalAmountRm: finalPrice,
+        taxAmount: share
       });
     }
 

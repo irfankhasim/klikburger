@@ -4,13 +4,12 @@
  */
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { COL } from './collections.mjs';
-import {
-  staffSalaryForCalendarMonth,
-  staffAccumulatedSalaryToDate,
-  staffStartedAtIso,
-} from '../../js/monthly-reports/staff-salary-calc.js';
+import { staffStartedAtIso } from '../../js/monthly-reports/staff-salary-calc.js';
+import { buildStaffPerformancePayload } from '../../js/monthly-reports/staff-performance-calc.js';
 
 const PAGE = 400;
+/** Gaji rata semua staf bukan-owner dalam laporan (bukan prorate ikut jam/tarikh mula). */
+const FIXED_STAFF_SALARY_RM = 1000;
 
 function pad2(n) {
   return (n < 10 ? '0' : '') + n;
@@ -120,6 +119,7 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
     purchaseDocs,
     ledgerDocs,
     shiftDocs,
+    activityDocs,
     ingSnap,
     staffSnap,
     salesLegacySnap,
@@ -128,6 +128,7 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
     fetchPagedByRange(db, COL.PURCHASE_HISTORY, 'createdAt', tsStart, tsEnd),
     fetchPagedByRange(db, COL.INGREDIENT_LEDGER, 'occurredAt', tsStart, tsEnd),
     fetchClosedShiftsInRange(db, tsStart, tsEnd),
+    fetchPagedByRange(db, COL.STAFF_ACTIVITY, 'createdAt', tsStart, tsEnd),
     db.collection(COL.INGREDIENTS).get(),
     db.collection(COL.STAFF).get(),
     fetchPagedByRange(db, COL.SALES, 'createdAt', tsStart, tsEnd),
@@ -144,27 +145,46 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
   staffSnap.docs.forEach((d) => {
     const x = d.data();
     const status = String(x.employmentStatus || 'active');
-    const est = staffSalaryForCalendarMonth(x, year, month1to12);
+    const role = String(x.role || '');
+    const isOwner = !!(x.isOwner || role.toLowerCase() === 'owner' || d.id === 'owner_01');
+    const baseName = String(x.name || x.staffName || '').trim() || 'Tanpa nama';
+    const est = isOwner ? 0 : FIXED_STAFF_SALARY_RM;
     if (status === 'active' && est > 0) payrollTotal += est;
     staffLines.push({
       staffId: d.id,
-      name: String(x.name || '').trim() || 'Tanpa nama',
-      role: String(x.role || ''),
+      name: baseName,
+      role,
+      isOwner,
       employmentStatus: status,
       payType: String(x.payType || 'hourly'),
       payAmount: typeof x.payAmount === 'number' ? x.payAmount : parseFloat(x.payAmount) || 0,
       startedAt: staffStartedAtIso(x),
       estimatedMonthlySalaryRm: est,
-      accumulatedSalaryRm: staffAccumulatedSalaryToDate(x, year, month1to12),
+      accumulatedSalaryRm: est,
     });
   });
   payrollTotal = round2(payrollTotal);
+
+  const staffPerf = buildStaffPerformancePayload(activityDocs, receiptDocs, staffLines);
+  const attendanceBySid = {};
+  staffPerf.attendance.lines.forEach((l) => {
+    attendanceBySid[l.staffId] = l;
+  });
+  staffLines.forEach((sl) => {
+    const a = attendanceBySid[sl.staffId];
+    if (!a) return;
+    sl.totalHoursWorked = a.totalHoursWorked;
+    sl.totalSessions = a.totalSessions;
+    sl.cashierHoursWorked = a.cashierHoursWorked;
+    sl.kitchenHoursWorked = a.kitchenHoursWorked;
+  });
 
   let grossSales = 0;
   let totalCogs = 0;
   let voidedCount = 0;
   let netReceiptCount = 0;
   const byPay = {};
+  const menuQtyByKey = {};
   receiptDocs.forEach((d) => {
     const x = d.data();
     const voided = !!x.voided;
@@ -179,6 +199,12 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
     totalCogs += cog;
     const pm = String(x.paymentMethod || 'other').toLowerCase();
     byPay[pm] = (byPay[pm] || 0) + sub;
+    (x.lines || []).forEach((ln) => {
+      const name = String(ln.name || ln.id || '').trim();
+      if (!name) return;
+      const qty = typeof ln.qty === 'number' ? ln.qty : parseFloat(ln.qty) || 0;
+      menuQtyByKey[name] = (menuQtyByKey[name] || 0) + qty;
+    });
   });
   grossSales = round2(grossSales);
   totalCogs = round2(totalCogs);
@@ -188,14 +214,21 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
   const grossProfit = round2(grossSales - totalCogs);
   const avgNonVoidSubtotalRm =
     netReceiptCount > 0 ? round2(grossSales / netReceiptCount) : 0;
+  const topMenuItems = Object.keys(menuQtyByKey)
+    .map((name) => ({ name, qty: menuQtyByKey[name] }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
 
   let purchaseTotalRm = 0;
+  let purchaseTaxTotalRm = 0;
   const purchaseCount = purchaseDocs.length;
   const purchaseTop = [];
   purchaseDocs.forEach((d) => {
     const x = d.data();
     const t = typeof x.totalAmount === 'number' ? x.totalAmount : parseFloat(x.totalAmount) || 0;
+    const tax = typeof x.taxAmount === 'number' ? x.taxAmount : parseFloat(x.taxAmount) || 0;
     purchaseTotalRm += t;
+    purchaseTaxTotalRm += tax;
     purchaseTop.push({
       id: d.id,
       totalAmountRm: round2(t),
@@ -204,6 +237,7 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
     });
   });
   purchaseTotalRm = round2(purchaseTotalRm);
+  purchaseTaxTotalRm = round2(purchaseTaxTotalRm);
   purchaseTop.sort((a, b) => b.totalAmountRm - a.totalAmountRm);
   const purchaseTop25 = purchaseTop.slice(0, 25);
 
@@ -288,6 +322,7 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
     rawMaterials: {
       purchaseHistoryDocumentCount: purchaseCount,
       purchaseHistoryTotalRm: purchaseTotalRm,
+      purchaseHistoryTaxTotalRm: purchaseTaxTotalRm,
       purchaseTop: purchaseTop25,
       ingredientLedgerEntriesInRange: ledgerDocs.length,
       ledgerSpendInitialPurchaseAdjustRm: ledgerPurchaseRm,
@@ -306,6 +341,7 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
       legacyColSalesDocumentCount: legacyCount,
       legacyColSalesSubtotalRm: legacySalesTotal,
       avgNonVoidSubtotalRm,
+      topMenuItems,
     },
     cashDrawer: {
       note:
@@ -316,12 +352,12 @@ export async function buildMonthlyReportPayloadAdmin(db, yearMonth, opts) {
       shiftsSample: shiftLines.slice(0, 40),
     },
     staffSalary: {
-      note:
-        'Anggaran gaji bulan ini prorata mengikut tarikh mula kerja. Gaji tetap = payAmount sebulan; gaji jam = kadar × 160 jam. Medan accumulatedSalaryRm = jumlah terkumpul dari tarikh mula hingga akhir bulan laporan.',
+      note: `Bahagian B — Kehadiran & Gaji (semua tugas). Gaji rata RM${FIXED_STAFF_SALARY_RM} sebulan setiap staf bukan-owner. totalHoursWorked/totalSessions dikira dari pasangan clock_in/clock_out sebenar (semua tugas).`,
       staffCount: staffLines.length,
       activeStaffPayrollEstimateRm: payrollTotal,
       lines: staffLines,
     },
+    staffSalesPerformance: staffPerf.salesPerformance,
     company: {
       revenuePosReceiptsRm: grossSales,
       costOfGoodsFifoRm: totalCogs,

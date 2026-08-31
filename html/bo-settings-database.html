@@ -14,6 +14,8 @@
       referrerpolicy="no-referrer"
     />
     <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css" />
     <link rel="stylesheet" href="../css/bo-ai-assistant.css?v=8" />
     <script>
       try {
@@ -23,9 +25,11 @@
       } catch (e) {}
     </script>
   </head>
-  <body class="ai-page ai-boot">
-    <div id="ai-root" class="ai-root" aria-busy="true" aria-label="Pangkalan data">
-      <p class="ai-root__loading">Memuatkan…</p>
+  <body class="staff-dash">
+    <div class="sd-app bs-settings bs-settings--kb">
+      <div id="ai-root" class="bs-settings__kb-root" aria-busy="true" aria-label="Pangkalan data">
+        <p class="bs-settings__loading">Memuatkan…</p>
+      </div>
     </div>
     <script type="module" src="../js/ai-assistant/owner-app.js?v=8"></script>
     <script type="module" src="../js/staff/bo-settings-iframe-autosize.js"></script>

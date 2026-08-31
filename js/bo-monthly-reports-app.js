@@ -1,7 +1,7 @@
 import { redirectIfPosPageWithoutAuth } from "./pos-page-auth.js";
 await redirectIfPosPageWithoutAuth();
 
-import { db, doc, getDoc } from "./firebase/init.js";
+import { db, doc, getDocFromServer } from "./firebase/init.js?v=20260825b";
 import { COL_MONTHLY_REPORTS } from "./firebase/collections.js";
 import { isElevatedRole } from "./pos-rbac-session.js";
 import { waitForAuthUser } from "./pos-firebase-auth-bridge.js";
@@ -128,12 +128,12 @@ function renderReport(d, key) {
   } else {
     staffHtml = staffLines
       .map(function (row) {
-        var salary = row.isOwner ? "N/A" : rm(row.estimatedMonthlySalaryRm || 0);
+        var salary = row.isOwner ? "tiada" : rm(row.estimatedMonthlySalaryRm || 0);
         var clockTxt =
-          (row.clockInCount || 0) +
-          " in · " +
-          (row.clockOutCount || 0) +
-          " out";
+          (row.totalHoursWorked != null ? row.totalHoursWorked : 0) +
+          " jam · " +
+          (row.totalSessions || 0) +
+          " sesi";
         var badge = row.isOwner
           ? '<span class="rp-badge" style="background:#fef3c7;color:#92400e">Owner</span>'
           : '<span class="rp-badge rp-badge-ok">' + escapeHtml(row.role || "staff") + "</span>";
@@ -141,14 +141,14 @@ function renderReport(d, key) {
           '<div class="rp-staff-row">' +
           '<div class="rp-staff-row__head">' +
           '<strong>' +
-          escapeHtml(row.name || "—") +
+          escapeHtml(String(row.name || "—").replace(/\s*\(Owner\)\s*$/i, "")) +
           "</strong> " +
           badge +
           "</div>" +
           '<div class="rp-row"><span class="rp-row-label">Gaji anggaran</span><span class="rp-row-val">' +
           escapeHtml(salary) +
           "</span></div>" +
-          '<div class="rp-row"><span class="rp-row-label">Clock bulan ini</span><span class="rp-row-val">' +
+          '<div class="rp-row"><span class="rp-row-label">Kehadiran bulan ini</span><span class="rp-row-val">' +
           escapeHtml(clockTxt) +
           "</span></div>" +
           "</div>"
@@ -215,6 +215,9 @@ function renderReport(d, key) {
     '<div class="rp-section-head"><div class="rp-section-num">4</div><p class="rp-section-title">Perbelanjaan bulan ini</p></div>' +
     '<div class="rp-row"><span class="rp-row-label">Gaji pekerja</span><span class="rp-row-val">' + escapeHtml(rm(payrollTotal)) + '</span></div>' +
     '<div class="rp-row"><span class="rp-row-label">Pembelian stok bulan ini</span><span class="rp-row-val">' + escapeHtml(rm(r.purchaseHistoryTotalRm)) + '</span></div>' +
+    (r.purchaseHistoryTaxTotalRm > 0
+      ? '<div class="rp-row"><span class="rp-row-label">— termasuk cukai/SST belian borong</span><span class="rp-row-val">' + escapeHtml(rm(r.purchaseHistoryTaxTotalRm)) + '</span></div>'
+      : '') +
     '<p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;padding:0 0 6px">* Kos bahan yang digunakan untuk jualan sudah dikira dalam Keuntungan Kasar di atas.</p>' +
     '</div>' +
 
@@ -250,9 +253,11 @@ function renderReport(d, key) {
 async function loadReport() {
   var sel = selectedYearMonth();
   currentKey = monthDocId(sel.year, sel.month);
+  currentReport = null;
+  renderEmpty();
   setStatus("Memuatkan…");
   try {
-    var snap = await getDoc(doc(db, COL_MONTHLY_REPORTS, currentKey));
+    var snap = await getDocFromServer(doc(db, COL_MONTHLY_REPORTS, currentKey));
     if (!snap.exists()) {
       currentReport = null;
       var now = new Date();
@@ -299,7 +304,12 @@ async function onGenerate() {
   if (btn) { btn.disabled = true; btn.textContent = "Jana…"; }
   setStatus("Menjana laporan " + sel.year + "-" + String(sel.month).padStart(2,"0") + "…");
   try {
-    await generateAndWriteMonthlyReport(sel.year, sel.month, { source: "user_regenerate" });
+    await generateAndWriteMonthlyReport(sel.year, sel.month, {
+      source: "user_regenerate",
+      onProgress: function (msg) {
+        setStatus(msg);
+      }
+    });
     setStatus("Laporan berjaya dijana.", "ok");
     await loadReport();
   } catch (e) {
@@ -426,6 +436,9 @@ async function downloadPdf() {
     sectionHead(topMenu.length > 0 ? "4" : "3", "Perbelanjaan Bulan Ini");
     row("Gaji pekerja", rm(payrollTotal));
     row("Pembelian stok bahan", rm(r.purchaseHistoryTotalRm));
+    if (r.purchaseHistoryTaxTotalRm > 0) {
+      row("— termasuk cukai/SST belian borong", rm(r.purchaseHistoryTaxTotalRm));
+    }
 
     // Section 4 — Pembayaran
     sectionHead(topMenu.length > 0 ? "5" : "4", "Cara Pembayaran Pelanggan");
@@ -504,18 +517,21 @@ if (genBtn) genBtn.addEventListener("click", onGenerate);
 var pdfBtn = $("mr-download-pdf");
 if (pdfBtn) pdfBtn.addEventListener("click", downloadPdf);
 
+function onFilterChange() {
+  updateGenerateButtonState();
+  loadReport();
+}
+
 var yearSel = $("mr-year");
 var monthSel = $("mr-month");
-if (yearSel) yearSel.addEventListener("change", updateGenerateButtonState);
-if (monthSel) monthSel.addEventListener("change", updateGenerateButtonState);
+if (yearSel) yearSel.addEventListener("change", onFilterChange);
+if (monthSel) monthSel.addEventListener("change", onFilterChange);
 
-// Init — no auto-fetch on filter change; report loads only via "Jana laporan"
 async function init() {
   try { await waitForAuthUser(); } catch(e) {}
   currentReport = null;
   currentKey = "";
-  renderEmpty();
-  setStatus("Pilih tahun dan bulan, kemudian klik Jana laporan.", null);
   updateGenerateButtonState();
+  await loadReport();
 }
 init();

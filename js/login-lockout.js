@@ -3,10 +3,10 @@
  * Akaun disekat hanya selepas MAX_FAILS percubaan gagal; tempoh 1 min → maks 1 jam.
  */
 
-export var MAX_FAILS_BEFORE_LOCK = 10;
+export var MAX_FAILS_BEFORE_LOCK = 30;
 
-/** Minit: 1 → 5 → 15 → 30 → 60 (maks) */
-var LOCKOUT_MINUTES = [1, 5, 15, 30, 60];
+/** Minit: 0.5 → 1 → 2 → 5 (maks) */
+var LOCKOUT_MINUTES = [0.5, 1, 2, 5];
 
 var STORAGE_KEY = "kb_login_lockout_v1";
 

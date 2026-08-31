@@ -73,7 +73,9 @@ function defaultSession() {
     pinLockedUntil: null,
     /** Dokumen Firestore `staff/{id}` — bila terminal kongsi satu akaun Auth (pekerja pilih nama sendiri). */
     operationalStaffId: "",
-    operationalStaffName: ""
+    operationalStaffName: "",
+    /** Tugas dipilih semasa clock-in untuk sesi ini: "cashier" | "kitchen". */
+    operationalWorkRole: ""
   };
 }
 
@@ -242,16 +244,28 @@ export function setSession(partial) {
   emitRbac();
 }
 
-/** Ikat jualan / staff_activity kepada rekod `staff` (bukan UID Auth). */
-export function setPosOperationalStaff(staffDocId, displayName) {
+/** Ikat jualan / staff_activity kepada rekod `staff` (bukan UID Auth), + tugas sesi ini. */
+export function setPosOperationalStaff(staffDocId, displayName, workRole) {
   setSession({
     operationalStaffId: String(staffDocId || "").trim(),
-    operationalStaffName: String(displayName || "").trim()
+    operationalStaffName: String(displayName || "").trim(),
+    operationalWorkRole: String(workRole || "").trim().toLowerCase()
   });
 }
 
 export function clearPosOperationalStaff() {
-  setSession({ operationalStaffId: "", operationalStaffName: "" });
+  setSession({ operationalStaffId: "", operationalStaffName: "", operationalWorkRole: "" });
+}
+
+/**
+ * Hanya staf bertugas sebagai Cashier untuk sesi semasa boleh buka drawer tunai.
+ * ADMIN kekal bypass (ikut canBypassStaffRestrictions sedia ada). Tiada workRole
+ * direkod (sesi lama/rosak) → anggap "cashier" (backward-compatible, tak sekat operasi sedia ada).
+ */
+export function canOpenCashDrawer() {
+  if (canBypassStaffRestrictions()) return true;
+  var role = String(loadSession().operationalWorkRole || "").trim().toLowerCase() || "cashier";
+  return role === "cashier";
 }
 
 export function loginSession(payload) {
