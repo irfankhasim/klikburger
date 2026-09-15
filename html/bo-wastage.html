@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
+    <title>Pembaziran — TAB KAUNTER</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="../css/base.css" />
+    <link rel="stylesheet" href="../css/staff-dashboard.css" />
+    <link rel="stylesheet" href="../css/bo-wastage.css" />
+    <script>
+      try {
+        if (window.self !== window.parent) {
+          document.documentElement.classList.add("kb-embed");
+        }
+      } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
+  </head>
+  <body class="staff-dash" data-i18n-doc-title="wastage.docTitle">
+    <div class="sd-app wg-app">
+      <header class="kb-page-header">
+        <h1 class="kb-page-title" data-i18n="wastage.title">Pembaziran</h1>
+        <p class="kb-page-lead" data-i18n-html="wastage.lead">
+          Rekod bahan yang <strong>dibuang</strong> (hangus, rosak, jatuh). Pilih <strong>lot belian</strong> supaya kos ikut harga lot itu, bukan harga semasa. Tambah bahan di <strong>Bahan mentah</strong> jika senarai kosong.
+        </p>
+      </header>
+
+      <p id="wg-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
+
+      <section class="sd-toolbar" data-i18n-aria-label="wastage.filterLabel" aria-label="Penapis bulan">
+        <div class="sd-toolbar__row">
+          <label class="sd-field">
+            <span data-i18n="wastage.filterMonth">Bulan paparan</span>
+            <input
+              type="month"
+              id="wg-filter-month"
+              title="Pilih bulan untuk jadual di bawah"
+              data-i18n-title="wastage.filterMonthTitle"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section
+        class="sd-metrics"
+        id="wg-summary"
+        aria-label="Ringkasan pembaziran bulan ini"
+        data-i18n-aria-label="wastage.summaryLabel"
+      ></section>
+
+      <section class="sd-panel" aria-labelledby="wg-form-title">
+        <h2 class="sd-panel__title" id="wg-form-title" data-i18n="wastage.formTitle">Rekod pembaziran</h2>
+        <form class="wg-form" id="wg-form">
+          <label class="sd-field">
+            <span data-i18n="wastage.ingredient">Bahan</span>
+            <select id="wg-ingredient" required>
+              <option value="" data-i18n="wastage.ingredientPh">- Pilih bahan -</option>
+            </select>
+            <span class="wg-stock" id="wg-stock" data-i18n="wastage.stockPick">Pilih bahan, kemudian pilih lot belian.</span>
+          </label>
+          <label class="sd-field wg-form__batch">
+            <span data-i18n="wastage.batch">Lot belian</span>
+            <select id="wg-batch" required>
+              <option value="" data-i18n="wastage.batchPh">- Pilih lot belian -</option>
+            </select>
+            <span class="wg-stock" id="wg-estimate" data-i18n="wastage.estimateNeed">Masukkan kuantiti untuk lihat kos lot ini.</span>
+          </label>
+          <label class="sd-field">
+            <span data-i18n="wastage.qty">Kuantiti</span>
+            <div class="wg-qty-row">
+              <input type="number" id="wg-qty" min="0" step="any" inputmode="decimal" required />
+              <span class="wg-qty-unit" id="wg-qty-unit">—</span>
+            </div>
+          </label>
+          <label class="sd-field">
+            <span data-i18n="wastage.reason">Sebab</span>
+            <select id="wg-reason">
+              <option value="burnt" data-i18n="wastage.reason.burnt">Hangus</option>
+              <option value="spoiled" data-i18n="wastage.reason.spoiled">Rosak / basi</option>
+              <option value="dropped" data-i18n="wastage.reason.dropped">Jatuh / tercicir</option>
+              <option value="other" data-i18n="wastage.reason.other">Lain-lain</option>
+            </select>
+          </label>
+          <label class="sd-field wg-form__notes">
+            <span data-i18n="wastage.notes">Nota (pilihan)</span>
+            <input type="text" id="wg-notes" maxlength="120" data-i18n-placeholder="wastage.notesPh" placeholder="Contoh: patty hangus semasa rush" />
+          </label>
+          <div class="wg-form__actions">
+            <button type="submit" class="btn btn--primary" id="wg-submit">
+              <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+              <span data-i18n="wastage.submit">Rekod pembaziran</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="sd-panel" aria-labelledby="wg-history-title">
+        <h2 class="sd-panel__title" id="wg-history-title" data-i18n="wastage.historyTitle">Sejarah pembaziran</h2>
+        <div class="sd-table-wrap">
+          <table class="sd-table">
+            <thead>
+              <tr>
+                <th data-i18n="wastage.th.when">Masa</th>
+                <th data-i18n="wastage.th.ingredient">Bahan</th>
+                <th data-i18n="wastage.th.qty">Kuantiti</th>
+                <th data-i18n="wastage.th.lot">Lot belian</th>
+                <th data-i18n="wastage.th.reason">Sebab</th>
+                <th data-i18n="wastage.th.cost">Kos</th>
+                <th data-i18n="wastage.th.notes">Nota</th>
+              </tr>
+            </thead>
+            <tbody id="wg-history-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="../js/bo-wastage-app.js"></script>
+    <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
+  </body>
+</html>

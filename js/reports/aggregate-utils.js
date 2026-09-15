@@ -96,7 +96,7 @@ export function aggregatePosReceiptDocs(receiptDocs) {
   var byPay = {};
   receiptDocs.forEach(function (d) {
     var x = d.data();
-    var voided = !!x.voided;
+    var voided = !!(x.voided || x.isVoided);
     if (voided) {
       voidedCount += 1;
       return;
@@ -150,7 +150,7 @@ export function aggregateReceiptsByMonth(receiptDocs, year) {
   }
   receiptDocs.forEach(function (d) {
     var x = d.data();
-    if (x.voided) return;
+    if (x.voided || x.isVoided) return;
     var key = monthKeyFromTimestamp(x.createdAt);
     if (!key || key.indexOf(String(year) + "-") !== 0) return;
     if (!buckets[key]) buckets[key] = [];

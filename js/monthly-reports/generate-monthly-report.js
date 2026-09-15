@@ -31,6 +31,7 @@ import {
 import { varianceCategoryFromVariance } from "../drawer-variance.js";
 import { staffStartedAtIso } from "./staff-salary-calc.js";
 import { buildStaffPerformancePayload } from "./staff-performance-calc.js";
+import { emptyWastageAgg, addWastageLedgerEntry, finalizeWastageAgg } from "./wastage-agg.js";
 
 /** Gaji rata semua staf bukan-owner dalam laporan (bukan prorate ikut jam/tarikh mula). */
 var FIXED_STAFF_SALARY_RM = 1000;
@@ -315,7 +316,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
 
   receiptDocs.forEach(function (d) {
     var x = d.data();
-    var voided = !!x.voided;
+    var voided = !!(x.voided || x.isVoided);
     if (voided) {
       voidedCount += 1;
       return;
@@ -404,6 +405,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   var ledgerByIngredient = {};
   var ledgerConsumptionByIngredient = {};
   var ledgerKinds = {};
+  var wastageState = emptyWastageAgg();
 
   ledgerDocs.forEach(function (d) {
     var x = d.data();
@@ -412,6 +414,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     var iid = String(x.ingredientId || "");
     var ingName = ingNameById[iid] || String(x.nameSnapshot || iid);
     var unit = String(x.unit || "unit");
+
+    addWastageLedgerEntry(wastageState, x, ingNameById, ingUnitById);
 
     // Rekod pembelian
     if (kind === "purchase" || kind === "initial" || kind === "price_adjust") {
@@ -434,7 +438,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       ledgerByIngredient[iid].entryCount += 1;
     }
 
-    // Rekod penggunaan dari jualan
+    // Penggunaan jualan sahaja — wastage dikira berasingan (harga lot belian)
     if (kind === "sale_consumption") {
       if (!iid) return;
       var consumedQty = typeof x.purchaseQty === "number" ? Math.abs(x.purchaseQty) : parseFloat(x.purchaseQty) || 0;
@@ -453,6 +457,11 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       ledgerConsumptionByIngredient[iid].totalQtyConsumed += consumedQty;
       ledgerConsumptionByIngredient[iid].totalCostConsumed += consumedCost;
     }
+  });
+  var wastageAgg = finalizeWastageAgg(wastageState);
+  var wastageByIngId = {};
+  wastageAgg.wastageByIngredient.forEach(function (row) {
+    wastageByIngId[row.ingredientId] = row;
   });
 
   ledgerPurchaseRm = round2(ledgerPurchaseRm);
@@ -484,7 +493,10 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     var qtyOriginal = round4(b.totalOriginal);
     var qtyRemaining = round4(b.totalRemaining);
     var thisMonthConsumption = ledgerConsumptionByIngredient[ingId];
+    var thisMonthWastage = wastageByIngId[ingId];
     var qtyUsedThisMonth = thisMonthConsumption ? round4(thisMonthConsumption.totalQtyConsumed || 0) : 0;
+    var qtyWastedThisMonth = thisMonthWastage ? round4(thisMonthWastage.totalQty || 0) : 0;
+    var costWastedThisMonth = thisMonthWastage ? round2(thisMonthWastage.totalCostRm || 0) : 0;
 
     return {
       ingredientId: ingId,
@@ -492,6 +504,8 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       unit: unit,
       qtyOriginal: qtyOriginal,
       qtyUsedThisMonth: qtyUsedThisMonth,
+      qtyWastedThisMonth: qtyWastedThisMonth,
+      costWastedThisMonth: costWastedThisMonth,
       qtyRemaining: qtyRemaining,
       status: qtyRemaining <= 0 ? "habis" : qtyRemaining <= 5 ? "rendah" : "ok"
     };
@@ -500,18 +514,23 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   // Gabungkan pembelian dan penggunaan dalam satu senarai
   var allIngredientIds = new Set([
     ...Object.keys(ledgerByIngredient),
-    ...Object.keys(ledgerConsumptionByIngredient)
+    ...Object.keys(ledgerConsumptionByIngredient),
+    ...Object.keys(wastageByIngId)
   ]);
 
   var combinedIngredientSummary = Array.from(allIngredientIds).map(function(iid) {
     var purchase = ledgerByIngredient[iid] || {};
     var consumption = ledgerConsumptionByIngredient[iid] || {};
-    var name = purchase.name || consumption.name || ingNameById[iid] || iid;
-    var unit = purchase.unit || consumption.unit || "unit";
+    var wasted = wastageByIngId[iid] || {};
+    var name = purchase.name || consumption.name || wasted.name || ingNameById[iid] || iid;
+    var unit = purchase.unit || consumption.unit || wasted.unit || "unit";
     var qtyBought = round4(purchase.totalQtyPurchased || 0);
     var qtyUsed = round4(consumption.totalQtyConsumed || 0);
-    var qtyRemaining = round4(Math.max(0, qtyBought - qtyUsed));
+    var qtyWasted = round4(wasted.totalQty || 0);
+    var live = batchByIngredient[iid];
+    var qtyRemaining = live ? round4(live.totalRemaining) : round4(Math.max(0, qtyBought - qtyUsed - qtyWasted));
     var costUsed = round2(consumption.totalCostConsumed || 0);
+    var costWasted = round2(wasted.totalCostRm || 0);
     var costBought = round2(purchase.ledgerSpendRm || 0);
     return {
       ingredientId: iid,
@@ -519,12 +538,14 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       unit: unit,
       qtyBought: qtyBought,
       qtyUsed: qtyUsed,
+      qtyWasted: qtyWasted,
       qtyRemaining: qtyRemaining,
       costBought: costBought,
-      costUsed: costUsed
+      costUsed: costUsed,
+      costWasted: costWasted
     };
   }).filter(function(x) {
-    return x.qtyBought > 0 || x.qtyUsed > 0;
+    return x.qtyBought > 0 || x.qtyUsed > 0 || x.qtyWasted > 0;
   }).sort(function(a, b) {
     return b.costBought - a.costBought;
   });
@@ -539,10 +560,11 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
   legacySalesTotal = round2(legacySalesTotal);
 
   var otherExpensesRm = 0;
-  // Operasi bersih = Untung kasar - Gaji - Perbelanjaan lain
-  // purchaseTotalRm TIDAK ditolak dari sini kerana ia adalah pembelian stok
-  // untuk masa hadapan, bukan kos operasi terus bulan ini (COGS sudah dalam grossProfit)
-  var netOperating = round2(grossProfit - payrollTotal - otherExpensesRm);
+  var wastageTotalRm = wastageAgg.wastageTotalRm;
+  // Operasi bersih = Untung kasar - Gaji - Wastage
+  // COGS = kos lot FIFO pada jualan sahaja. Wastage = kos lot belian yang dibuang.
+  // purchaseTotalRm tidak ditolak (stok untuk masa hadapan; COGS sudah kira bahan terjual).
+  var netOperating = round2(grossProfit - payrollTotal - wastageTotalRm - otherExpensesRm);
 
   progress("Menyimpan laporan…");
   var payload = {
@@ -552,7 +574,7 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
     boundsNote:
       "Julat masa ikut tengah malam tempatan pelayar semasa penjanaan (new Date(year, month-1, 1) → bulan berikut).",
     generatedAt: serverTimestamp(),
-    generatorVersion: 2,
+    generatorVersion: 3,
     source: o.source || "user_regenerate",
     actorUid: o.actorUid != null ? String(o.actorUid) : "",
     rawMaterials: {
@@ -567,6 +589,9 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       consumptionByIngredient: consumptionAgg,
       ingredientSummary: combinedIngredientSummary,
       ingredientStockSummary: ingredientStockSummary,
+      wastageTotalRm: wastageTotalRm,
+      wastageEntryCount: wastageAgg.wastageEntryCount,
+      wastageByIngredient: wastageAgg.wastageByIngredient,
       ingredientsCatalogCount: ingSnap.size
     },
     sales: {
@@ -606,11 +631,12 @@ export async function generateAndWriteMonthlyReport(year, month1to12, opts) {
       grossProfitRm: grossProfit,
       inventoryPurchasesRecordedRm: purchaseTotalRm,
       payrollEstimateRm: payrollTotal,
+      wastageRm: wastageTotalRm,
       otherExpensesRm: otherExpensesRm,
       netOperatingEstimateRm: netOperating,
       includesLegacySalesCollection: legacyCount > 0,
       narrative:
-        "Anggaran operasi bersih = Untung kasar (Jualan - COGS) - Anggaran gaji pekerja aktif. Pembelian stok (purchase_history) dipaparkan berasingan sebagai maklumat perbelanjaan inventori — ia tidak ditolak dari operasi bersih kerana COGS sudah mengambil kira kos bahan yang digunakan."
+        "Anggaran operasi bersih = Untung kasar (Jualan - COGS jualan) - Gaji - Pembaziran. Pembaziran dikira dari harga lot belian yang dipilih semasa rekod, bukan harga katalog semasa. Pembelian stok (purchase_history) dipaparkan berasingan dan tidak ditolak dari operasi bersih."
     }
   };
 

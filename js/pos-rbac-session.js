@@ -6,6 +6,7 @@
 import { getPosHubState, appendPosAudit } from "./pos-operations-hub.js";
 import { PROTOTYPE_PIN_MAX_ATTEMPTS } from "./pos-security-constants.js";
 import { ROLES, OPERATIONAL_STATUS } from "./pos-rbac-constants.js";
+import { t as tr } from "./i18n/locale.js";
 
 export { ROLES, OPERATIONAL_STATUS };
 
@@ -16,6 +17,8 @@ function mirrorClockStaffActivity(kind) {
   // operationalStaffId sudah dikosongkan dan clock_out akan ditulis dengan staffId salah
   // (UID Auth) — menyebabkan ia gagal dipadan dengan clock_in dan tidak dipaparkan.
   var session = loadSession();
+  var wr = String(session.operationalWorkRole || "").trim().toLowerCase();
+  if (wr === "kitchen" || wr === "owner") return;
   var atMs = Date.now();
   console.info(
     "[clock] mirror",
@@ -75,7 +78,8 @@ function defaultSession() {
     operationalStaffId: "",
     operationalStaffName: "",
     /** Tugas dipilih semasa clock-in untuk sesi ini: "cashier" | "kitchen". */
-    operationalWorkRole: ""
+    operationalWorkRole: "",
+    ownerTestingSession: false
   };
 }
 
@@ -216,11 +220,23 @@ export function canBypassStaffRestrictions() {
   return loadSession().role === ROLES.ADMIN;
 }
 
-/** Layer 1+2: full sales & kitchen ops (not money drawer extras). */
+/**
+ * Jualan / pesanan / papan dapur: sudah clock in.
+ * Drawer tunai (buka/tutup, void, cash in/out) kekal di canUseFinancialControls.
+ * Hanya clock out yang mengunci semula POS — tutup drawer tidak mengunci menu.
+ */
 export function canAccessOperationalModules() {
   if (canBypassStaffRestrictions()) return true;
-  var st = getEffectiveOperationalStatus();
-  return st !== OPERATIONAL_STATUS.NOT_CLOCKED_IN && st !== OPERATIONAL_STATUS.SHIFT_CLOSED;
+  var s = loadSession();
+  if (!s.clockedIn) return false;
+  var wr = String(s.operationalWorkRole || "").trim().toLowerCase();
+  if (wr === "kitchen") return true;
+  var hub = getPosHubState();
+  if (wr === "cashier" || wr === "") {
+    return !!(hub.shift && hub.shift.isOpen);
+  }
+  if (isOwnerRole() || wr === "owner") return true;
+  return !!(hub.shift && hub.shift.isOpen);
 }
 
 /** Read-only: dashboard-style view for locked staff. */
@@ -254,7 +270,12 @@ export function setPosOperationalStaff(staffDocId, displayName, workRole) {
 }
 
 export function clearPosOperationalStaff() {
-  setSession({ operationalStaffId: "", operationalStaffName: "", operationalWorkRole: "" });
+  setSession({
+    operationalStaffId: "",
+    operationalStaffName: "",
+    operationalWorkRole: "",
+    ownerTestingSession: false
+  });
 }
 
 /**
@@ -264,8 +285,11 @@ export function clearPosOperationalStaff() {
  */
 export function canOpenCashDrawer() {
   if (canBypassStaffRestrictions()) return true;
-  var role = String(loadSession().operationalWorkRole || "").trim().toLowerCase() || "cashier";
-  return role === "cashier";
+  var s = loadSession();
+  if (!s.clockedIn) return false;
+  var wr = String(s.operationalWorkRole || "").trim().toLowerCase();
+  if (wr === "kitchen") return false;
+  return wr === "cashier" || wr === "owner" || wr === "" || isOwnerRole();
 }
 
 export function loginSession(payload) {
@@ -286,6 +310,26 @@ export function loginSession(payload) {
 }
 
 /**
+ * Boot / "terus ke menu": kemas kini identiti Auth tanpa memadam clock-in.
+ * Akaun baharu (userId berbeza atau tiada sesi) → loginSession (reset kehadiran).
+ */
+export function applyLoginIdentity(payload) {
+  var prev = loadSession();
+  var incomingId = String((payload && payload.userId) || "").trim();
+  var prevId = String(prev.userId || "").trim();
+  if (!prevId || !incomingId || prevId !== incomingId) {
+    loginSession(payload);
+    return;
+  }
+  setSession({
+    userId: incomingId,
+    displayName: String((payload && payload.displayName) || prev.displayName || ""),
+    email: String((payload && payload.email) || prev.email || ""),
+    role: (payload && payload.role) || prev.role
+  });
+}
+
+/**
  * Sebab log keluar disekat — null jika dibenarkan.
  * Semak drawer/syif kaunter dahulu, kemudian status clock in.
  */
@@ -295,17 +339,17 @@ export function getLogoutBlockReason() {
 
   // Semak drawer dulu
   if (hub.shift && hub.shift.isOpen) {
-    return "Tutup drawer tunai (syif kaunter) dahulu sebelum log keluar. Pergi ke menu Clock In / Drawer.";
+    return tr("rbac.logout.closeDrawer");
   }
 
   // Semak clock in aktif — wajib clock out dulu
   if (sess.clockedIn) {
-    return "Anda masih clock in. Sila clock out terlebih dahulu sebelum log keluar. Pergi ke menu Clock In / Clock Out.";
+    return tr("rbac.logout.stillClocked");
   }
 
   // Semak jika ada sesi clock in aktif dalam operationalStaffId yang berbeza
   if (sess.operationalStaffId && sess.operationalStaffId !== "") {
-    return "Sila clock out terlebih dahulu sebelum log keluar. Pergi ke menu Clock In / Clock Out.";
+    return tr("rbac.logout.clockOutFirst");
   }
 
   return null;
@@ -320,7 +364,7 @@ export async function assertLogoutReady() {
   // Semak clock in dulu
   var sess = loadSession();
   if (sess.clockedIn) {
-    return "Anda masih clock in. Sila clock out terlebih dahulu sebelum log keluar.";
+    return tr("rbac.logout.stillClocked");
   }
 
   var reason = getLogoutBlockReason();
@@ -329,7 +373,7 @@ export async function assertLogoutReady() {
   try {
     var hubMod = await import("./pos-firestore-hub.js");
     if (await hubMod.queryOpenShiftExists()) {
-      return "Tutup drawer tunai (syif kaunter) dahulu sebelum log keluar. Pergi ke menu Clock In / Drawer.";
+      return tr("rbac.logout.closeDrawer");
     }
   } catch (e) {}
   return null;
@@ -344,7 +388,7 @@ export function logoutSession() {
 
 export function clockIn() {
   var s = loadSession();
-  if (s.clockedIn) return { ok: false, error: "Sudah clock in." };
+  if (s.clockedIn) return { ok: true, resumed: true };
   s.clockedIn = true;
   s.clockedInAt = new Date().toISOString();
   s.clockedOutAt = null;
@@ -363,14 +407,45 @@ export function clockIn() {
   return { ok: true };
 }
 
+/** Pulihkan clock-in tempatan (refresh) tanpa tulis semula kehadiran ke Firestore. */
+export function restoreClockedInSession() {
+  var s = loadSession();
+  if (s.clockedIn) return { ok: true, resumed: true };
+  s.clockedIn = true;
+  s.clockedInAt = s.clockedInAt || new Date().toISOString();
+  s.clockedOutAt = null;
+  s.afterShiftCloseReadOnly = false;
+  saveSession(s);
+  emitRbac();
+  return { ok: true };
+}
+
+/**
+ * Owner memaksa clock-out dari peranti lain — tutup sesi tempatan tanpa tulis
+ * kehadiran semula (server dah tulis clock_out) dan tanpa semak drawer.
+ */
+export function revokeClockInFromRoster() {
+  var s = loadSession();
+  if (!s.clockedIn) return { ok: true, alreadyOut: true };
+  s.clockedIn = false;
+  s.clockedOutAt = new Date().toISOString();
+  s.afterShiftCloseReadOnly = false;
+  s.pinFailures = 0;
+  s.pinLockedUntil = null;
+  saveSession(s);
+  clearPosOperationalStaff();
+  emitRbac();
+  return { ok: true };
+}
+
 export function clockOut() {
   var s = loadSession();
   if (!s.clockedIn) {
-    return { ok: false, error: "Belum clock in." };
+    return { ok: false, error: tr("rbac.clock.notIn") };
   }
   var hub = getPosHubState();
   if (hub.shift && hub.shift.isOpen) {
-    return { ok: false, error: "Tutup drawer tunai dahulu sebelum clock out." };
+    return { ok: false, error: tr("rbac.clock.closeDrawerOut") };
   }
   s.clockedIn = false;
   s.clockedOutAt = new Date().toISOString();
@@ -474,7 +549,13 @@ export function canAccessBackOfficeModule() {
   return isElevatedRole();
 }
 
-/** Paparan di menu POS & skrin terbenam — kekal ringkas untuk kakitangan kaunter. */
+/** Jualan / POS penuh: sudah clock in. Drawer hanya untuk kawalan tunai. */
+export function canOperatePos() {
+  if (canBypassStaffRestrictions()) return true;
+  return canAccessOperationalModules();
+}
+
+/** Mesej kunci menu POS — jualan dikunci hanya jika belum clock in. */
 export function staffLockMessage() {
-  return "Sila clock in terlebih dahulu untuk membuka drawer tunai serta menu Jualan, Resit, dan Senarai Pesanan.";
+  return tr("rbac.staffLock");
 }

@@ -15,16 +15,16 @@ import {
   subscribeRbac,
   getSnapshot,
   canBypassStaffRestrictions,
-  canAccessOperationalModules,
   canUseFinancialControls,
   canOpenCashDrawer,
   isReadOnlyMode,
   getActorForAudit,
   clearManagerPinFailures,
-  staffLockMessage,
   notifyShiftClosedForStaff,
   notifyShiftOpenedClearReadOnly
 } from "./pos-rbac-session.js";
+// Fail ini sudah guna `t` sebagai pembolehubah sasaran peristiwa, jadi import sebagai `tr`.
+import { t as tr, onLocaleChange } from "./i18n/locale.js";
 var hubBound = false;
 
 function isClockedIn() {
@@ -38,7 +38,7 @@ function isClockedIn() {
 /** Laci & drawer — sama seperti menu operasi: mesti clock in dahulu (semua peranan). */
 function requireClockInForLaci() {
   if (isClockedIn()) return true;
-  window.alert("Sila clock in dahulu. Kawalan laci tunai dan drawer hanya dibuka selepas clock in.");
+  window.alert(tr("shift.alert.clockInFirst"));
   return false;
 }
 
@@ -70,49 +70,91 @@ function fmtShortClock(iso) {
   }
 }
 
+/**
+ * Templat statik panel. Teks ditulis melalui tr() supaya betul sebaik dipasang
+ * (panel ini disuntik selepas applyI18n awal berjalan), dan ditanda data-i18n
+ * supaya applyI18n menyapunya semula bila bahasa bertukar. Elemen yang teksnya
+ * ditulis oleh renderShiftPanelUI() sengaja TIDAK ditanda.
+ */
 export function getShiftPanelHtml() {
   return (
     '<div id="kb-shift-shell" class="kb-shift-shell">' +
     '<section class="rc-shift rc-shift--compact kb-shift-panel" aria-labelledby="kb-shift-heading">' +
-    '<h2 id="kb-shift-heading" class="sr-only">Drawer tunai</h2>' +
+    '<p id="kb-shift-heading" class="ops-card__title">' +
+    escapeHtml(tr("clock.card.drawer")) +
+    "</p>" +
     '<div class="rc-shift-bar">' +
     '<div class="rc-shift-bar__top">' +
     '<span id="rc-shift-pill" class="rc-shift-pill" aria-live="polite"></span>' +
     '<p id="shift-status-line" class="rc-shift-line"></p>' +
     "</div>" +
-    '<div class="rc-shift-bar__metrics" role="group" aria-label="Ringkas drawer">' +
+    '<div class="rc-shift-bar__metrics" role="group" aria-label="' +
+    escapeHtml(tr("shift.metricsLabel")) +
+    '" data-i18n-aria-label="shift.metricsLabel">' +
     '<div class="rc-mini-metric">' +
-    '<span class="rc-mini-metric__lbl">Laci</span>' +
+    '<span class="rc-mini-metric__lbl" data-i18n="shift.metric.opening">' +
+    escapeHtml(tr("shift.metric.opening")) +
+    "</span>" +
+    '<strong id="shift-opening-cash" class="rc-mini-metric__val">—</strong>' +
+    "</div>" +
+    '<div class="rc-mini-metric">' +
+    '<span class="rc-mini-metric__lbl" data-i18n="shift.metric.drawer">' +
+    escapeHtml(tr("shift.metric.drawer")) +
+    "</span>" +
     '<strong id="shift-expected" class="rc-mini-metric__val">—</strong>' +
     "</div>" +
     '<div class="rc-mini-metric">' +
-    '<span class="rc-mini-metric__lbl">Jualan</span>' +
+    '<span class="rc-mini-metric__lbl" data-i18n="shift.metric.sales">' +
+    escapeHtml(tr("shift.metric.sales")) +
+    "</span>" +
     '<strong id="shift-sales-total" class="rc-mini-metric__val">RM 0.00</strong>' +
     "</div>" +
     '<div class="rc-mini-metric rc-mini-metric--wide">' +
-    '<span class="rc-mini-metric__lbl">Mengikut bayaran</span>' +
+    '<span class="rc-mini-metric__lbl" data-i18n="shift.metric.byPayment">' +
+    escapeHtml(tr("shift.metric.byPayment")) +
+    "</span>" +
     '<div id="shift-pay-chips" class="rc-pay-chips"></div>' +
     "</div>" +
     "</div>" +
     '<div class="rc-shift-bar__actions">' +
-    '<button type="button" class="rc-btn rc-btn--solid rc-btn--action rc-btn--shift-open" id="btn-shift-open" title="Buka drawer">' +
-    '<i class="fa-solid fa-door-open" aria-hidden="true"></i> Buka drawer' +
+    '<button type="button" class="rc-btn rc-btn--solid rc-btn--action rc-btn--shift-open" id="btn-shift-open" title="' +
+    escapeHtml(tr("shift.action.open")) +
+    '" data-i18n-title="shift.action.open">' +
+    '<i class="fa-solid fa-door-open" aria-hidden="true"></i> <span data-i18n="shift.action.open">' +
+    escapeHtml(tr("shift.action.open")) +
+    "</span>" +
     "</button>" +
-    '<button type="button" class="rc-btn rc-btn--line rc-btn--action" id="btn-cash-in" title="Tunai masuk">' +
-    '<i class="fa-solid fa-arrow-down" aria-hidden="true"></i> Tunai masuk' +
+    '<button type="button" class="rc-btn rc-btn--line rc-btn--action" id="btn-cash-in" title="' +
+    escapeHtml(tr("shift.action.cashIn")) +
+    '" data-i18n-title="shift.action.cashIn">' +
+    '<i class="fa-solid fa-arrow-down" aria-hidden="true"></i> <span data-i18n="shift.action.cashIn">' +
+    escapeHtml(tr("shift.action.cashIn")) +
+    "</span>" +
     "</button>" +
-    '<button type="button" class="rc-btn rc-btn--line rc-btn--action" id="btn-cash-out" title="Tunai keluar">' +
-    '<i class="fa-solid fa-arrow-up" aria-hidden="true"></i> Tunai keluar' +
+    '<button type="button" class="rc-btn rc-btn--line rc-btn--action" id="btn-cash-out" title="' +
+    escapeHtml(tr("shift.action.cashOut")) +
+    '" data-i18n-title="shift.action.cashOut">' +
+    '<i class="fa-solid fa-arrow-up" aria-hidden="true"></i> <span data-i18n="shift.action.cashOut">' +
+    escapeHtml(tr("shift.action.cashOut")) +
+    "</span>" +
     "</button>" +
-    '<button type="button" class="rc-btn rc-btn--solid rc-btn--action rc-btn--shift-close" id="btn-shift-close" title="Tutup drawer">' +
-    '<i class="fa-solid fa-lock" aria-hidden="true"></i> Tutup drawer' +
+    '<button type="button" class="rc-btn rc-btn--solid rc-btn--action rc-btn--shift-close" id="btn-shift-close" title="' +
+    escapeHtml(tr("shift.action.close")) +
+    '" data-i18n-title="shift.action.close">' +
+    '<i class="fa-solid fa-lock" aria-hidden="true"></i> <span data-i18n="shift.action.close">' +
+    escapeHtml(tr("shift.action.close")) +
+    "</span>" +
     "</button>" +
     "</div>" +
     "</div>" +
     "</section>" +
     '<details class="rc-notes rc-notes--compact kb-shift-log-tunai">' +
-    "<summary>Log tunai</summary>" +
-    '<span class="rc-shift-details__label">Tunai masuk / keluar</span>' +
+    '<summary data-i18n="shift.log.summary">' +
+    escapeHtml(tr("shift.log.summary")) +
+    "</summary>" +
+    '<span class="rc-shift-details__label" data-i18n="shift.log.label">' +
+    escapeHtml(tr("shift.log.label")) +
+    "</span>" +
     '<div id="shift-movements" class="rc-shift-details__body"></div>' +
     "</details>" +
     "</div>"
@@ -123,7 +165,6 @@ function applyShiftActionGates(state) {
   var sh = state.shift;
   var bypass = canBypassStaffRestrictions();
   var clockedIn = isClockedIn();
-  var ops = clockedIn && (canAccessOperationalModules() || bypass);
   var fin = clockedIn && (canUseFinancialControls() || bypass);
   var ro = isReadOnlyMode() && !bypass;
 
@@ -135,7 +176,7 @@ function applyShiftActionGates(state) {
   var btnOpen = document.getElementById("btn-shift-open");
   if (btnOpen) {
     btnOpen.hidden = !!sh.isOpen;
-    btnOpen.disabled = sh.isOpen ? true : !ops || ro || !canOpenCashDrawer();
+    btnOpen.disabled = sh.isOpen ? true : !clockedIn || ro || !canOpenCashDrawer();
   }
   setDis("btn-cash-in", !fin || ro || !sh.isOpen);
   setDis("btn-cash-out", !fin || ro || !sh.isOpen);
@@ -163,7 +204,7 @@ function renderPayChips(b) {
       "</span></span>"
     );
   }
-  chips.innerHTML = chip("Tunai", b.cash) + chip("QR", b.qr);
+  chips.innerHTML = chip(tr("shift.pay.cash"), b.cash) + chip(tr("shift.pay.qr"), b.qr);
 }
 
 export function renderShiftPanelUI(state) {
@@ -174,18 +215,19 @@ export function renderShiftPanelUI(state) {
   var line = document.getElementById("shift-status-line");
   var exp = document.getElementById("shift-expected");
   var tot = document.getElementById("shift-sales-total");
+  var openEl = document.getElementById("shift-opening-cash");
   var movEl = document.getElementById("shift-movements");
   if (!line || !exp || !tot || !movEl) return;
 
   if (pill) {
     if (sh.isOpen) {
-      pill.textContent = "Drawer aktif";
+      pill.textContent = tr("shift.pill.open");
       pill.className = "rc-shift-pill rc-shift-pill--open";
     } else if (sh.closing) {
-      pill.textContent = "Drawer tutup";
+      pill.textContent = tr("shift.pill.closed");
       pill.className = "rc-shift-pill rc-shift-pill--done";
     } else {
-      pill.textContent = "Belum buka";
+      pill.textContent = tr("shift.pill.notOpen");
       pill.className = "rc-shift-pill";
     }
   }
@@ -196,24 +238,36 @@ export function renderShiftPanelUI(state) {
       fmtShortClock(sh.openedAt) +
       " · " +
       sid +
-      " · Float " +
+      " · " +
+      tr("shift.line.float") +
+      " " +
       formatRM(typeof sh.openingCash === "number" ? sh.openingCash : 0);
   } else if (sh.closing) {
     line.textContent =
-      "Varians " +
+      tr("shift.line.variancePrefix") +
+      " " +
       formatRM(sh.closing.variance) +
-      (sh.closing.variance < 0 ? " (kurang)" : sh.closing.variance > 0 ? " (lebih)" : "");
+      (sh.closing.variance < 0
+        ? " " + tr("shift.line.varianceShort")
+        : sh.closing.variance > 0
+          ? " " + tr("shift.line.varianceOver")
+          : "");
   } else {
-    line.textContent = "Buka drawer untuk rekod tunai dan jualan.";
+    line.textContent = tr("shift.line.idle");
   }
 
   exp.textContent = sh.isOpen ? formatRM(getExpectedDrawerCash()) : "—";
+  if (openEl) {
+    openEl.textContent = sh.isOpen
+      ? formatRM(typeof sh.openingCash === "number" ? sh.openingCash : 0)
+      : "—";
+  }
   var b = getShiftSalesBreakdown();
   tot.textContent = formatRM(b.total);
   renderPayChips(b);
 
   if (!sh.movements || !sh.movements.length) {
-    movEl.textContent = "Tiada rekod tunai masuk atau keluar.";
+    movEl.textContent = tr("shift.movements.empty");
   } else {
     movEl.innerHTML =
       "<ul style=\"margin:0;padding-left:1.1rem\">" +
@@ -223,7 +277,7 @@ export function renderShiftPanelUI(state) {
             "<li>" +
             escapeHtml(new Date(m.at).toLocaleString("ms-MY", { hour: "2-digit", minute: "2-digit" })) +
             " — " +
-            (m.type === "out" ? "Keluar" : "Masuk") +
+            escapeHtml(m.type === "out" ? tr("shift.movement.out") : tr("shift.movement.in")) +
             " " +
             formatRM(m.amount) +
             (m.note ? " <span style=\"color:var(--text-muted)\">(" + escapeHtml(m.note) + ")</span>" : "") +
@@ -259,25 +313,39 @@ function hideModal() {
 
 function handleShiftOpen() {
   if (!requireClockInForLaci()) return;
-  if (!canAccessOperationalModules() && !canBypassStaffRestrictions()) {
-    window.alert(staffLockMessage());
-    return;
-  }
   if (isReadOnlyMode() && !canBypassStaffRestrictions()) {
-    window.alert("Mod baca sahaja — clock out atau tunggu drawer baharu.");
+    window.alert(tr("shift.alert.readOnly"));
     return;
   }
   if (!canOpenCashDrawer()) {
-    window.alert("Hanya staf bertugas sebagai Cashier dibenarkan membuka drawer tunai.");
+    window.alert(tr("shift.alert.cashierOnly"));
     return;
   }
+  var stOpen = getPosHubState();
+  var lastOpen =
+    typeof stOpen.shift.openingCash === "number" ? stOpen.shift.openingCash : 100;
   showModal(
-    "Buka drawer",
-    "<p class=\"ops-muted\" style=\"margin:0 0 0.75rem\">Tunai permulaan dalam laci sebelum jualan.</p>" +
-      '<label class="rc-filters__pay" style="margin:0"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Tunai awal (RM)</span></label>' +
-      '<input type="number" id="mod-open-cash" min="0" step="0.01" value="100" class="rc-input" style="width:100%;padding:0.55rem;margin-top:0.35rem" />',
-    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-cancel\">Batal</button>" +
-      "<button type=\"button\" class=\"rc-btn rc-btn--solid rc-btn--shift-open\" id=\"mod-confirm\">Sahkan</button>"
+    tr("shift.action.open"),
+    "<p class=\"ops-muted\">" +
+      escapeHtml(tr("shift.open.lead")) +
+      "</p>" +
+      "<p class=\"ops-muted\"><strong>" +
+      escapeHtml(tr("shift.open.yours")) +
+      "</strong></p>" +
+      '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-open-cash"><span>' +
+      escapeHtml(tr("shift.open.amount")) +
+      "</span></label>" +
+      '<input type="number" id="mod-open-cash" min="0" step="0.01" value="' +
+      escapeHtml(String(lastOpen)) +
+      '" class="rc-input" />' +
+      "</div>",
+    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-cancel\">" +
+      escapeHtml(tr("shift.modal.cancel")) +
+      "</button>" +
+      "<button type=\"button\" class=\"rc-btn rc-btn--solid rc-btn--shift-open\" id=\"mod-confirm\">" +
+      escapeHtml(tr("shift.modal.confirm")) +
+      "</button>"
   );
 }
 
@@ -285,13 +353,25 @@ function handleCashIn() {
   if (!requireClockInForLaci()) return;
   if (!canUseFinancialControls() && !canBypassStaffRestrictions()) return;
   showModal(
-    "Tunai masuk",
-    '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Amaun (RM)</span></label>' +
-      '<input type="number" id="mod-amt" min="0" step="0.01" class="rc-input" style="width:100%;padding:0.55rem;margin-bottom:0.65rem" />' +
-      '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Nota</span></label>' +
-      '<input type="text" id="mod-note" class="rc-input" style="width:100%;padding:0.55rem" />',
-    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-ci-x\">Batal</button>" +
-      "<button type=\"button\" class=\"rc-btn rc-btn--solid\" id=\"mod-ci-ok\">Rekod</button>"
+    tr("shift.action.cashIn"),
+    '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-amt"><span>' +
+      escapeHtml(tr("shift.field.amount")) +
+      "</span></label>" +
+      '<input type="number" id="mod-amt" min="0" step="0.01" class="rc-input" />' +
+      "</div>" +
+      '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-note"><span>' +
+      escapeHtml(tr("shift.field.note")) +
+      "</span></label>" +
+      '<input type="text" id="mod-note" class="rc-input" />' +
+      "</div>",
+    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-ci-x\">" +
+      escapeHtml(tr("shift.modal.cancel")) +
+      "</button>" +
+      "<button type=\"button\" class=\"rc-btn rc-btn--solid\" id=\"mod-ci-ok\">" +
+      escapeHtml(tr("shift.modal.record")) +
+      "</button>"
   );
 }
 
@@ -299,25 +379,37 @@ function handleCashOut() {
   if (!requireClockInForLaci()) return;
   if (!canUseFinancialControls() && !canBypassStaffRestrictions()) return;
   showModal(
-    "Tunai keluar",
-    '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Amaun (RM)</span></label>' +
-      '<input type="number" id="mod-amt-o" min="0" step="0.01" class="rc-input" style="width:100%;padding:0.55rem;margin-bottom:0.65rem" />' +
-      '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Sebab</span></label>' +
-      '<input type="text" id="mod-note-o" class="rc-input" style="width:100%;padding:0.55rem" />',
-    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-co-x\">Batal</button>" +
-      "<button type=\"button\" class=\"rc-btn rc-btn--solid\" id=\"mod-co-ok\">Rekod</button>"
+    tr("shift.action.cashOut"),
+    '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-amt-o"><span>' +
+      escapeHtml(tr("shift.field.amount")) +
+      "</span></label>" +
+      '<input type="number" id="mod-amt-o" min="0" step="0.01" class="rc-input" />' +
+      "</div>" +
+      '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-note-o"><span>' +
+      escapeHtml(tr("shift.field.reason")) +
+      "</span></label>" +
+      '<input type="text" id="mod-note-o" class="rc-input" />' +
+      "</div>",
+    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-co-x\">" +
+      escapeHtml(tr("shift.modal.cancel")) +
+      "</button>" +
+      "<button type=\"button\" class=\"rc-btn rc-btn--solid\" id=\"mod-co-ok\">" +
+      escapeHtml(tr("shift.modal.record")) +
+      "</button>"
   );
 }
 
 function handleShiftClose() {
   var st0 = getPosHubState();
   if (!isClockedIn() && !(st0.shift && st0.shift.isOpen)) {
-    window.alert("Sila clock in dahulu. Kawalan laci tunai dan drawer hanya dibuka selepas clock in.");
+    window.alert(tr("shift.alert.clockInFirst"));
     return;
   }
   var st = getPosHubState();
   if (!st.shift.isOpen) {
-    window.alert("Tiada drawer aktif.");
+    window.alert(tr("shift.alert.noDrawer"));
     return;
   }
   var stClose = getPosHubState();
@@ -326,32 +418,89 @@ function handleShiftClose() {
   var expFull = getExpectedDrawerCash();
   var expSimple = Math.round((opening + br.cash) * 100) / 100;
   showModal(
-    "Tutup drawer — ringkasan",
-    "<p class=\"ops-muted\" style=\"margin:0 0 0.65rem\">Sahkan kiraan tunai sebelum tutup.</p>" +
-      '<dl class="rc-dl" style="margin-bottom:0.75rem">' +
-      "<dt>Tunai awal (opening)</dt><dd><strong>" +
+    tr("shift.close.title"),
+    "<p class=\"ops-muted\">" +
+      escapeHtml(tr("shift.close.lead")) +
+      "</p>" +
+      '<dl class="ops-cash-sheet">' +
+      "<dt>" +
+      escapeHtml(tr("shift.close.opening")) +
+      "</dt><dd><strong>" +
       formatRM(opening) +
       "</strong></dd>" +
-      "<dt>Jualan tunai</dt><dd><strong>" +
+      "<dt>" +
+      escapeHtml(tr("shift.close.cashSales")) +
+      "</dt><dd>" +
       formatRM(br.cash) +
-      "</strong></dd>" +
-      "<dt>Jualan QR</dt><dd><strong>" +
+      "</dd>" +
+      "<dt>" +
+      escapeHtml(tr("shift.close.qrSales")) +
+      "</dt><dd>" +
       formatRM(br.qr) +
-      "</strong></dd>" +
-      "<dt>Jangkaan laci (awal + tunai)</dt><dd><strong>" +
+      "</dd>" +
+      "<dt>" +
+      escapeHtml(tr("shift.close.expectedSimple")) +
+      "</dt><dd>" +
       formatRM(expSimple) +
-      "</strong></dd>" +
-      "<dt>Jangkaan laci (termasuk masuk/keluar)</dt><dd><strong>" +
+      "</dd>" +
+      "<dt class=\"ops-cash-sheet__emphasis\">" +
+      escapeHtml(tr("shift.close.expectedFull")) +
+      "</dt><dd class=\"ops-cash-sheet__emphasis\"><strong>" +
       formatRM(expFull) +
       "</strong></dd>" +
       "</dl>" +
-      '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Kiraan tunai sebenar dalam laci (RM)</span></label>' +
-      '<input type="number" id="mod-act" min="0" step="0.01" class="rc-input" style="width:100%;padding:0.55rem;margin-bottom:0.65rem" />' +
-      '<label class="rc-filters__pay" style="margin:0 0 0.25rem"><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Catatan bayaran balik (pilihan)</span></label>' +
-      '<textarea id="mod-close-refund" rows="2" class="rc-textarea"></textarea>',
-    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-cl-x\">Batal</button>" +
-      "<button type=\"button\" class=\"rc-btn rc-btn--solid rc-btn--shift-close\" id=\"mod-cl-ok\">Tutup drawer</button>"
+      '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-act"><span>' +
+      escapeHtml(tr("shift.close.actualCount")) +
+      "</span></label>" +
+      '<input type="number" id="mod-act" min="0" step="0.01" class="rc-input" />' +
+      "</div>" +
+      '<p id="mod-diff-live" class="ops-diff-live ops-diff-live--pending">' +
+      escapeHtml(tr("shift.close.diffPending")) +
+      "</p>" +
+      '<div class="ops-field">' +
+      '<label class="rc-filters__pay" for="mod-close-refund"><span>' +
+      escapeHtml(tr("shift.close.refundNotes")) +
+      "</span></label>" +
+      '<textarea id="mod-close-refund" rows="2" class="rc-textarea"></textarea>' +
+      "</div>",
+    "<button type=\"button\" class=\"rc-btn rc-btn--line\" id=\"mod-cl-x\">" +
+      escapeHtml(tr("shift.modal.cancel")) +
+      "</button>" +
+      "<button type=\"button\" class=\"rc-btn rc-btn--solid rc-btn--shift-close\" id=\"mod-cl-ok\">" +
+      escapeHtml(tr("shift.action.close")) +
+      "</button>"
   );
+  var actLive = document.getElementById("mod-act");
+  var liveEl = document.getElementById("mod-diff-live");
+  function paintLiveDiff() {
+    if (!liveEl || !actLive) return;
+    var actual = parseFloat(actLive.value);
+    if (!isFinite(actual)) {
+      liveEl.className = "ops-diff-live ops-diff-live--pending";
+      liveEl.textContent = tr("shift.close.diffPending");
+      return;
+    }
+    var diff = Math.round((actual - expFull) * 100) / 100;
+    if (Math.abs(diff) < 0.005) {
+      liveEl.className = "ops-diff-live ops-diff-live--ok";
+      liveEl.textContent = tr("shift.close.diffNone");
+    } else if (diff < 0) {
+      liveEl.className = "ops-diff-live ops-diff-live--short";
+      liveEl.textContent =
+        tr("shift.close.diffShort") +
+        " " +
+        formatRM(Math.abs(diff)) +
+        " · " +
+        tr("shift.closed.toPayLabel") +
+        " " +
+        formatRM(Math.abs(diff));
+    } else {
+      liveEl.className = "ops-diff-live ops-diff-live--over";
+      liveEl.textContent = tr("shift.close.diffOver") + " " + formatRM(diff);
+    }
+  }
+  if (actLive) actLive.addEventListener("input", paintLiveDiff);
 }
 
 async function onModalFootClick(e) {
@@ -403,13 +552,13 @@ async function onModalFootClick(e) {
   if (id === "mod-cl-ok") {
     var stPre = getPosHubState();
     if (!isClockedIn() && !(stPre.shift && stPre.shift.isOpen)) {
-      window.alert("Sila clock in dahulu. Kawalan laci tunai dan drawer hanya dibuka selepas clock in.");
+      window.alert(tr("shift.alert.clockInFirst"));
       return;
     }
     var actInput = document.getElementById("mod-act");
     var actual = parseFloat(actInput && actInput.value);
     if (!isFinite(actual)) {
-      window.alert("Sila masukkan kiraan tunai sebenar dalam laci (RM).");
+      window.alert(tr("shift.alert.needActual"));
       if (actInput) actInput.focus();
       return;
     }
@@ -427,23 +576,43 @@ async function onModalFootClick(e) {
     } catch (err) {
       console.error(err);
       if (t instanceof HTMLButtonElement) t.disabled = false;
-      window.alert("Gagal tutup drawer: " + (err && err.message ? err.message : String(err)));
+      window.alert(
+        tr("shift.alert.closeFailPrefix") + (err && err.message ? err.message : String(err))
+      );
       return;
     }
     if (!resC || !resC.ok) {
       if (t instanceof HTMLButtonElement) t.disabled = false;
-      window.alert(resC && resC.error ? resC.error : "Gagal tutup drawer.");
+      window.alert(resC && resC.error ? resC.error : tr("shift.alert.closeFail"));
       return;
     }
     clearManagerPinFailures();
     if (!canBypassStaffRestrictions()) notifyShiftClosedForStaff();
+    var v = resC.closing.variance;
+    var vLine = tr("shift.close.diffNone");
+    if (v < -0.005) vLine = tr("shift.close.diffShort") + " " + formatRM(Math.abs(v));
+    else if (v > 0.005) vLine = tr("shift.close.diffOver") + " " + formatRM(v);
+    var payLine = "";
+    if (resC.closing.amountToBePaid > 0) {
+      payLine =
+        "\n" +
+        tr("shift.closed.toPayLabel") +
+        " " +
+        formatRM(resC.closing.amountToBePaid);
+    }
     window.alert(
-      "Drawer ditutup.\nJangkaan laci: " +
+      tr("shift.closed.title") +
+        "\n" +
+        tr("shift.closed.expectedLabel") +
+        " " +
         formatRM(resC.closing.expectedDrawer) +
-        "\nSebenar: " +
+        "\n" +
+        tr("shift.closed.actualLabel") +
+        " " +
         formatRM(resC.closing.actualDrawer) +
-        "\nVarians: " +
-        formatRM(resC.closing.variance)
+        "\n" +
+        vLine +
+        payLine
     );
     hideModal();
     renderShiftPanelUI(getPosHubState());
@@ -514,3 +683,12 @@ export function ensureShiftPanelHubSync() {
     renderShiftPanelUI(getPosHubState());
   });
 }
+
+/**
+ * Teks statik panel disapu oleh applyI18n; di sini kita render semula teks yang
+ * ditulis oleh JS. renderShiftPanelUI() keluar awal apabila panel belum dipasang,
+ * jadi ini tidak melakukan apa-apa di halaman tanpa panel.
+ */
+onLocaleChange(function () {
+  renderShiftPanelUI(getPosHubState());
+});

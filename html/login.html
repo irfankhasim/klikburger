@@ -3,10 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover" />
-    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="theme-color" content="#e08a18" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#d97706" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <meta name="description" content="TAB KAUNTER — log masuk POS kaunter." />
     <title>Log masuk — TAB KAUNTER</title>
     <link
@@ -16,11 +24,13 @@
       referrerpolicy="no-referrer"
     />
     <link rel="stylesheet" href="../css/login.css" />
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
   </head>
-  <body class="page-login">
+  <body class="page-login" data-i18n-doc-title="login.docTitle">
     <div class="login-bg" aria-hidden="true"></div>
     <div class="app-wrap">
-      <h1 class="sr-only">Selamat datang — log masuk TAB KAUNTER</h1>
+      <h1 class="sr-only" data-i18n="login.srHeading">Selamat datang — log masuk TAB KAUNTER</h1>
 
       <div class="login-split">
         <div class="login-split__brand">
@@ -28,21 +38,24 @@
             class="login-hero__logo"
             src="../assets/tabkaunter.png"
             alt="TAB KAUNTER"
+            width="960"
+            height="540"
             decoding="async"
           />
         </div>
 
         <main class="card login-card login-split__main" aria-labelledby="login-heading">
           <div class="login-card__head">
-            <h2 id="login-heading" class="login-card__title">Selamat datang</h2>
-            <p class="login-card__lead">
+            <p class="login-card__eyebrow">TAB KAUNTER</p>
+            <h2 id="login-heading" class="login-card__title" data-i18n="login.title">Selamat datang</h2>
+            <p class="login-card__lead" data-i18n="login.lead">
               Gembira melihat anda semula. Log masuk untuk teruskan ke menu utama.
             </p>
           </div>
 
           <form class="login-form" action="main-menu.html" method="get" novalidate>
             <div class="field field--with-icon">
-              <label class="field__label" for="email">E-mel</label>
+              <label class="field__label" for="email" data-i18n="login.email">E-mel</label>
               <div class="field__control">
                 <span class="field__icon" aria-hidden="true"><i class="fa-regular fa-envelope"></i></span>
                 <input
@@ -52,12 +65,13 @@
                   name="email"
                   autocomplete="username"
                   placeholder="nama@restoran.com"
+                  data-i18n-placeholder="login.emailPlaceholder"
                   required
                 />
               </div>
             </div>
             <div class="field field--with-icon">
-              <label class="field__label" for="password">Kata laluan</label>
+              <label class="field__label" for="password" data-i18n="login.password">Kata laluan</label>
               <div class="field__control">
                 <span class="field__icon" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
                 <input
@@ -74,6 +88,7 @@
                   class="field__toggle"
                   id="password-toggle"
                   aria-label="Tunjuk kata laluan"
+                  data-i18n-aria-label="login.showPassword"
                   aria-pressed="false"
                 >
                   <i class="fa-regular fa-eye" aria-hidden="true"></i>
@@ -82,17 +97,24 @@
             </div>
             <button type="submit" class="btn btn--primary login-submit">
               <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
-              Teruskan ke menu
+              <span data-i18n="login.submit">Teruskan ke menu</span>
             </button>
           </form>
 
           <div class="form-footer login-footer">
-            <span>Belum ada akaun?</span>
-            <a href="#">Mohon akses</a>
+            <p class="login-footer__secure">
+              <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+              <span data-i18n="login.secure">Log masuk selamat untuk kaunter</span>
+            </p>
+            <p class="login-footer__help">
+              <span data-i18n="login.noAccount">Belum ada akaun?</span>
+              <a href="#" data-i18n="login.requestAccess">Mohon akses</a>
+            </p>
             <small class="login-footer__copyright">Copyright &copy; Irfan Khasim</small>
           </div>
 
           <script type="module" src="../js/login.js"></script>
+          <script type="module" src="../js/i18n/lang-toggle.js"></script>
         </main>
       </div>
     </div>

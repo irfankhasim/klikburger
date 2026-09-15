@@ -5,6 +5,11 @@ import { db } from "../firebase/init.js";
 import { docToIngredient } from "../cost-calculator/mappers.js";
 import { docToRecipe, docToMenuItem } from "./mappers.js";
 import { subscribeIngredients } from "../cost-calculator/ingredients-repository.js";
+import {
+  subscribeIngredientBatches,
+  groupBatchesByIngredientId,
+  applyFifoCostsToIngredients
+} from "../cost-calculator/ingredient-batch-repository.js";
 import { subscribeRecipes } from "./recipes-repository.js";
 import { subscribeMenuItems, persistMenuItem } from "./menu-items-repository.js";
 import { menuItemCostModel } from "./costing-engine.js";
@@ -15,6 +20,7 @@ import { serverTimestamp } from "../firebase/init.js";
 var ingredients = [];
 var recipes = [];
 var menuItems = [];
+var batchesByIngredientId = {};
 var pending = { ingredients: false, recipes: false, menuItems: false };
 var sellPriceHandlersBound = false;
 
@@ -68,6 +74,8 @@ function render() {
       var recName = rec ? escapeHtml(rec.name || "(tiada resipi)") : '<span style="color:#c0392b">recipeId tidak jumpa</span>';
       var sellVal = Number(m.sellingPrice);
       if (isNaN(sellVal)) sellVal = 0;
+      var costCell = formatRM(m.cost);
+      var marginCell = m.marginPct + "%";
       return (
         '<tr data-menu-row="' +
         escapeHtml(mi.id) +
@@ -76,7 +84,7 @@ function render() {
         "</td><td>" +
         recName +
         "</td><td class=\"num\">" +
-        formatRM(m.cost) +
+        costCell +
         '</td><td class="num">' +
         '<input type="number" class="sell-price-input" step="0.01" min="0" data-menu-id="' +
         escapeHtml(mi.id) +
@@ -88,8 +96,8 @@ function render() {
         '</td><td class="num js-cell-profit">' +
         formatRM(m.profit) +
         '</td><td class="num js-cell-margin">' +
-        m.marginPct +
-        "%</td></tr>"
+        marginCell +
+        "</td></tr>"
       );
     })
     .join("");
@@ -176,7 +184,7 @@ bindMenuCostingPagehideOnce();
 menuCostingUnsubs.push(
   subscribeIngredients(
   function (snap) {
-    ingredients = snap.docs.map(docToIngredient);
+    ingredients = applyFifoCostsToIngredients(snap.docs.map(docToIngredient), batchesByIngredientId);
     pending.ingredients = true;
     markReady();
   },
@@ -184,6 +192,19 @@ menuCostingUnsubs.push(
     console.error(e);
     var el = document.getElementById("menu-costing-tbody");
     if (el) el.innerHTML = '<tr><td colspan="6" style="color:#c0392b">Ralat ingredients: ' + escapeHtml(e.message || String(e)) + "</td></tr>";
+  }
+)
+);
+
+menuCostingUnsubs.push(
+  subscribeIngredientBatches(
+  function (snap) {
+    batchesByIngredientId = groupBatchesByIngredientId(snap);
+    ingredients = applyFifoCostsToIngredients(ingredients, batchesByIngredientId);
+    markReady();
+  },
+  function (e) {
+    console.error(e);
   }
 )
 );

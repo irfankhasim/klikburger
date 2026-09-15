@@ -154,6 +154,29 @@ export async function getOwnerStaffDoc() {
   return { id: snap.id, data: snap.data() };
 }
 
+/** Cipta `staff/owner_01` jika tiada — pemilik mesti ada rekod staf untuk clock in. */
+export async function ensureOwnerStaffRecord(displayName) {
+  var ref = doc(db, COL_STAFF, OWNER_STAFF_DOC_ID);
+  var snap = await getDoc(ref);
+  if (snap.exists()) return { created: false, id: OWNER_STAFF_DOC_ID };
+  var name = String(displayName || "").trim() || "Pemilik";
+  await setDoc(ref, {
+    staffId: OWNER_STAFF_DOC_ID,
+    name: name,
+    staffName: name,
+    role: "owner",
+    employmentStatus: "active",
+    isOwner: true,
+    payType: "salary",
+    payAmount: 0,
+    phone: "",
+    email: "",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return { created: true, id: OWNER_STAFF_DOC_ID };
+}
+
 export function removeStaff(id) {
   return deleteDoc(doc(db, COL_STAFF, id));
 }

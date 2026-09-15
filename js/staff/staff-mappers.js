@@ -2,6 +2,8 @@
  * Firestore `staff` → objek UI.
  * weeklyRoster: { day: 0–6 (Ahad=0), shift: string }[] — "cuti" / "" = tidak bertugas.
  */
+// Diimport sebagai `tr` kerana `t` sudah dipakai sebagai pemboleh ubah dalam fail ini.
+import { t as tr } from "../i18n/locale.js";
 
 function tsToDate(ts) {
   if (!ts) return null;
@@ -84,18 +86,42 @@ export const STAFF_ROLES_MS = {
   supervisor: "Penyelia"
 };
 
-export const STAFF_STATUS_MS = {
-  active: "Aktif",
-  leave: "Cuti",
-  terminated: "Berhenti"
+/**
+ * Label status & shift dibaca melalui getter supaya ia mengikut bahasa aktif pada
+ * masa ia diakses — tiada cache, jadi tukaran bahasa terus berkesan tanpa reload.
+ */
+export const STAFF_STATUS_LABELS = {
+  get active() {
+    return tr("staff.status.active");
+  },
+  get leave() {
+    return tr("staff.status.leave");
+  },
+  get terminated() {
+    return tr("staff.status.terminated");
+  }
 };
 
-export const SHIFT_LABELS_MS = {
-  pagi: "Pagi",
-  petang: "Petang",
-  penuh: "Sepenuh masa",
-  cuti: "Cuti"
+export const SHIFT_LABELS = {
+  get pagi() {
+    return tr("staff.shift.pagi");
+  },
+  get petang() {
+    return tr("staff.shift.petang");
+  },
+  get penuh() {
+    return tr("staff.shift.penuh");
+  },
+  get cuti() {
+    return tr("staff.shift.cuti");
+  }
 };
+
+/** @deprecated — nama lama (kekal supaya import sedia ada tidak pecah). */
+export const STAFF_STATUS_MS = STAFF_STATUS_LABELS;
+
+/** @deprecated — nama lama (kekal supaya import sedia ada tidak pecah). */
+export const SHIFT_LABELS_MS = SHIFT_LABELS;
 
 /** Nama untuk padanan longgar (huruf kecil, ruang tunggal). */
 export function normalizeStaffNameKey(s) {

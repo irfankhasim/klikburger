@@ -204,9 +204,11 @@ export const adminTools = [
       const ref = db.collection(COL.POS_RECEIPTS).doc(input.receiptId);
       const snap = await ref.get();
       if (!snap.exists) return fail(`Receipt '${input.receiptId}' not found`);
-      if (snap.data().isVoided) return fail(`Receipt '${input.receiptId}' is already voided`);
+      const existing = snap.data() || {};
+      if (existing.voided || existing.isVoided) return fail(`Receipt '${input.receiptId}' is already voided`);
 
       await ref.update({
+        voided:     true,
         isVoided:   true,
         voidedAt:   ts(),
         voidReason: input.reason,

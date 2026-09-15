@@ -2,6 +2,7 @@
  * Pengelasan varians drawer (amaun sebenar − jangkaan).
  * Dikongsi antara POS (shiftClose) dan paparan BO / MCP.
  */
+import { t as tr } from "./i18n/locale.js";
 
 export function roundMoney(n) {
   var x = typeof n === "number" ? n : parseFloat(n);
@@ -19,9 +20,17 @@ export function varianceCategoryFromVariance(varianceRm) {
   return varianceRm > 0 ? "over" : "short";
 }
 
-export function varianceLabelMs(cat) {
-  if (cat === "balanced") return "Seimbang (Balanced)";
-  if (cat === "short") return "Kurang (Short)";
-  if (cat === "over") return "Lebih (Over)";
-  return "Tidak dikira";
+/**
+ * Label varians dalam bahasa aktif. Nama `varianceLabelMs` dikekalkan sebagai alias
+ * kerana ia masih dipanggil dari modul lain (cth js/staff/staff-app.js).
+ *
+ * @param {"balanced"|"short"|"over"|"unknown"|string} cat
+ */
+export function varianceLabel(cat) {
+  if (cat === "balanced") return tr("shift.variance.balanced");
+  if (cat === "short") return tr("shift.variance.short");
+  if (cat === "over") return tr("shift.variance.over");
+  return tr("shift.variance.unknown");
 }
+
+export { varianceLabel as varianceLabelMs };

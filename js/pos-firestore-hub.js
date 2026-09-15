@@ -31,6 +31,7 @@ import {
 import { PROTOTYPE_MANAGER_PIN } from "./pos-security-constants.js";
 import { ensurePosCountersDoc } from "./pos-checkout-firestore-writer.js";
 import { varianceCategoryFromVariance } from "./drawer-variance.js";
+import { t as tr } from "./i18n/locale.js";
 
 function defaultShift() {
   return {
@@ -652,7 +653,10 @@ export async function shiftClose(p) {
     cashSales: br.cash,
     qrSales: br.qr,
     refundNotes: p.refundNotes != null ? String(p.refundNotes) : "",
-    closedWithOwnerBypass: !!p.ownerBypass
+    closedWithOwnerBypass: !!p.ownerBypass,
+    cashDifference: variance,
+    amountToBePaid: variance < 0 ? Math.round(Math.abs(variance) * 100) / 100 : 0,
+    paymentStatus: variance < 0 ? "unpaid" : "not_applicable"
   };
   await runTransaction(db, async function (transaction) {
     var cref = doc(db, COL_POS_META, "counters");
@@ -701,7 +705,7 @@ export function orderPriorityFlag(order) {
 }
 
 export function paymentMethodLabel(code) {
-  return normalizePaymentMethod(code) === "cash" ? "Tunai" : "QR";
+  return normalizePaymentMethod(code) === "cash" ? tr("receipt.pay.cash") : tr("receipt.pay.qr");
 }
 
 export { PROTOTYPE_MANAGER_PIN };

@@ -10,6 +10,7 @@
  */
 import { ensureAdminInitialized, getAdminFirestore } from "./lib/admin-init.mjs";
 import admin from "firebase-admin";
+import { usageBaseQty } from "../js/cost-calculator/core.js";
 
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -18,16 +19,12 @@ function round4(n) {
   return Math.round((n + Number.EPSILON) * 10000) / 10000;
 }
 
-/** Tukar unit resipi (gunaUnit) ke unit stok bahan (ingredient.unit) — g<->kg sahaja perlu tukar. */
-function usageInStockUnit(usageEntry, ingUnit) {
-  if (typeof usageEntry === "number") return usageEntry;
-  var guna = typeof usageEntry.guna === "number" ? usageEntry.guna : parseFloat(usageEntry.guna) || 0;
-  var gunaUnit = String(usageEntry.gunaUnit || "").toLowerCase();
-  var u = String(ingUnit || "").toLowerCase();
-  if (gunaUnit === u) return guna;
-  if (gunaUnit === "g" && u === "kg") return guna / 1000;
-  if (gunaUnit === "kg" && u === "g") return guna * 1000;
-  return guna;
+/**
+ * Kuantiti nominal dalam unit stok bahan. Guna `usageBaseQty` dari core.js — sumber
+ * yang sama dengan POS — supaya seed ini tak terpesong daripada tolakan stok sebenar.
+ */
+function usageInStockUnit(usageEntry, ing) {
+  return usageBaseQty(ing, usageEntry, "nominal");
 }
 
 // Sasaran jualan bulan Ogos — dalam lingkungan baki stok pcs (patty/roti/telur/cheese/ayam
@@ -206,7 +203,7 @@ async function main() {
       Object.keys(item.usage).forEach(function (ingId) {
         var ing = ingById[ingId];
         if (!ing) return;
-        var perUnit = usageInStockUnit(item.usage[ingId], ing.unit);
+        var perUnit = usageInStockUnit(item.usage[ingId], ing);
         var needed = perUnit * qty;
         var res = consumeIngredient(ingId, needed);
         if (!res.ok) {

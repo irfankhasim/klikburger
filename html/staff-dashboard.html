@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <title>Kakitangan — Klik Burger</title>
     <link
       rel="stylesheet"
@@ -22,43 +31,65 @@
         }
       } catch (e) {}
     </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
+    <link rel="stylesheet" href="../css/pos-clock-ops.css" />
   </head>
-  <body class="staff-dash">
+  <body class="staff-dash" data-i18n-doc-title="staff.docTitle">
     <div class="sd-app">
       <header class="kb-page-header">
-        <h1 class="kb-page-title">Kakitangan</h1>
-        <p class="kb-page-lead">
-          <strong>Pemantauan</strong> — kehadiran (clock in/out dari POS), <strong>penutupan drawer tunai</strong> (shift ditutup
-          dalam <code>pos_shifts</code>: amaun awal/akhir &amp; varians), dan ringkasan staf. Urus butiran penuh rekod staf di
+        <h1 class="kb-page-title" data-i18n="staff.title">Kakitangan</h1>
+        <p class="kb-page-lead" data-i18n-html="staff.lead">
+          <strong>Pemantauan</strong> — kehadiran (clock in/out dari POS), <strong>penutupan drawer tunai</strong> (amaun awal, amaun akhir &amp; beza), dan ringkasan staf. Urus butiran penuh di
           <strong>Tetapan → Kakitangan</strong>.
         </p>
       </header>
 
       <p id="sd-status" class="sd-status sd-status--hidden" role="status" aria-live="polite"></p>
 
-      <section class="sd-toolbar" aria-label="Penapis bulan">
+      <section class="sd-toolbar" aria-label="Penapis bulan" data-i18n-aria-label="staff.filterSectionLabel">
         <div class="sd-toolbar__row">
           <label class="sd-field">
-            <span>Bulan paparan</span>
-            <input type="month" id="sd-filter-month" title="Pilih bulan untuk jadual di bawah" />
+            <span data-i18n="staff.filterMonth">Bulan paparan</span>
+            <input
+              type="month"
+              id="sd-filter-month"
+              title="Pilih bulan untuk jadual di bawah"
+              data-i18n-title="staff.filterMonthTitle"
+            />
           </label>
         </div>
       </section>
 
-      <section class="sd-metrics" id="sd-summary" aria-label="Ringkasan pemantauan"></section>
+      <section
+        class="sd-metrics"
+        id="sd-summary"
+        aria-label="Ringkasan pemantauan"
+        data-i18n-aria-label="staff.summaryLabel"
+      ></section>
+
+      <section class="sd-panel" id="sd-active-roster-panel" aria-labelledby="sd-active-roster-title">
+        <h2 class="sd-panel__title" id="sd-active-roster-title" data-i18n="staff.activeRosterTitle">Sesi clock in aktif</h2>
+        <p class="sd-panel__hint" data-i18n="staff.activeRosterHint">Owner boleh clock out, clock in manual, atau padam sesi tersekat di sini. Hanya satu Cashier dibenarkan pada satu masa.</p>
+        <div id="sd-active-roster" class="sd-active-roster"></div>
+        <div class="sd-panel__actions">
+          <button type="button" class="btn btn--ghost btn--sm" id="sd-manual-clock-in" hidden data-i18n="staff.manageManualIn">Clock in manual</button>
+        </div>
+      </section>
 
       <section class="sd-panel" aria-labelledby="sd-clock-title">
-        <h2 class="sd-panel__title" id="sd-clock-title">Kehadiran — Clock In / Clock Out</h2>
+        <h2 class="sd-panel__title" id="sd-clock-title" data-i18n="staff.clockPanelTitle">Kehadiran — Clock In / Clock Out</h2>
         <div class="sd-table-wrap">
           <table class="sd-table">
             <thead>
               <tr>
-                <th>Tarikh</th>
-                <th>Staf</th>
-                <th>Tugas</th>
-                <th>Clock In</th>
-                <th>Clock Out</th>
-                <th>Tempoh</th>
+                <th data-i18n="staff.th.date">Tarikh</th>
+                <th data-i18n="staff.th.staff">Staf</th>
+                <th data-i18n="staff.th.task">Tugas</th>
+                <th data-i18n="staff.th.clockIn">Clock In</th>
+                <th data-i18n="staff.th.clockOut">Clock Out</th>
+                <th data-i18n="staff.th.duration">Tempoh</th>
+                <th data-i18n="staff.th.manage">Urus</th>
               </tr>
             </thead>
             <tbody id="sd-clock-body"></tbody>
@@ -67,17 +98,17 @@
       </section>
 
       <section class="sd-panel" aria-labelledby="sd-perf-sales-title">
-        <h2 class="sd-panel__title" id="sd-perf-sales-title">Prestasi Staf — Jualan (Cashier)</h2>
-        <p class="sd-panel__hint">Produktiviti dikira: jualan ÷ jam bertugas sebagai Cashier.</p>
+        <h2 class="sd-panel__title" id="sd-perf-sales-title" data-i18n="staff.perfSalesTitle">Prestasi Staf — Jualan (Cashier)</h2>
+        <p class="sd-panel__hint" data-i18n="staff.perfSalesHint">Produktiviti dikira: jualan ÷ jam bertugas sebagai Cashier.</p>
         <div class="sd-table-wrap">
           <table class="sd-table">
             <thead>
               <tr>
-                <th>Staf</th>
-                <th>Jam Cashier</th>
-                <th>Bil. pesanan</th>
-                <th>Jumlah jualan</th>
-                <th>Jualan / jam</th>
+                <th data-i18n="staff.th.staff">Staf</th>
+                <th data-i18n="staff.th.cashierHours">Jam Cashier</th>
+                <th data-i18n="staff.th.orderCount">Bil. pesanan</th>
+                <th data-i18n="staff.th.totalSales">Jumlah jualan</th>
+                <th data-i18n="staff.th.salesPerHour">Jualan / jam</th>
               </tr>
             </thead>
             <tbody id="sd-perf-sales-body"></tbody>
@@ -86,16 +117,16 @@
       </section>
 
       <section class="sd-panel sd-panel--drawer" aria-labelledby="sd-drawer-title">
-        <h2 class="sd-panel__title" id="sd-drawer-title">Drawer tunai — penutupan shift</h2>
+        <h2 class="sd-panel__title" id="sd-drawer-title" data-i18n="staff.drawerPanelTitle">Drawer tunai — penutupan shift</h2>
         <div class="sd-table-wrap sd-table-wrap--drawer">
           <table class="sd-table sd-table--drawer">
             <thead>
               <tr>
-                <th>Masa / tarikh</th>
-                <th>Amaun awal</th>
-                <th>Amaun akhir</th>
-                <th>Varians</th>
-                <th>Nota</th>
+                <th data-i18n="staff.th.when">Masa / tarikh</th>
+                <th data-i18n="staff.th.opening">Amaun awal</th>
+                <th data-i18n="staff.th.closing">Amaun akhir</th>
+                <th data-i18n="staff.th.variance">Varians</th>
+                <th data-i18n="staff.th.note">Nota</th>
               </tr>
             </thead>
             <tbody id="sd-drawer-body"></tbody>
@@ -107,5 +138,6 @@
     <script type="module" src="../js/staff/staff-app.js"></script>
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

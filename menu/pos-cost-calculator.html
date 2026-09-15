@@ -2,7 +2,10 @@
 <html lang="ms">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Klik Burger — Kalkulator kos jualan</title>
     <link rel="stylesheet" href="../css/pos-cost-calculator.css" />
     <script>
@@ -37,6 +40,9 @@
 
         <div class="ing-toolbar">
           <button type="button" class="btn btn--primary" id="btn-add-ing">+ Tambah bahan</button>
+          <button type="button" class="btn btn--outline" id="btn-bulk-purchase">
+            <i class="ti ti-shopping-cart"></i> Belian borong
+          </button>
         </div>
 
         <div id="ing-add-draft" class="ing-add-draft" hidden>
@@ -52,7 +58,7 @@
                 <select id="ing-draft-unit" name="unit" aria-label="Unit pakej"></select>
               </div>
               <div class="field">
-                <label for="ing-draft-price">Jumlah (RM) pakej — termasuk cukai jika ada</label>
+                <label for="ing-draft-price" title="Jumlah (RM) pakej — termasuk cukai jika ada">Jumlah (RM)</label>
                 <input type="number" id="ing-draft-price" name="price" min="0" step="0.01" value="0" required />
               </div>
               <div class="field">
@@ -109,24 +115,28 @@
       >
         <div class="modal__head">
           <h2 class="modal__title" id="modal-title">Sunting produk</h2>
-          <button type="button" class="btn btn--ghost btn--sm" id="modal-close" aria-label="Tutup">✕</button>
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x" id="modal-close" aria-label="Tutup">✕</button>
         </div>
         <div class="modal__body">
           <div class="field">
             <label for="modal-name">Nama</label>
             <input type="text" id="modal-name" autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field field--price">
             <label for="modal-price">Harga jual (RM)</label>
             <input type="number" id="modal-price" min="0" step="0.01" />
+            <p id="modal-price-suggestion" class="field-hint"></p>
           </div>
           <div id="modal-panel-package" hidden>
             <p class="modal-package-help">Pilih produk untuk tab pakej di kaunter.</p>
             <div id="modal-package-lines" class="pkg-member-list" aria-label="Produk"></div>
           </div>
-          <div id="modal-panel-single">
-            <p class="modal-ing-list-label">Bahan</p>
-            <div id="modal-ing-list"></div>
+          <div id="modal-panel-single" class="modal-panel-single">
+            <div class="modal-ing-section">
+              <p class="modal-ing-list-label">Bahan</p>
+              <p class="modal-ing-list-hint">Isi kuantiti sebagai <strong>min – max</strong>. Untuk kuantiti tepat, letak nilai yang sama pada kedua-duanya (cth. <strong>1 – 1</strong>).</p>
+              <div id="modal-ing-list" class="modal-ing-scroll"></div>
+            </div>
             <div id="ing-quick-add" class="ing-quick-add" hidden>
               <p class="ing-quick-add__title">Bahan baharu</p>
               <div class="ing-quick-add__grid">
@@ -198,7 +208,7 @@
                 <input type="number" id="ing-log-qty" min="0.001" step="any" required />
               </div>
               <div class="field">
-                <label for="ing-log-price">Jumlah (RM) — termasuk cukai jika ada</label>
+                <label for="ing-log-price" title="Jumlah (RM) — termasuk cukai jika ada">Jumlah (RM)</label>
                 <input type="number" id="ing-log-price" min="0" step="0.01" required />
               </div>
               <div class="field">
@@ -210,13 +220,10 @@
               <span class="ing-drawer-cpu__label">Modal / unit</span>
               <strong id="ing-log-cpu-preview" class="ing-drawer-cpu__value">—</strong>
             </div>
-            <div class="field field--full">
-              <label for="ing-log-notes">Nota <span class="label-optional">(pilihan)</span></label>
-              <input type="text" id="ing-log-notes" autocomplete="off" placeholder="Nota" />
-            </div>
           </div>
 
           <p id="ing-drawer-log-status" class="kb-status kb-status--hidden ing-drawer-form__status" role="status"></p>
+          <p id="ing-drawer-impact-status" class="kb-status kb-status--hidden ing-drawer-form__status" role="status"></p>
           <div class="ing-drawer-form__actions">
             <button type="button" class="btn btn--outline ing-drawer-submit ing-drawer-submit--secondary" id="ing-drawer-save-name-only">
               Simpan nama
@@ -227,15 +234,18 @@
 
         <div class="ing-drawer-history" aria-labelledby="ing-drawer-ledger-title">
           <h3 class="ing-drawer-history__title" id="ing-drawer-ledger-title">Sejarah belian</h3>
+          <p class="ing-drawer-history__legend" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin:0 0 8px;">
+            <span style="display:inline-block;width:12px;height:12px;background:#FEFCE8;border-left:3px solid #EAB308;flex-shrink:0;"></span>
+            Batch/lot yang sedang digunakan sekarang (FIFO aktif)
+          </p>
           <div class="ing-drawer-table-wrap">
             <table class="ing-table ing-ledger-table">
               <thead>
                 <tr>
                   <th>Tarikh</th>
-                  <th>Jenis</th>
                   <th>Pakej</th>
                   <th class="num">Kos / unit</th>
-                  <th>Nota</th>
+                  <th class="num">Perubahan</th>
                 </tr>
               </thead>
               <tbody id="ing-ledger-tbody"></tbody>
@@ -243,6 +253,79 @@
           </div>
         </div>
       </div>
+      </div>
+    </div>
+
+    <div id="bulk-purchase-backdrop" class="ing-drawer-backdrop" hidden aria-hidden="true">
+      <div class="bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-modal-title">
+
+        <div class="bulk-modal__head">
+          <div>
+            <h2 id="bulk-modal-title" class="bulk-modal__title">Belian borong</h2>
+            <p class="bulk-modal__sub">Rekod pembelian bahan mentah. Kuantiti resepi ditetapkan kemudian di <strong>Produk &amp; kos</strong>.</p>
+          </div>
+          <button type="button" class="bulk-modal__close btn-close-x" id="btn-bulk-close" aria-label="Tutup">✕</button>
+        </div>
+
+        <div class="bulk-modal__body">
+          <div class="bulk-row-head">
+            <span>Bahan mentah</span>
+            <span>Kuantiti</span>
+            <span>Harga (RM)</span>
+            <span>Unit</span>
+            <span aria-hidden="true"></span>
+          </div>
+          <div id="bulk-rows"></div>
+
+          <div class="bulk-add-row">
+            <button type="button" class="btn btn--ghost btn--sm" id="btn-bulk-add-existing">
+              <i class="ti ti-plus"></i> Tambah bahan sedia ada
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm" id="btn-bulk-add-new">
+              <i class="ti ti-plus"></i> Tambah bahan baru
+            </button>
+          </div>
+
+          <div class="bulk-tax-row">
+            <span class="bulk-tax-label">
+              <i class="ti ti-receipt-tax"></i> Cukai / SST
+            </span>
+            <input type="number" id="bulk-tax-val" value="0" min="0" step="0.1"
+                   placeholder="0" class="bulk-tax-input">
+            <select id="bulk-tax-type" class="bulk-tax-type">
+              <option value="pct">%</option>
+              <option value="fixed">RM</option>
+            </select>
+            <span id="bulk-tax-result" class="bulk-tax-result">+ RM 0.00</span>
+          </div>
+
+          <div class="bulk-preview" id="bulk-preview" hidden>
+            <div class="bulk-preview__title">Ringkasan &amp; agihan cukai</div>
+            <div id="bulk-preview-rows"></div>
+            <div class="bulk-preview__divider"></div>
+            <div class="bulk-preview__row">
+              <span>Subtotal</span>
+              <span id="bulk-subtotal">RM 0.00</span>
+            </div>
+            <div class="bulk-preview__row bulk-preview__row--tax">
+              <span id="bulk-tax-label-display">Cukai</span>
+              <span id="bulk-tax-total">+ RM 0.00</span>
+            </div>
+            <div class="bulk-preview__total">
+              <span>Jumlah keseluruhan</span>
+              <span id="bulk-grand-total">RM 0.00</span>
+            </div>
+          </div>
+
+          <p id="bulk-status" class="kb-status kb-status--hidden"></p>
+        </div>
+
+        <div class="bulk-modal__foot">
+          <button type="button" class="btn btn--ghost" id="btn-bulk-cancel">Batal</button>
+          <button type="button" class="btn btn--primary" id="btn-bulk-confirm">
+            <i class="ti ti-check"></i> Sahkan &amp; simpan
+          </button>
+        </div>
       </div>
     </div>
 

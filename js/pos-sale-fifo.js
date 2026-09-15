@@ -10,9 +10,10 @@ import {
   runTransaction,
   query,
   where,
+  Timestamp,
   serverTimestamp
 } from "./firebase/init.js";
-import { COL_INGREDIENTS, COL_INGREDIENT_BATCHES, COL_SALES, COL_POS_META } from "./firebase/collections.js";
+import { COL_INGREDIENTS, COL_INGREDIENT_BATCHES, COL_INGREDIENT_LEDGER, COL_SALES, COL_POS_META } from "./firebase/collections.js";
 import { createPurchaseBatch, compareFifoBatches } from "./cost-calculator/ingredient-batch-repository.js";
 import { usageBaseQty } from "./cost-calculator/core.js";
 import { appendCheckoutInTransaction } from "./pos-checkout-firestore-writer.js";
@@ -190,6 +191,7 @@ export async function finalizePosSaleFifo(opts) {
 
         var saleLines = [];
         var subtotal = 0;
+        var consumptionByIng = {};
 
         for (var c = 0; c < cart.length; c++) {
           var line = cart[c];
@@ -218,6 +220,16 @@ export async function finalizePosSaleFifo(opts) {
                 });
               }
               lineCogs += r.cost;
+              if (!consumptionByIng[ingId]) {
+                consumptionByIng[ingId] = {
+                  qty: 0,
+                  cost: 0,
+                  unit: ing.unit || "",
+                  name: ing.name || ingId
+                };
+              }
+              consumptionByIng[ingId].qty += need;
+              consumptionByIng[ingId].cost += r.cost;
             });
           }
           saleLines.push({
@@ -255,6 +267,25 @@ export async function finalizePosSaleFifo(opts) {
         }
 
         var saleRef = doc(collection(db, COL_SALES));
+        Object.keys(consumptionByIng).forEach(function (ingId) {
+          var row = consumptionByIng[ingId];
+          if (!(row.qty > 0)) return;
+          var ledgerRef = doc(collection(db, COL_INGREDIENT_LEDGER));
+          var cpu = row.qty > 0 ? row.cost / row.qty : 0;
+          transaction.set(ledgerRef, {
+            ingredientId: ingId,
+            kind: "sale_consumption",
+            occurredAt: Timestamp.now(),
+            createdAt: serverTimestamp(),
+            purchaseQty: Math.round(row.qty * 10000) / 10000,
+            purchasePrice: Math.round(row.cost * 10000) / 10000,
+            unit: row.unit,
+            costPerUnit: Math.round(cpu * 10000) / 10000,
+            nameSnapshot: row.name,
+            notes: "POS " + saleRef.id
+          });
+        });
+
         transaction.set(saleRef, {
           createdAt: serverTimestamp(),
           subtotal: Math.round(subtotal * 100) / 100,

@@ -22,6 +22,7 @@ import {
   isPinLocked
 } from "./pos-rbac-session.js";
 import { PROTOTYPE_MANAGER_PIN } from "./pos-security-constants.js";
+import { t as tr, onLocaleChange } from "./i18n/locale.js";
 
 function formatRM(n) {
   return "RM " + (Math.round(n * 100) / 100).toFixed(2);
@@ -76,22 +77,19 @@ function renderRbacBanner() {
   if (!canAccessOperationalModules()) {
     el.hidden = false;
     el.removeAttribute("hidden");
-    el.textContent =
-      "Mod baca sahaja — resit boleh dilihat. Untuk void/refund, clock in dan buka drawer di menu <strong>Clock In / Drawer</strong>.";
+    el.textContent = tr("receipt.banner.readOnlyStaff");
     return;
   }
   if (isReadOnlyMode()) {
     el.hidden = false;
     el.removeAttribute("hidden");
-    el.textContent =
-      "Drawer ditutup — skrin ini baca sahaja sehingga anda clock out atau pengurus membuka drawer baharu.";
+    el.textContent = tr("receipt.banner.drawerClosed");
     return;
   }
   if (!canUseFinancialControls()) {
     el.hidden = false;
     el.removeAttribute("hidden");
-    el.textContent =
-      "Drawer belum dibuka — void dan kawalan tunai: buka drawer di menu utama, <strong>Clock In / Drawer</strong>.";
+    el.textContent = tr("receipt.banner.drawerNotOpen");
     return;
   }
   el.hidden = true;
@@ -130,19 +128,22 @@ function renderReceiptList(state) {
   var rows = filteredReceipts(state);
   if (cnt) {
     cnt.textContent =
-      rows.length === 0 ? "Tiada resit." : rows.length === 1 ? "1 resit." : rows.length + " resit.";
+      rows.length === 0
+        ? tr("receipt.count.none")
+        : rows.length === 1
+          ? tr("receipt.count.one")
+          : rows.length + tr("receipt.count.suffix");
   }
   if (!rows.length) {
-    el.innerHTML =
-      '<p class="rc-empty">Tiada resit dijumpai. Jualan daripada skrin <strong>Jualan</strong> akan muncul di sini.</p>';
+    el.innerHTML = '<p class="rc-empty">' + tr("receipt.list.empty") + "</p>";
     return;
   }
   el.innerHTML = rows
     .map(function (r) {
       var stClass = r.voided ? " rc-receipt-row--void" : "";
       var pill = r.voided
-        ? '<span class="rc-tag rc-tag--void">Batal</span>'
-        : '<span class="rc-tag">Sah</span>';
+        ? '<span class="rc-tag rc-tag--void">' + escapeHtml(tr("receipt.tag.void")) + "</span>"
+        : '<span class="rc-tag">' + escapeHtml(tr("receipt.tag.valid")) + "</span>";
       var meta = fmtReceiptTime(r.createdAt) + " · " + paymentMethodLabel(r.paymentMethod);
       return (
         '<button type="button" class="rc-receipt-row' +
@@ -199,7 +200,7 @@ function openDrawer(state) {
             var amtStr = !isNaN(lt) ? formatRM(lt) : "—";
             return (
               "<li>" +
-              escapeHtml(String(l.name || "").trim() || "(Item)") +
+              escapeHtml(String(l.name || "").trim() || tr("receipt.item.unnamed")) +
               " × " +
               escapeHtml(String(l.qty != null ? l.qty : "")) +
               " — " +
@@ -209,43 +210,63 @@ function openDrawer(state) {
           })
           .join("") +
         "</ul>"
-      : "<p class=\"ops-muted\" style=\"margin:0;font-size:0.82rem\">Tiada baris item.</p>";
+      : "<p class=\"ops-muted\" style=\"margin:0;font-size:0.82rem\">" +
+        escapeHtml(tr("receipt.detail.noLines")) +
+        "</p>";
 
   var voidDis = r.voided || !voidAllowed();
   var refundDis = r.voided || r.refunded || !voidAllowed();
   var padamRow =
     r.voided && voidAllowed()
-      ? '<div class="rc-drawer-delete"><button type="button" class="rc-btn rc-btn--line rc-btn--sm" id="rc-delete">Padam rekod</button></div>'
+      ? '<div class="rc-drawer-delete"><button type="button" class="rc-btn rc-btn--line rc-btn--sm" id="rc-delete">' +
+        escapeHtml(tr("receipt.action.delete")) +
+        "</button></div>"
       : "";
   body.innerHTML =
     '<div class="rc-detail-hero">' +
-    '<span class="rc-detail-hero__label">Jumlah</span>' +
+    '<span class="rc-detail-hero__label">' +
+    escapeHtml(tr("receipt.detail.total")) +
+    "</span>" +
     '<span class="rc-detail-hero__amt">' +
     formatRM(r.subtotal) +
     "</span></div>" +
     '<dl class="rc-dl">' +
-    "<dt>Masa</dt><dd>" +
+    "<dt>" +
+    escapeHtml(tr("receipt.detail.time")) +
+    "</dt><dd>" +
     escapeHtml(fmtReceiptTime(r.createdAt)) +
     "</dd>" +
-    "<dt>Bayaran</dt><dd>" +
+    "<dt>" +
+    escapeHtml(tr("receipt.detail.payment")) +
+    "</dt><dd>" +
     escapeHtml(paymentMethodLabel(r.paymentMethod)) +
     "</dd>" +
-    "<dt>Nama pelanggan</dt><dd>" +
+    "<dt>" +
+    escapeHtml(tr("receipt.detail.customer")) +
+    "</dt><dd>" +
     escapeHtml(String(r.customerName || "").trim() || "—") +
     "</dd>" +
-    "<dt>ID jualan</dt><dd style=\"word-break:break-all\">" +
+    "<dt>" +
+    escapeHtml(tr("receipt.detail.saleId")) +
+    "</dt><dd style=\"word-break:break-all\">" +
     escapeHtml(r.saleId || "—") +
     "</dd>" +
     "</dl>" +
     '<div class="rc-detail-lines">' +
-    '<p class="rc-detail-lines__title">Item</p>' +
+    '<p class="rc-detail-lines__title">' +
+    escapeHtml(tr("receipt.detail.items")) +
+    "</p>" +
     linesUl +
     "</div>" +
     '<div class="rc-drawer-actions rc-drawer-actions--split">' +
-    '<button type="button" class="rc-btn rc-btn--line rc-btn--drawer" id="rc-print"><i class="fa-solid fa-print" aria-hidden="true"></i> Cetak</button>' +
+    '<button type="button" class="rc-btn rc-btn--line rc-btn--drawer" id="rc-print"><i class="fa-solid fa-print" aria-hidden="true"></i> ' +
+    escapeHtml(tr("receipt.action.print")) +
+    "</button>" +
     '<button type="button" class="rc-btn rc-btn--solid rc-btn--drawer rc-btn--void" id="rc-void"' +
     (voidDis ? " disabled" : "") +
-    '><i class="fa-solid fa-ban" aria-hidden="true"></i> Void</button>' +
+    '><i class="fa-solid fa-ban" aria-hidden="true"></i> ' +
+    escapeHtml(tr("receipt.action.void")) +
+    "</button>" +
     '<button type="button" class="rc-btn rc-btn--drawer rc-btn--refund js-refund-receipt" id="rc-refund" ' +
     'data-no="' +
     escapeAttr(r.receiptNo) +
@@ -255,7 +276,9 @@ function openDrawer(state) {
     escapeAttr(r.paymentMethod) +
     '"' +
     (refundDis ? " disabled" : "") +
-    '><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Refund</button>' +
+    '><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> ' +
+    escapeHtml(tr("receipt.action.refund")) +
+    "</button>" +
     "</div>" +
     padamRow;
 
@@ -285,9 +308,7 @@ function openDrawer(state) {
     delBtn.onclick = async function () {
       if (
         !window.confirm(
-          "Padam rekod " +
-            r.receiptNo +
-            " daripada senarai? Pesanan dapur berkaitan turut dibuang daripada pangkalan data."
+          tr("receipt.delete.confirmPrefix") + r.receiptNo + tr("receipt.delete.confirmSuffix")
         )
       ) {
         return;
@@ -305,20 +326,20 @@ function openDrawer(state) {
 
 async function promptVoid(receiptNo, closeDrawer) {
   if (!voidAllowed()) {
-    window.alert("Void tidak tersedia — buka drawer di menu Clock In / Drawer, atau tunggu keluar mod baca sahaja.");
+    window.alert(tr("receipt.void.unavailable"));
     return;
   }
   var act = getActorForAudit();
   var res;
   if (canBypassStaffRestrictions()) {
-    if (!window.confirm("Owner override — void this receipt? (Audit will record override.)")) return;
+    if (!window.confirm(tr("receipt.void.ownerOverride"))) return;
     res = await voidReceiptInHub(receiptNo, { ownerBypass: true, actor: act });
   } else {
     if (isPinLocked()) {
-      window.alert("PIN dikunci — cuba lagi kemudian.");
+      window.alert(tr("receipt.void.pinLocked"));
       return;
     }
-    var pin = window.prompt("Manager PIN (prototype " + PROTOTYPE_MANAGER_PIN + "):", "");
+    var pin = window.prompt(tr("receipt.void.pinPrompt") + PROTOTYPE_MANAGER_PIN + "):", "");
     if (pin == null) return;
     res = await voidReceiptInHub(receiptNo, { pin: pin, actor: act });
     if (!res.ok) recordManagerPinFailure({ message: "Void PIN fail" });
@@ -328,7 +349,7 @@ async function promptVoid(receiptNo, closeDrawer) {
     window.alert(res.error);
     return;
   }
-  window.alert("Resit dibatalkan (audit).");
+  window.alert(tr("receipt.void.done"));
   if (closeDrawer) closeDrawer();
   renderAll(getPosHubState());
 }
@@ -364,9 +385,15 @@ function setRefundStatus(text, kind) {
   el.className = kind === "ok" ? "kb-status kb-status--ok" : "kb-status kb-status--error";
 }
 
+function refundMethodLabel(paymentMethod) {
+  return paymentMethod === "cash" || paymentMethod === "tunai"
+    ? tr("receipt.refund.pmCash")
+    : tr("receipt.refund.pmQr");
+}
+
 function openRefundModal(receiptNo, subtotal, paymentMethod) {
   if (!voidAllowed()) {
-    window.alert("Refund tidak tersedia — buka drawer di menu Clock In / Drawer, atau tunggu keluar mod baca sahaja.");
+    window.alert(tr("receipt.refund.unavailable"));
     return;
   }
   refundModal.receiptNo = receiptNo;
@@ -378,10 +405,7 @@ function openRefundModal(receiptNo, subtotal, paymentMethod) {
 
   document.getElementById("refund-receipt-no").textContent = receiptNo;
   document.getElementById("refund-amount").textContent = "RM " + (parseFloat(subtotal) || 0).toFixed(2);
-  document.getElementById("refund-pm").textContent =
-    paymentMethod === "cash" || paymentMethod === "tunai"
-      ? "Tunai (akan dipulangkan dari drawer)"
-      : "QR/Online (proses manual diperlukan)";
+  document.getElementById("refund-pm").textContent = refundMethodLabel(paymentMethod);
   document.getElementById("refund-note").value = "";
   setRefundStatus("", null);
 
@@ -400,16 +424,16 @@ function closeRefundModal() {
 }
 
 async function processRefund() {
-  var note = document.getElementById("refund-note").value.trim() || "Pemulangan wang";
+  var note = document.getElementById("refund-note").value.trim() || tr("receipt.refund.defaultNote");
   var confirmBtn = document.getElementById("btn-refund-confirm");
 
   if (!voidAllowed()) {
-    setRefundStatus("Refund tidak tersedia — buka drawer dahulu.", "error");
+    setRefundStatus(tr("receipt.refund.needDrawer"), "error");
     return;
   }
 
   confirmBtn.disabled = true;
-  confirmBtn.textContent = "Memproses...";
+  confirmBtn.textContent = tr("receipt.refund.processing");
   setRefundStatus("", null);
 
   try {
@@ -426,20 +450,34 @@ async function processRefund() {
     }
 
     var msg = result.cashRefunded
-      ? "Refund berjaya. RM " +
+      ? tr("receipt.refund.okCashPrefix") +
         (parseFloat(refundModal.subtotal) || 0).toFixed(2) +
-        " telah dipulangkan dari drawer tunai."
-      : "Refund direkodkan. Bayaran QR/online perlu diproses secara manual.";
+        tr("receipt.refund.okCashSuffix")
+      : tr("receipt.refund.okQr");
 
     setRefundStatus(msg, "ok");
     closeReceiptDrawerUI();
     renderAll(getPosHubState());
     setTimeout(closeRefundModal, 2000);
   } catch (err) {
-    setRefundStatus("Ralat: " + (err && err.message ? err.message : String(err)), "error");
+    setRefundStatus(
+      tr("receipt.refund.errorPrefix") + (err && err.message ? err.message : String(err)),
+      "error"
+    );
   } finally {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = "Sahkan refund";
+    confirmBtn.textContent = tr("receipt.refund.confirm");
+  }
+}
+
+/** Butang sahkan refund ditulis semula oleh JS semasa memproses, jadi labelnya diurus di sini. */
+function renderRefundChrome() {
+  var confirmBtn = document.getElementById("btn-refund-confirm");
+  if (confirmBtn && !confirmBtn.disabled) confirmBtn.textContent = tr("receipt.refund.confirm");
+  var modal = document.getElementById("refund-modal");
+  var pm = document.getElementById("refund-pm");
+  if (modal && !modal.hidden && pm && refundModal.receiptNo) {
+    pm.textContent = refundMethodLabel(refundModal.paymentMethod);
   }
 }
 
@@ -447,6 +485,7 @@ function renderAll(state) {
   renderRbacBanner();
   applyReceiptFiltersGates();
   renderReceiptList(state);
+  renderRefundChrome();
 }
 
 function wire() {
@@ -485,6 +524,16 @@ function wire() {
   });
   subscribeRbac(function () {
     renderAll(getPosHubState());
+  });
+
+  // Teks statik disapu oleh applyI18n; di sini kita render semula bahagian yang
+  // dibina oleh JS — termasuk butiran resit jika drawer sedang terbuka.
+  onLocaleChange(function () {
+    renderAll(getPosHubState());
+    var dr = document.getElementById("rc-drawer");
+    if (dr && dr.classList.contains("is-open") && selectedReceiptNo) {
+      openDrawer(getPosHubState());
+    }
   });
 }
 

@@ -4,6 +4,7 @@
 import { escapeHtml, formatDateTime } from "../utils.js";
 import { askAI, fetchKnowledgeBase } from "../ai-service.js";
 import { loadSession } from "../../pos-rbac-session.js";
+import { t, onLocaleChange } from "../../i18n/locale.js";
 
 /** Ikon FAB — gelembung sembang + sparkle (gaya pembantu AI). */
 var FAB_ICON_SVG =
@@ -33,22 +34,30 @@ export function mountGlobalAiChatWidget() {
   wrap.className = "ai-staff-widget";
   wrap.innerHTML =
     '<button type="button" class="ai-staff-widget__backdrop" tabindex="-1" aria-hidden="true" data-ai-backdrop></button>' +
-    '<button type="button" class="ai-staff-widget__fab" aria-expanded="false" aria-controls="kb-ai-staff-drawer" aria-label="Buka Pembantu AI">' +
+    '<button type="button" class="ai-staff-widget__fab" aria-expanded="false" aria-controls="kb-ai-staff-drawer" aria-label="' +
+    escapeHtml(t("ai.widget.open")) +
+    '" data-i18n-aria-label="ai.widget.open">' +
     FAB_ICON_SVG +
     "</button>" +
     '<div id="kb-ai-staff-drawer" class="ai-staff-drawer" role="dialog" aria-modal="true" aria-labelledby="kb-ai-staff-title" aria-hidden="true">' +
     '<header class="ai-staff-drawer__head">' +
-    '<div><h2 id="kb-ai-staff-title" class="ai-staff-drawer__title">Pembantu AI</h2>' +
-    '<p class="ai-staff-drawer__sub">Tanya tentang SOP syarikat, produk dan cara guna sistem.</p></div>' +
-    '<button type="button" class="ai-staff-drawer__close btn-close-x" aria-label="Tutup">✕</button>' +
+    '<div><h2 id="kb-ai-staff-title" class="ai-staff-drawer__title" data-i18n="ai.title">Pembantu AI</h2>' +
+    '<p class="ai-staff-drawer__sub" data-i18n="ai.widget.sub">Tanya tentang SOP syarikat, produk dan cara guna sistem.</p></div>' +
+    '<button type="button" class="ai-staff-drawer__close btn-close-x" aria-label="' +
+    escapeHtml(t("common.close")) +
+    '" data-i18n-aria-label="common.close">✕</button>' +
     "</header>" +
     '<div class="ai-staff-drawer__messages" data-ai-mount="messages" aria-live="polite"></div>' +
     '<div class="ai-staff-drawer__typing" data-ai-mount="typing" hidden><span></span><span></span><span></span></div>' +
     '<form class="ai-staff-drawer__composer">' +
     '<div class="ai-staff-drawer__composer-inner">' +
-    '<label class="sr-only" for="kb-ai-staff-input">Mesej</label>' +
-    '<textarea id="kb-ai-staff-input" class="ai-staff-drawer__input" rows="1" placeholder="Tanya apa sahaja…" autocomplete="off"></textarea>' +
-    '<button type="submit" class="ai-staff-drawer__send" aria-label="Hantar">' +
+    '<label class="sr-only" for="kb-ai-staff-input" data-i18n="ai.composer.messageLabel">Mesej</label>' +
+    '<textarea id="kb-ai-staff-input" class="ai-staff-drawer__input" rows="1" placeholder="' +
+    escapeHtml(t("ai.widget.placeholder")) +
+    '" data-i18n-placeholder="ai.widget.placeholder" autocomplete="off"></textarea>' +
+    '<button type="submit" class="ai-staff-drawer__send" aria-label="' +
+    escapeHtml(t("ai.send")) +
+    '" data-i18n-aria-label="ai.send">' +
     SEND_ICON_SVG +
     "</button></div></form></div>";
 
@@ -96,7 +105,7 @@ export function mountGlobalAiChatWidget() {
   function renderMessages() {
     if (!messages.length) {
       messagesEl.innerHTML =
-        '<p class="ai-staff-drawer__empty">Hai! Tanya apa sahaja tentang operasi kedai.</p>';
+        '<p class="ai-staff-drawer__empty">' + t("ai.widget.empty") + "</p>";
       return;
     }
     messagesEl.innerHTML = messages
@@ -165,8 +174,7 @@ export function mountGlobalAiChatWidget() {
         console.warn("[staff-chat] askAI", err);
         messages.push({
           role: "assistant",
-          text:
-            "Maaf, Pembantu AI tidak dapat dihubungi buat masa ini. Sila cuba semula atau rujuk Owner.",
+          text: t("ai.widget.error"),
           at: new Date().toISOString()
         });
       })
@@ -207,6 +215,9 @@ export function mountGlobalAiChatWidget() {
   setTypingVisible(false);
   resizeInput();
   renderMessages();
+  onLocaleChange(function () {
+    renderMessages();
+  });
 }
 
 /** Alias — kod lama */

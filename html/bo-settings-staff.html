@@ -14,6 +14,20 @@
 
     <meta name="mobile-web-app-capable" content="yes" />
 
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
+
     <title>Kakitangan — Tetapan</title>
 
     <link
@@ -32,7 +46,7 @@
 
     <link rel="stylesheet" href="../css/staff-dashboard.css" />
 
-    <link rel="stylesheet" href="../css/bo-settings.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css?v=43" />
 
     <script>
 
@@ -48,9 +62,12 @@
 
     </script>
 
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
+
   </head>
 
-  <body class="staff-dash">
+  <body class="staff-dash" data-i18n-doc-title="settings.staff.docTitle">
 
     <div class="sd-app bs-settings">
 
@@ -58,17 +75,18 @@
 
         <div class="kb-page-header__row">
 
-          <h1 class="kb-page-title">Kakitangan</h1>
+          <h1 class="kb-page-title" data-i18n="settings.staff.title">Kakitangan</h1>
 
           <button type="button" class="btn btn--primary" id="bs-btn-add-staff">
 
-            <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Tambah kakitangan
+            <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+            <span data-i18n="settings.staff.addBtn">Tambah kakitangan</span>
 
           </button>
 
         </div>
 
-        <p class="kb-page-lead">
+        <p class="kb-page-lead" data-i18n-html="settings.staff.lead">
 
           Sunting butiran staf operasi. Pemantauan clock in/out &amp; drawer ada di menu <strong>Kakitangan</strong> sidebar.
 
@@ -84,9 +102,9 @@
 
       <section class="sd-panel bs-store-panel" id="bs-store-location-panel" hidden aria-labelledby="bs-store-location-title">
 
-        <h2 class="sd-panel__title" id="bs-store-location-title">Lokasi kedai</h2>
+        <h2 class="sd-panel__title" id="bs-store-location-title" data-i18n="settings.store.title">Lokasi kedai</h2>
 
-        <p class="sd-panel__hint">Sekatan clock-in — staf hanya boleh clock in dalam radius kedai.</p>
+        <p class="sd-panel__hint" data-i18n="settings.store.hint">Sekatan clock-in — staf hanya boleh clock in dalam radius kedai.</p>
 
         <p class="bs-inline-status" id="bs-store-location-status">Memuat…</p>
 
@@ -94,19 +112,19 @@
 
           <label class="sd-field bs-store-panel__radius">
 
-            Radius (meter)
+            <span data-i18n="settings.store.radius">Radius (meter)</span>
 
             <input type="number" id="bs-store-radius" min="10" step="10" value="150" />
 
           </label>
 
-          <button type="button" class="btn btn--outline btn--sm" id="bs-btn-set-store-location">Guna lokasi semasa</button>
+          <button type="button" class="btn btn--outline btn--sm" id="bs-btn-set-store-location" data-i18n="settings.store.useCurrent">Guna lokasi semasa</button>
 
-          <button type="button" class="btn btn--ghost btn--sm" id="bs-btn-clear-store-location" hidden>Buang sekatan</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="bs-btn-clear-store-location" hidden data-i18n="settings.store.clear">Buang sekatan</button>
 
         </div>
 
-        <p class="sd-footnote">Buka halaman ini di kedai (peranti dengan GPS) sebelum tetapkan lokasi.</p>
+        <p class="sd-footnote" data-i18n="settings.store.footnote">Buka halaman ini di kedai (peranti dengan GPS) sebelum tetapkan lokasi.</p>
 
       </section>
 
@@ -116,9 +134,9 @@
 
         <section class="sd-panel bs-settings__list-panel" aria-labelledby="bs-list-title">
 
-          <h2 class="sd-panel__title" id="bs-list-title">Senarai kakitangan</h2>
+          <h2 class="sd-panel__title" id="bs-list-title" data-i18n="settings.list.title">Senarai kakitangan</h2>
 
-          <p class="sd-panel__hint">Pilih nama untuk sunting butiran.</p>
+          <p class="sd-panel__hint" data-i18n="settings.list.hint">Pilih nama untuk sunting butiran.</p>
 
           <div id="bs-staff-list" class="bs-staff-list"></div>
 
@@ -128,11 +146,11 @@
 
         <section class="sd-panel bs-settings__form-panel" aria-labelledby="bs-form-title">
 
-          <h2 class="sd-panel__title" id="bs-form-title">Butiran staf</h2>
+          <h2 class="sd-panel__title" id="bs-form-title" data-i18n="settings.form.title">Butiran staf</h2>
 
-          <p id="bs-owner-note" class="sd-footnote bs-owner-note" hidden>
+          <p id="bs-owner-note" class="sd-footnote bs-owner-note" hidden data-i18n-html="settings.form.ownerNote">
 
-            <strong>Profil pemilik</strong> — kemaskini nama paparan. Rekod kehadiran POS: <code>owner_01</code>.
+            <strong>Profil pemilik</strong> — kemaskini nama paparan sahaja.
 
           </p>
 
@@ -140,11 +158,11 @@
 
           <div class="sd-form-grid">
 
-            <p class="sd-section-label"><i class="fa-solid fa-id-card" aria-hidden="true"></i> Maklumat asas</p>
+            <p class="sd-section-label"><i class="fa-solid fa-id-card" aria-hidden="true"></i> <span data-i18n="settings.form.sectionBasic">Maklumat asas</span></p>
 
             <label class="sd-field sd-field--full">
 
-              Nama penuh
+              <span data-i18n="settings.form.name">Nama penuh</span>
 
               <input type="text" id="bs-form-name" autocomplete="name" required />
 
@@ -152,27 +170,33 @@
 
             <label class="sd-field sd-field--full">
 
-              E-mel
+              <span data-i18n="settings.form.email">E-mel</span>
 
-              <input type="email" id="bs-form-email" autocomplete="email" placeholder="nama@contoh.com" />
+              <input
+                type="email"
+                id="bs-form-email"
+                autocomplete="email"
+                placeholder="nama@contoh.com"
+                data-i18n-placeholder="settings.form.emailPlaceholder"
+              />
 
             </label>
 
             <label class="sd-field">
 
-              Jawatan
+              <span data-i18n="settings.form.role">Jawatan</span>
 
               <select id="bs-form-role">
 
-                <option value="owner">Pemilik</option>
+                <option value="owner" data-i18n="settings.role.owner">Pemilik</option>
 
-                <option value="cashier">Kaunter</option>
+                <option value="cashier" data-i18n="settings.role.cashier">Kaunter</option>
 
-                <option value="kitchen">Dapur</option>
+                <option value="kitchen" data-i18n="settings.role.kitchen">Dapur</option>
 
-                <option value="runner">Runner</option>
+                <option value="runner" data-i18n="settings.role.runner">Runner</option>
 
-                <option value="supervisor">Penyelia</option>
+                <option value="supervisor" data-i18n="settings.role.supervisor">Penyelia</option>
 
               </select>
 
@@ -180,15 +204,15 @@
 
             <label class="sd-field">
 
-              Status
+              <span data-i18n="settings.form.status">Status</span>
 
               <select id="bs-form-status">
 
-                <option value="active">Aktif</option>
+                <option value="active" data-i18n="staff.status.active">Aktif</option>
 
-                <option value="leave">Cuti</option>
+                <option value="leave" data-i18n="staff.status.leave">Cuti</option>
 
-                <option value="terminated">Berhenti</option>
+                <option value="terminated" data-i18n="staff.status.terminated">Berhenti</option>
 
               </select>
 
@@ -196,11 +220,11 @@
 
 
 
-            <p class="sd-section-label"><i class="fa-solid fa-briefcase" aria-hidden="true"></i> Butiran kerja</p>
+            <p class="sd-section-label"><i class="fa-solid fa-briefcase" aria-hidden="true"></i> <span data-i18n="settings.form.sectionWork">Butiran kerja</span></p>
 
             <label class="sd-field">
 
-              Telefon
+              <span data-i18n="settings.form.phone">Telefon</span>
 
               <input type="tel" id="bs-form-phone" autocomplete="tel" />
 
@@ -208,7 +232,7 @@
 
             <label class="sd-field">
 
-              Tarikh mula bekerja
+              <span data-i18n="settings.form.startedAt">Tarikh mula bekerja</span>
 
               <input type="date" id="bs-form-started" />
 
@@ -218,13 +242,13 @@
 
               <label class="sd-field">
 
-                Jenis gaji
+                <span data-i18n="settings.form.payType">Jenis gaji</span>
 
                 <select id="bs-form-paytype">
 
-                  <option value="hourly">Sejam</option>
+                  <option value="hourly" data-i18n="settings.payType.hourly">Sejam</option>
 
-                  <option value="salary">Bulanan</option>
+                  <option value="salary" data-i18n="settings.payType.salary">Bulanan</option>
 
                 </select>
 
@@ -232,7 +256,7 @@
 
               <label class="sd-field">
 
-                Kadar / gaji asas (RM)
+                <span data-i18n="settings.form.payAmount">Kadar / gaji asas (RM)</span>
 
                 <input type="number" id="bs-form-pay" min="0" step="0.01" />
 
@@ -242,7 +266,7 @@
 
 
 
-            <p class="sd-section-label"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Keselamatan clock-in</p>
+            <p class="sd-section-label"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> <span data-i18n="settings.form.sectionSecurity">Keselamatan clock-in</span></p>
 
             <div class="bs-security-card">
 
@@ -250,25 +274,21 @@
 
                 <div class="bs-pin-head">
 
-                  <span class="bs-pin-head__title">2FA Clock In (Authenticator App)</span>
+                  <span class="bs-pin-head__title" data-i18n="settings.totp.headTitle">2FA Clock In (Authenticator App)</span>
 
-                  <label class="bs-switch" title="Aktif / Nyahaktif 2FA">
-
-                    <input type="checkbox" id="bs-form-totp-enabled" />
-
-                    <span class="bs-switch__track" aria-hidden="true"></span>
-
-                    <span class="bs-switch__text" id="bs-form-totp-enabled-text">Tidak aktif</span>
-
-                  </label>
+                  <span class="bs-totp-chip bs-totp-chip--off" id="bs-totp-status-chip" role="status">Off</span>
 
                 </div>
 
-                <p class="bs-inline-status" id="bs-totp-status-text">Belum disediakan.</p>
+                <div class="bs-totp-actions">
 
-                <button type="button" id="bs-btn-setup-totp" class="btn btn--outline btn--sm">Setup / Reset 2FA</button>
+                  <button type="button" id="bs-btn-delete-totp" class="btn btn--outline btn--sm" disabled data-i18n="settings.totp.deleteBtn">Delete 2FA</button>
 
-                <p class="sd-footnote">Bila aktif, staf wajib masukkan kod dari app authenticator semasa clock in.</p>
+                  <button type="button" id="bs-btn-setup-totp" class="btn btn--outline btn--sm" data-i18n="settings.totp.setupBtn">Setup 2FA</button>
+
+                </div>
+
+                <p class="sd-footnote" data-i18n="settings.totp.footnote">Bila 2FA disediakan, staf wajib masukkan kod dari app authenticator semasa clock in.</p>
 
               </div>
 
@@ -278,9 +298,9 @@
 
           <div class="bs-settings__actions">
 
-            <button type="button" class="btn btn--danger" id="bs-form-delete" hidden>Padam</button>
+            <button type="button" class="btn btn--danger" id="bs-form-delete" hidden data-i18n="settings.form.delete">Padam</button>
 
-            <button type="button" class="btn btn--primary" id="bs-form-save">Simpan</button>
+            <button type="button" class="btn btn--primary" id="bs-form-save" data-i18n="settings.form.save">Simpan</button>
 
           </div>
 
@@ -300,7 +320,7 @@
 
           <h2 id="bs-totp-modal-title">Setup 2FA</h2>
 
-          <button type="button" class="btn btn--ghost btn--sm btn-close-x" id="bs-totp-modal-close" aria-label="Tutup">✕</button>
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x" id="bs-totp-modal-close" aria-label="Tutup" data-i18n-aria-label="settings.totp.closeModal">✕</button>
 
         </div>
 
@@ -316,7 +336,7 @@
 
             <div class="bs-totp-qr" id="bs-totp-qr"></div>
 
-            <span class="bs-totp-modal__secret-label">Kod manual</span>
+            <span class="bs-totp-modal__secret-label" data-i18n="settings.totp.manualCode">Kod manual</span>
 
             <code class="bs-totp-secret" id="bs-totp-secret-text"></code>
 
@@ -324,7 +344,7 @@
 
           <label class="sd-field sd-field--full">
 
-            Kod 6 digit untuk sahkan
+            <span data-i18n="settings.totp.confirmLabel">Kod 6 digit untuk sahkan</span>
 
             <input type="text" inputmode="numeric" maxlength="6" id="bs-totp-confirm-code" placeholder="000000" autocomplete="off" />
 
@@ -336,7 +356,7 @@
 
         <div class="sd-modal__foot">
 
-          <button type="button" class="btn btn--primary" id="bs-totp-modal-confirm">Sahkan &amp; Aktifkan</button>
+          <button type="button" class="btn btn--primary" id="bs-totp-modal-confirm" disabled data-i18n="settings.totp.confirmBtn">Sahkan &amp; Aktifkan</button>
 
         </div>
 
@@ -346,13 +366,53 @@
 
 
 
-    <script type="module" src="../js/staff/bo-settings-app.js"></script>
+    <div class="sd-modal-backdrop bs-totp-modal-backdrop" id="bs-totp-delete-backdrop" hidden aria-hidden="true">
+
+      <div class="sd-modal sd-modal--narrow bs-totp-modal" role="dialog" aria-modal="true" aria-labelledby="bs-totp-delete-title">
+
+        <div class="sd-modal__head">
+
+          <h2 id="bs-totp-delete-title" data-i18n="settings.totp.deleteTitle">Padam 2FA?</h2>
+
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x" id="bs-totp-delete-close" aria-label="Tutup" data-i18n-aria-label="settings.totp.closeModal">✕</button>
+
+        </div>
+
+        <div class="sd-modal__body bs-totp-modal__body">
+
+          <p class="bs-totp-modal__lead" id="bs-totp-delete-lead">
+
+            Padam setup 2FA untuk staf ini? Authenticator sedia ada tidak lagi sah. Setup semula diperlukan untuk aktifkan 2FA.
+
+          </p>
+
+          <p class="bs-totp-modal-status" id="bs-totp-delete-status" hidden></p>
+
+        </div>
+
+        <div class="sd-modal__foot bs-totp-delete-foot">
+
+          <button type="button" class="btn btn--outline" id="bs-totp-delete-cancel" data-i18n="settings.totp.deleteCancel">Batal</button>
+
+          <button type="button" class="btn btn--danger" id="bs-totp-delete-confirm" data-i18n="settings.totp.deleteConfirm">Ya, padam</button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+
+    <script type="module" src="../js/staff/bo-settings-app.js?v=55"></script>
 
     <script type="module" src="../js/staff/bo-settings-iframe-autosize.js"></script>
 
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
 
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
 
   </body>
 

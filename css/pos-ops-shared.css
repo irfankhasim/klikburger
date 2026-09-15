@@ -17,7 +17,7 @@
 .ops-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--kb-btn-gap, 0.75rem);
   align-items: flex-end;
   margin-bottom: 0.75rem;
 }
@@ -39,8 +39,9 @@
 .ops-field input,
 .ops-field select {
   font: inherit;
-  font-size: 0.875rem;
-  padding: 0.45rem 0.55rem;
+  font-size: var(--kb-control-font, 1.0625rem);
+  min-height: var(--kb-control-min-h, 3.15rem);
+  padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -89,8 +90,8 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
-  overflow: auto;
-  max-height: min(52vh, 420px);
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .ops-table {
@@ -350,7 +351,7 @@
   margin-top: 0.45rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  gap: var(--kb-btn-gap, 0.75rem);
 }
 
 .ops-ticket__nav {
@@ -362,10 +363,10 @@
 }
 
 .ops-btn--icon {
-  min-width: 2.4rem;
-  min-height: 2.1rem;
-  padding: 0.25rem 0.4rem;
-  font-size: 1.05rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 1.1rem;
   line-height: 1;
   font-weight: 700;
 }
@@ -380,14 +381,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.75rem;
+  gap: 0.45rem;
+  min-height: var(--kb-btn-min-h, 3.15rem);
+  padding: var(--kb-btn-pad-y, 0.8rem) var(--kb-btn-pad-x, 1.25rem);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--kb-btn-font, 1.0625rem);
   font-weight: 600;
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
+  touch-action: manipulation;
   transition: opacity 0.12s, transform 0.08s;
 }
 
@@ -421,8 +424,9 @@
 }
 
 .ops-btn--sm {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.72rem;
+  min-height: var(--kb-btn-sm-min-h, 2.5rem);
+  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
 }
 
 /* Aliran jualan (overlay) — selaras butang/order sedia ada */
@@ -444,7 +448,9 @@
 .order-flow__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(18, 18, 18, 0.34);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
 }
 
 .order-flow__panel {
@@ -470,8 +476,11 @@
   flex-wrap: nowrap;
 }
 
-/* base.css .btn { width:100% } memaksa butang tutup penuh baris — elak teks tajuk terpecah */
-.order-flow__head .btn {
+/*
+ * base.css .btn { width:100% } memaksa butang penuh baris — elak teks tajuk terpecah.
+ * Butang tutup dikecualikan supaya petak segi empat .btn-close-x kekal.
+ */
+.order-flow__head .btn:not(.btn-close-x) {
   width: auto;
   min-width: 2.25rem;
   flex: 0 0 auto;
@@ -500,8 +509,7 @@
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
+  gap: var(--kb-btn-gap, 0.75rem);
 }
 
 .order-flow__list {
@@ -719,14 +727,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.75rem;
+  gap: 0.45rem;
+  min-height: var(--kb-btn-min-h, 3.15rem);
+  padding: var(--kb-btn-pad-y, 0.8rem) var(--kb-btn-pad-x, 1.25rem);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--kb-btn-font, 1.0625rem);
   font-weight: 600;
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
+  touch-action: manipulation;
   transition: opacity 0.12s, transform 0.08s, background 0.12s;
 }
 
@@ -755,13 +765,15 @@
 }
 
 .rc-btn--sm {
-  padding: 0.32rem 0.55rem;
-  font-size: 0.75rem;
+  min-height: var(--kb-btn-sm-min-h, 2.85rem);
+  padding: 0.65rem 1.05rem;
+  font-size: var(--kb-btn-sm-font, 1rem);
 }
 
 .rc-btn--icon {
-  padding: 0.4rem 0.55rem;
-  min-width: 2.25rem;
+  padding: 0.55rem 0.7rem;
+  min-width: var(--kb-btn-min-h, 3.15rem);
+  min-height: var(--kb-btn-min-h, 3.15rem);
 }
 
 .rc-shift__log {
@@ -788,8 +800,6 @@
   border-radius: var(--radius-md);
   font-size: 0.78rem;
   line-height: 1.5;
-  max-height: 7rem;
-  overflow-y: auto;
 }
 
 .rc-list-section {
@@ -855,6 +865,10 @@
 
 .rc-input--select {
   padding: 0.5rem 0.55rem;
+  min-width: 9.5rem;
+}
+
+.rc-filters__pay .kb-dd {
   min-width: 9.5rem;
 }
 
@@ -1234,12 +1248,6 @@
   grid-column: 1 / -1;
 }
 
-@media (min-width: 640px) {
-  .rc-mini-metric--wide {
-    grid-column: auto;
-  }
-}
-
 .rc-mini-metric__lbl {
   display: block;
   font-size: 0.58rem;
@@ -1291,7 +1299,7 @@
 .rc-shift-bar__actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
+  gap: var(--kb-btn-gap, 0.75rem);
 }
 
 @media (min-width: 640px) {
@@ -1301,16 +1309,16 @@
 }
 
 .rc-btn--action {
-  min-height: 2.45rem;
-  padding: 0.48rem 0.8rem;
-  font-size: 0.84rem;
+  min-height: var(--kb-btn-min-h, 3.15rem);
+  padding: var(--kb-btn-pad-y, 0.8rem) var(--kb-btn-pad-x, 1.25rem);
+  font-size: var(--kb-btn-font, 1.0625rem);
   font-weight: 700;
 }
 
 /* Baris butang drawer — lebar penuh selari grid metrik (gap sama 0.4rem) */
 .rc-shift-bar__actions .rc-btn--action {
   width: 100%;
-  min-height: 2.55rem;
+  min-height: var(--kb-btn-min-h, 3.15rem);
   padding: 0.5rem 0.45rem;
   font-size: 0.78rem;
   font-weight: 700;
@@ -1373,8 +1381,6 @@
   padding: 0.4rem 0.5rem;
   background: var(--surface-muted);
   border-radius: var(--radius-md);
-  max-height: 5.5rem;
-  overflow-y: auto;
   font-size: 0.74rem;
   line-height: 1.45;
 }

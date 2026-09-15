@@ -116,8 +116,10 @@ html:not(.kb-embed) .layout__main.dash-page-shell > main.content.dash-content {
   margin: 0;
   font-size: clamp(1.25rem, 2.5vw, 1.45rem);
   font-weight: 700;
+  line-height: 1.4;
   letter-spacing: -0.02em;
   color: var(--text);
+  padding-bottom: 0.22rem;
 }
 
 .dash-topbar-meta {
@@ -671,7 +673,7 @@ html:not(.kb-embed) .layout__main.dash-page-shell > main.content.dash-content {
   gap: var(--dash-space-3);
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
   padding-right: var(--dash-space-2);
 }
 
@@ -943,9 +945,7 @@ html:not(.kb-embed) .layout__main.dash-page-shell > main.content.dash-content {
 
 /* —— Amaran —— */
 .dash-panel__body--alerts-scroll {
-  max-height: min(40vh, 22rem);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 .dash-alerts {
@@ -1004,7 +1004,22 @@ html.kb-embed .sidebar {
 }
 
 html.kb-embed .layout__main {
-  min-height: 100vh;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+html.kb-embed,
+html.kb-embed body.page-main-menu {
+  height: auto;
+  overflow: visible;
+}
+
+html.kb-embed .layout {
+  height: auto;
+  min-height: 100%;
+  max-height: none;
+  overflow: visible;
 }
 
 html.kb-embed .topbar.topbar--dashboard {

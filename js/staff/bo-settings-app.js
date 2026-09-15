@@ -16,17 +16,26 @@ import { subscribeStaff, addStaff, persistStaff, removeStaff } from "./staff-rep
 import {
   enrollStaffTotp,
   confirmStaffTotpEnrollment,
-  setStaffTotpEnabled,
+  resetStaffTotp,
   setStoreLocation,
   clearStoreLocation
 } from "./totp-callables.js";
 import { renderTotpQrCode } from "../totp-qr.js";
 import { notifyInnerHeight } from "./bo-settings-iframe-autosize.js";
+import { t as tr, onLocaleChange } from "../i18n/locale.js";
 
 var staffList = [];
 var selectedId = "";
 var staffUnsub = null;
 var pagehideBound = false;
+
+/**
+ * Teks yang dibina oleh JS disimpan sebagai keadaan (bukan hanya ditulis ke DOM)
+ * supaya ia boleh dibina semula bila bahasa bertukar tanpa memanggil Firestore lagi.
+ */
+var totpFormView = { kind: "notSetup", enrolled: false, enabled: false };
+var storeLocationView = { kind: "loading", loc: null };
+var totpModalStaffName = "";
 
 function defaultWeeklyRosterPagi() {
   var out = [];
@@ -67,6 +76,18 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Terjemahan dengan pemegang tempat `{nama}`. */
+function trFmt(key, vars) {
+  return String(tr(key)).replace(/\{(\w+)\}/g, function (whole, name) {
+    return vars && vars[name] != null ? String(vars[name]) : whole;
+  });
+}
+
+/** Mesej ralat teknikal dari Firebase; kalau tiada, guna perkataan generik. */
+function errText(e) {
+  return e && e.message ? e.message : tr("settings.common.error");
 }
 
 function setStatus(msg, kind) {
@@ -113,7 +134,7 @@ function renderStaffList() {
     return !isOwnerStaffRecord(s);
   });
   if (!visibleStaff.length) {
-    wrap.innerHTML = '<p class="sd-footnote">Tiada rekod staf. Klik <strong>Tambah kakitangan</strong> atau jalankan <code>node scripts/add-owner-staff.js</code>.</p>';
+    wrap.innerHTML = '<p class="sd-footnote">' + tr("settings.list.empty") + "</p>";
     notifyInnerHeight();
     return;
   }
@@ -167,7 +188,7 @@ function applyOwnerFormMode(s) {
   if (deleteBtn) deleteBtn.hidden = ownerMode || !selectedId;
   applyPayrollFieldsVisibility();
   var totpBlock = $("bs-totp-block");
-  if (totpBlock) totpBlock.hidden = ownerMode || !selectedId;
+  if (totpBlock) totpBlock.hidden = !selectedId;
 }
 
 async function fillFormForStaff(id) {
@@ -213,30 +234,52 @@ async function fillFormForStaff(id) {
   renderStaffList();
 }
 
+/** Tulis semula chip On/Off + butang Delete/Setup 2FA dari `totpFormView`. */
+function renderTotpFormStatus() {
+  var chip = $("bs-totp-status-chip");
+  var setupBtn = $("bs-btn-setup-totp");
+  var deleteBtn = $("bs-btn-delete-totp");
+  var v = totpFormView;
+  var on = v.kind === "state" && v.enabled;
+  var configured = v.kind === "state" && (v.enrolled || v.enabled);
+  if (chip) {
+    if (v.kind === "loading") {
+      chip.className = "bs-totp-chip bs-totp-chip--muted";
+      chip.textContent = tr("settings.common.loadingShort");
+    } else if (v.kind === "error") {
+      chip.className = "bs-totp-chip bs-totp-chip--off";
+      chip.textContent = tr("settings.totp.loadError");
+    } else {
+      chip.className = "bs-totp-chip " + (on ? "bs-totp-chip--on" : "bs-totp-chip--off");
+      chip.textContent = on ? tr("settings.totp.statusOn") : tr("settings.totp.statusOff");
+    }
+  }
+  if (setupBtn) {
+    setupBtn.textContent = tr("settings.totp.setupBtn");
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !configured;
+  }
+}
+
 async function refreshTotpStatusForForm(id) {
-  var toggle = $("bs-form-totp-enabled");
-  var text = $("bs-form-totp-enabled-text");
-  var statusText = $("bs-totp-status-text");
-  if (!toggle || !statusText) return;
-  toggle.checked = false;
-  if (text) text.textContent = "Tidak aktif";
-  statusText.textContent = "Memuat…";
+  var chip = $("bs-totp-status-chip");
+  if (!chip) return;
+  totpFormView = { kind: "loading", enrolled: false, enabled: false };
+  renderTotpFormStatus();
   try {
     var snap = await getDoc(doc(db, "staff_totp_status", id));
     var data = snap.exists() ? snap.data() : {};
-    var enrolled = !!data.enrolled;
-    var enabled = !!data.enabled;
-    toggle.checked = enabled;
-    toggle.disabled = !enrolled;
-    if (text) text.textContent = enabled ? "Aktif" : "Tidak aktif";
-    statusText.textContent = enrolled
-      ? enabled
-        ? "2FA disediakan dan aktif — wajib semasa clock in."
-        : "2FA disediakan tapi tidak aktif."
-      : "Belum disediakan — tekan “Setup / Reset 2FA” dahulu.";
+    totpFormView = {
+      kind: "state",
+      enrolled: !!data.enrolled,
+      enabled: !!data.enabled
+    };
+    renderTotpFormStatus();
   } catch (e) {
     console.error(e);
-    statusText.textContent = "Gagal muat status 2FA.";
+    totpFormView = { kind: "error", enrolled: false, enabled: false };
+    renderTotpFormStatus();
   }
 }
 
@@ -255,12 +298,12 @@ async function saveStaffForm() {
   var editingOwner = id && (id === OWNER_STAFF_DOC_ID || isOwnerStaffRecord(staffList.find(function (x) { return String(x.id) === id; })));
 
   if (editingOwner && !isElevatedRole()) {
-    setStatus("Hanya pemilik (owner) boleh kemaskini rekod pemilik.", "err");
+    setStatus(tr("settings.msg.ownerOnly"), "err");
     return;
   }
 
   if (!name) {
-    setStatus("Isi nama.", "err");
+    setStatus(tr("settings.msg.nameRequired"), "err");
     return;
   }
 
@@ -269,15 +312,15 @@ async function saveStaffForm() {
     return normalizeStaffNameKey(s.name) === nameKey && String(s.id) !== String(id);
   });
   if (dupOther) {
-    setStatus("Nama ini sudah digunakan oleh rekod lain.", "err");
+    setStatus(tr("settings.msg.nameDuplicate"), "err");
     return;
   }
   if (!id && staffList.length >= 40) {
-    setStatus("Had 40 rekod staf dicapai. Padam rekod tidak digunakan dahulu.", "err");
+    setStatus(tr("settings.msg.limitReached"), "err");
     return;
   }
   if (emailRaw && emailRaw.indexOf("@") === -1) {
-    setStatus("E-mel tidak sah.", "err");
+    setStatus(tr("settings.msg.emailInvalid"), "err");
     return;
   }
   var sh = shiftPayloadForSave(id);
@@ -311,14 +354,14 @@ async function saveStaffForm() {
   try {
     if (id) {
       await persistStaff(id, payload);
-      setStatus("Butiran staf dikemas kini.", "ok");
+      setStatus(tr("settings.msg.staffUpdated"), "ok");
       selectedId = id;
     } else {
       var ref = await addStaff(payload);
       selectedId = ref.id;
       $("bs-form-id").value = ref.id;
       $("bs-form-delete").hidden = false;
-      setStatus("Kakitangan ditambah.", "ok");
+      setStatus(tr("settings.msg.staffAdded"), "ok");
       renderStaffList();
     }
   } catch (e) {
@@ -331,13 +374,13 @@ async function deleteStaffForm() {
   var id = $("bs-form-id").value.trim();
   if (!id) return;
   if (id === OWNER_STAFF_DOC_ID) {
-    setStatus("Rekod pemilik tidak boleh dipadam.", "err");
+    setStatus(tr("settings.msg.ownerUndeletable"), "err");
     return;
   }
-  if (!confirm("Padam kakitangan ini dari pangkalan data?")) return;
+  if (!confirm(tr("settings.msg.confirmDelete"))) return;
   try {
     await removeStaff(id);
-    setStatus("Dipadam.", "ok");
+    setStatus(tr("settings.msg.deleted"), "ok");
     selectedId = "";
     fillFormForStaff("");
   } catch (e) {
@@ -413,7 +456,7 @@ function logSecurityAudit(type, meta) {
 function getCurrentCoordsForOwner() {
   return new Promise(function (resolve, reject) {
     if (!navigator.geolocation) {
-      reject(new Error("Peranti/browser ini tidak menyokong GPS."));
+      reject(new Error(tr("settings.store.noGps")));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -421,7 +464,7 @@ function getCurrentCoordsForOwner() {
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
       function () {
-        reject(new Error("Tidak dapat akses lokasi. Benarkan kebenaran GPS dan cuba lagi."));
+        reject(new Error(tr("settings.store.noPermission")));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -437,41 +480,55 @@ async function refreshStoreLocationPanel() {
   }
   panel.hidden = false;
   var statusEl = $("bs-store-location-status");
-  var clearBtn = $("bs-btn-clear-store-location");
   var radiusInput = $("bs-store-radius");
   if (!statusEl) return;
-  statusEl.textContent = "Memuat…";
+  storeLocationView = { kind: "loading", loc: null };
+  renderStoreLocationStatus();
   try {
     var snap = await getDoc(doc(db, "pos_meta", "store_location"));
     if (snap.exists()) {
       var d = snap.data();
-      statusEl.textContent =
-        "Lokasi ditetapkan — radius " + d.radiusMeters + "m (" + d.lat.toFixed(5) + ", " + d.lng.toFixed(5) + "). Clock-in disekat di luar kawasan ini.";
-      if (clearBtn) clearBtn.hidden = false;
+      storeLocationView = { kind: "set", loc: d };
+      renderStoreLocationStatus();
       if (radiusInput && d.radiusMeters) radiusInput.value = d.radiusMeters;
     } else {
-      statusEl.textContent = "Belum ditetapkan — clock-in staf tiada sekatan lokasi buat masa ini.";
-      if (clearBtn) clearBtn.hidden = true;
+      storeLocationView = { kind: "unset", loc: null };
+      renderStoreLocationStatus();
     }
   } catch (e) {
     console.error(e);
-    statusEl.textContent = "Gagal muat status lokasi kedai.";
+    storeLocationView = { kind: "error", loc: null };
+    renderStoreLocationStatus();
+  }
+}
+
+/** Tulis semula status lokasi kedai dari `storeLocationView` (dipakai juga bila bahasa bertukar). */
+function renderStoreLocationStatus() {
+  var statusEl = $("bs-store-location-status");
+  var clearBtn = $("bs-btn-clear-store-location");
+  if (!statusEl) return;
+  var v = storeLocationView;
+  if (v.kind === "set" && v.loc) {
+    statusEl.textContent = trFmt("settings.store.statusSet", {
+      radius: v.loc.radiusMeters,
+      lat: v.loc.lat.toFixed(5),
+      lng: v.loc.lng.toFixed(5)
+    });
+    if (clearBtn) clearBtn.hidden = false;
+  } else if (v.kind === "unset") {
+    statusEl.textContent = tr("settings.store.statusUnset");
+    if (clearBtn) clearBtn.hidden = true;
+  } else if (v.kind === "error") {
+    statusEl.textContent = tr("settings.store.statusError");
+  } else {
+    statusEl.textContent = tr("settings.common.loadingShort");
   }
 }
 
 /** Kemaskini panel lokasi kedai terus dari keputusan yang dah diketahui — elak getDoc berlebihan. */
 function applyStoreLocationOptimistic(loc) {
-  var statusEl = $("bs-store-location-status");
-  var clearBtn = $("bs-btn-clear-store-location");
-  if (!statusEl) return;
-  if (loc) {
-    statusEl.textContent =
-      "Lokasi ditetapkan — radius " + loc.radiusMeters + "m (" + loc.lat.toFixed(5) + ", " + loc.lng.toFixed(5) + "). Clock-in disekat di luar kawasan ini.";
-    if (clearBtn) clearBtn.hidden = false;
-  } else {
-    statusEl.textContent = "Belum ditetapkan — clock-in staf tiada sekatan lokasi buat masa ini.";
-    if (clearBtn) clearBtn.hidden = true;
-  }
+  storeLocationView = loc ? { kind: "set", loc: loc } : { kind: "unset", loc: null };
+  renderStoreLocationStatus();
 }
 
 function wireStoreLocationEvents() {
@@ -484,12 +541,12 @@ function wireStoreLocationEvents() {
         var radiusInput = $("bs-store-radius");
         var radius = radiusInput ? parseFloat(radiusInput.value) || 150 : 150;
         await setStoreLocation(coords.lat, coords.lng, radius);
-        setStatus("Lokasi kedai ditetapkan.", "ok");
+        setStatus(tr("settings.store.msgSet"), "ok");
         applyStoreLocationOptimistic({ lat: coords.lat, lng: coords.lng, radiusMeters: radius });
         logSecurityAudit("store_location_set", { lat: coords.lat, lng: coords.lng, radiusMeters: radius });
       } catch (e) {
         console.error(e);
-        setStatus("Gagal tetapkan lokasi: " + (e && e.message ? e.message : "ralat"), "err");
+        setStatus(trFmt("settings.store.msgSetFailed", { error: errText(e) }), "err");
       } finally {
         setBtnLoading(setBtn, false);
       }
@@ -502,12 +559,12 @@ function wireStoreLocationEvents() {
       setBtnLoading(clearBtn, true);
       try {
         await clearStoreLocation();
-        setStatus("Sekatan lokasi dibuang.", "ok");
+        setStatus(tr("settings.store.msgCleared"), "ok");
         applyStoreLocationOptimistic(null);
         logSecurityAudit("store_location_cleared", {});
       } catch (e) {
         console.error(e);
-        setStatus("Gagal buang sekatan lokasi: " + (e && e.message ? e.message : "ralat"), "err");
+        setStatus(trFmt("settings.store.msgClearFailed", { error: errText(e) }), "err");
       } finally {
         setBtnLoading(clearBtn, false);
       }
@@ -541,18 +598,19 @@ function totpStatusText(msg, kind) {
  * berlaku dengan segera — QR dipaparkan dengan skeleton loading dahulu, ditukar
  * bila enrollStaffTotp/enrollOwnerTotp resolve. Elak "tekan butang, tak nampak apa-apa".
  */
-function openTotpModal(staffName) {
+function applyTotpModalCopy(staffName) {
+  var name = staffName || tr("settings.totp.staffFallback");
   var titleEl = $("bs-totp-modal-title");
   var leadEl = $("bs-totp-modal-lead");
-  if (titleEl) titleEl.textContent = "Setup 2FA — " + (staffName || "Staf");
-  if (leadEl) {
-    leadEl.textContent =
-      "Imbas kod QR ini dengan app authenticator pada telefon " +
-      (staffName ? staffName : "staf ini") +
-      ", atau masukkan kod secara manual.";
-  }
+  if (titleEl) titleEl.textContent = trFmt("settings.totp.modalTitle", { name: name });
+  if (leadEl) leadEl.textContent = trFmt("settings.totp.modalLead", { name: name });
+}
+
+function openTotpModal(staffName) {
+  totpModalStaffName = staffName || "";
+  applyTotpModalCopy(totpModalStaffName);
   var qr = $("bs-totp-qr");
-  if (qr) qr.innerHTML = '<div class="bs-totp-qr--loading">Menjana kod QR…</div>';
+  if (qr) qr.innerHTML = '<div class="bs-totp-qr--loading">' + escapeHtml(tr("settings.totp.generatingQr")) + "</div>";
   var secretEl = $("bs-totp-secret-text");
   if (secretEl) secretEl.textContent = "…";
   var codeInput = $("bs-totp-confirm-code");
@@ -576,6 +634,20 @@ function openTotpModal(staffName) {
       });
     });
   }
+}
+
+function fillTotpModalFailed(msg) {
+  var qr = $("bs-totp-qr");
+  if (qr) {
+    qr.innerHTML = '<div class="bs-totp-qr--error">' + escapeHtml(msg || tr("settings.totp.generateFailedShort")) + "</div>";
+  }
+  var secretEl = $("bs-totp-secret-text");
+  if (secretEl) secretEl.textContent = "—";
+  var codeInput = $("bs-totp-confirm-code");
+  if (codeInput) codeInput.disabled = true;
+  var confirmBtn = $("bs-totp-modal-confirm");
+  if (confirmBtn) confirmBtn.disabled = true;
+  totpStatusText(msg || tr("settings.totp.generateFailedShort"), "error");
 }
 
 /** Tukar modal dari skeleton loading ke QR sebenar bila Cloud Function dah siap. */
@@ -611,53 +683,69 @@ function closeTotpModal() {
   totpStatusText("", null);
 }
 
-/** Kemaskini togol + teks status 2FA staf terus dari keputusan Cloud Function yang dah diketahui — elak getDoc berlebihan. */
+function totpDeleteStatusText(msg, kind) {
+  var el = $("bs-totp-delete-status");
+  if (!el) return;
+  if (!msg) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "bs-totp-modal-status";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = msg;
+  el.className =
+    "bs-totp-modal-status" +
+    (kind === "error" ? " bs-totp-modal-status--error" : kind === "ok" ? " bs-totp-modal-status--ok" : "");
+}
+
+function applyDeleteModalCopy() {
+  var staffRec = staffList.find(function (x) {
+    return String(x.id) === selectedId;
+  });
+  var name = staffRec && staffRec.name ? staffRec.name : tr("settings.totp.staffFallback");
+  var leadEl = $("bs-totp-delete-lead");
+  if (leadEl) leadEl.textContent = trFmt("settings.totp.deleteLead", { name: name });
+}
+
+function openTotpDeleteModal() {
+  applyDeleteModalCopy();
+  totpDeleteStatusText("", null);
+  var bd = $("bs-totp-delete-backdrop");
+  if (!bd) return;
+  bd.hidden = false;
+  bd.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      bd.classList.add("is-open");
+    });
+  });
+}
+
+function closeTotpDeleteModal() {
+  var bd = $("bs-totp-delete-backdrop");
+  if (!bd) return;
+  bd.classList.remove("is-open");
+  bd.setAttribute("aria-hidden", "true");
+  setTimeout(function () {
+    bd.hidden = true;
+  }, 160);
+  totpDeleteStatusText("", null);
+}
+
+/** Kemaskini chip status 2FA staf terus dari keputusan Cloud Function yang dah diketahui — elak getDoc berlebihan. */
 function applyTotpStatusOptimistic(enrolled, enabled) {
-  var toggle = $("bs-form-totp-enabled");
-  var text = $("bs-form-totp-enabled-text");
-  var statusText = $("bs-totp-status-text");
-  if (toggle) {
-    toggle.checked = enabled;
-    toggle.disabled = !enrolled;
-  }
-  if (text) text.textContent = enabled ? "Aktif" : "Tidak aktif";
-  if (statusText) {
-    statusText.textContent = enrolled
-      ? enabled
-        ? "2FA disediakan dan aktif — wajib semasa clock in."
-        : "2FA disediakan tapi tidak aktif."
-      : "Belum disediakan — tekan “Setup / Reset 2FA” dahulu.";
-  }
+  totpFormView = { kind: "state", enrolled: enrolled, enabled: enabled };
+  renderTotpFormStatus();
 }
 
 function wireTotpEvents() {
-  var toggle = $("bs-form-totp-enabled");
-  if (toggle) {
-    toggle.addEventListener("change", async function () {
-      var id = selectedId;
-      if (!id) return;
-      var wantEnabled = toggle.checked;
-      toggle.disabled = true;
-      try {
-        await setStaffTotpEnabled(id, wantEnabled);
-        applyTotpStatusOptimistic(true, wantEnabled);
-        setStatus(wantEnabled ? "2FA diaktifkan untuk staf ini." : "2FA dinyahaktifkan untuk staf ini.", "ok");
-        logSecurityAudit(wantEnabled ? "staff_totp_enabled" : "staff_totp_disabled", { staffId: id });
-      } catch (e) {
-        console.error(e);
-        toggle.checked = !wantEnabled;
-        toggle.disabled = false;
-        setStatus("Gagal kemaskini status 2FA: " + (e && e.message ? e.message : "ralat"), "err");
-      }
-    });
-  }
-
   var setupBtn = $("bs-btn-setup-totp");
   if (setupBtn) {
     setupBtn.addEventListener("click", async function () {
       var id = selectedId;
       if (!id) {
-        setStatus("Pilih nama staf dari senarai di sebelah dahulu sebelum setup 2FA.", "err");
+        setStatus(tr("settings.totp.needStaff"), "err");
         return;
       }
       var staffRec = staffList.find(function (x) {
@@ -668,13 +756,29 @@ function wireTotpEvents() {
       setBtnLoading(setupBtn, true);
       try {
         var res = await enrollStaffTotp(id);
+        if (!res || !res.otpauthUrl || !res.secret) {
+          fillTotpModalFailed(tr("settings.totp.generateFailedShort"));
+          return;
+        }
         fillTotpModalReady(res.otpauthUrl, res.secret);
       } catch (e) {
         console.error(e);
-        totpStatusText("Gagal jana 2FA: " + (e && e.message ? e.message : "ralat"), "error");
+        fillTotpModalFailed(trFmt("settings.totp.generateFailed", { error: errText(e) }));
       } finally {
         setBtnLoading(setupBtn, false);
       }
+    });
+  }
+
+  var deleteBtn = $("bs-btn-delete-totp");
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", function () {
+      if (totpFormView.kind !== "state" || !(totpFormView.enrolled || totpFormView.enabled)) return;
+      if (!selectedId) {
+        setStatus(tr("settings.totp.needStaff"), "err");
+        return;
+      }
+      openTotpDeleteModal();
     });
   }
 
@@ -688,19 +792,19 @@ function wireTotpEvents() {
       var codeInput = $("bs-totp-confirm-code");
       var code = codeInput ? codeInput.value.trim() : "";
       if (!/^\d{6}$/.test(code)) {
-        totpStatusText("Masukkan kod 6 digit.", "error");
+        totpStatusText(tr("settings.totp.needSix"), "error");
         return;
       }
       setBtnLoading(confirmBtn, true);
       try {
         await confirmStaffTotpEnrollment(id, code);
-        totpStatusText("2FA disahkan & diaktifkan.", "ok");
+        totpStatusText(tr("settings.totp.confirmed"), "ok");
         applyTotpStatusOptimistic(true, true);
         logSecurityAudit("staff_totp_enrolled", { staffId: id });
         setTimeout(closeTotpModal, 700);
       } catch (e) {
         console.error(e);
-        totpStatusText(e && e.message ? e.message : "Kod tidak sepadan.", "error");
+        totpStatusText(e && e.message ? e.message : tr("settings.totp.codeMismatch"), "error");
       } finally {
         setBtnLoading(confirmBtn, false);
       }
@@ -711,6 +815,43 @@ function wireTotpEvents() {
   if (backdrop) {
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop) closeTotpModal();
+    });
+  }
+
+  var deleteClose = $("bs-totp-delete-close");
+  if (deleteClose) deleteClose.addEventListener("click", closeTotpDeleteModal);
+  var deleteCancel = $("bs-totp-delete-cancel");
+  if (deleteCancel) deleteCancel.addEventListener("click", closeTotpDeleteModal);
+  var deleteBd = $("bs-totp-delete-backdrop");
+  if (deleteBd) {
+    deleteBd.addEventListener("click", function (e) {
+      if (e.target === deleteBd) closeTotpDeleteModal();
+    });
+  }
+  var deleteConfirm = $("bs-totp-delete-confirm");
+  if (deleteConfirm) {
+    deleteConfirm.addEventListener("click", async function () {
+      var id = selectedId;
+      if (!id) {
+        totpDeleteStatusText(tr("settings.totp.needStaff"), "error");
+        return;
+      }
+      setBtnLoading(deleteConfirm, true);
+      try {
+        var res = await resetStaffTotp(id);
+        if (res && res.ok === false) {
+          throw new Error(res.error || tr("settings.common.error"));
+        }
+        applyTotpStatusOptimistic(false, false);
+        logSecurityAudit("staff_totp_deleted", { staffId: id });
+        setStatus(tr("settings.totp.deletedOk"), "ok");
+        closeTotpDeleteModal();
+      } catch (e) {
+        console.error(e);
+        totpDeleteStatusText(trFmt("settings.totp.deleteFailed", { error: errText(e) }), "error");
+      } finally {
+        setBtnLoading(deleteConfirm, false);
+      }
     });
   }
 }
@@ -778,6 +919,16 @@ async function main() {
 
   fillFormForStaff("");
 }
+
+onLocaleChange(function () {
+  renderStaffList();
+  renderTotpFormStatus();
+  renderStoreLocationStatus();
+  var bd = $("bs-totp-modal-backdrop");
+  if (bd && !bd.hidden) applyTotpModalCopy(totpModalStaffName);
+  var deleteBd = $("bs-totp-delete-backdrop");
+  if (deleteBd && !deleteBd.hidden) applyDeleteModalCopy();
+});
 
 main().catch(function (e) {
   console.error(e);

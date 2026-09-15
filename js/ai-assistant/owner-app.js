@@ -3,6 +3,7 @@
  */
 import { mountKnowledgeBase } from "./components/knowledge-base.js";
 import { waitForAuthUser } from "../pos-firebase-auth-bridge.js";
+import { t } from "../i18n/locale.js";
 
 function showLoadError(root, message) {
   root.innerHTML =
@@ -10,7 +11,9 @@ function showLoadError(root, message) {
     '<p class="bs-settings__load-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' +
     message +
     "</p>" +
-    '<p class="sd-footnote">Pastikan anda log masuk sebagai owner/admin.</p></div>';
+    '<p class="sd-footnote">' +
+    t("ai.kb.reloginFoot") +
+    "</p></div>";
   root.removeAttribute("aria-busy");
 }
 
@@ -22,7 +25,7 @@ export async function bootOwnerAiAssistant() {
   if (!user) {
     showLoadError(
       root,
-      "Sesi log masuk tidak dijumpai. Sila log masuk semula, kemudian buka Pangkalan data."
+      t("ai.kb.sessionMissing")
     );
     return;
   }

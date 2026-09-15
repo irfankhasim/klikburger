@@ -116,7 +116,7 @@ export const reportTools = [
       // untuk data terkini; ikut corak js/monthly-reports/generate-monthly-report.js).
       const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
         .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
-      const sales = snapToArray(receiptsSnap).filter((x) => !x.voided);
+      const sales = snapToArray(receiptsSnap).filter((x) => !(x.voided || x.isVoided));
 
       // Hourly breakdown
       const hourly = Array(24).fill(0).map((_, h) => ({ hour: h, count: 0, revenue: 0 }));
@@ -184,7 +184,7 @@ export const reportTools = [
       // pos_receipts — transaksi sebenar (bukan COL.SALES legacy, boleh lapuk/kosong untuk data terkini).
       const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
         .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
-      let receipts = snapToArray(receiptsSnap).filter((x) => !x.voided);
+      let receipts = snapToArray(receiptsSnap).filter((x) => !(x.voided || x.isVoided));
       if (input.staffId) receipts = receipts.filter((x) => (x.staffId ?? x.operationalStaffId) === input.staffId);
 
       const [activitySnap, staffSnap] = await Promise.all([
@@ -255,7 +255,7 @@ export const reportTools = [
       // pos_receipts — transaksi sebenar (bukan COL.SALES legacy, boleh lapuk/kosong untuk data terkini).
       const receiptsSnap = await db.collection(COL.POS_RECEIPTS)
         .where('createdAt', '>=', from).where('createdAt', '<=', to).get();
-      const sales = snapToArray(receiptsSnap).filter((x) => !x.voided);
+      const sales = snapToArray(receiptsSnap).filter((x) => !(x.voided || x.isVoided));
 
       const totalRevenue = sales.reduce((s, x) => s + (x.subtotal ?? 0), 0);
       const totalCOGS    = sales.reduce((s, x) => s + (x.totalCogsFifo ?? 0), 0);

@@ -2,6 +2,15 @@
  * Spesifikasi data seed burger — tiada import Firestore (boleh guna dari browser & Node).
  */
 
+/**
+ * Julat kuantiti resepi — `{ gunaMin, gunaMax, gunaUnit }`. Bahan yang disukat dengan
+ * tangan (sos, sayur, serbuk) diberi julat; bahan dikira biji cukup dengan satu nombor
+ * kerana min = max bermakna kuantiti tepat.
+ */
+export function usageRange(min, max, unit) {
+  return { gunaMin: min, gunaMax: max, gunaUnit: unit };
+}
+
 /** @param {Record<string,string>} slugToId */
 export function buildUsage(slugToId, parts) {
   var u = {};
@@ -525,11 +534,11 @@ export function getProductTemplates() {
       usageParts: [
         ["patty_ayam", 1],
         ["roti_burger", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["timun", { guna: 18, gunaUnit: "g" }],
-        ["sos_cili", { guna: 12, gunaUnit: "ml" }],
-        ["mayonis", { guna: 14, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["timun", usageRange(14, 23, "g")],
+        ["sos_cili", usageRange(10, 15, "ml")],
+        ["mayonis", usageRange(11, 17, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -539,11 +548,11 @@ export function getProductTemplates() {
       usageParts: [
         ["patty_daging", 1],
         ["roti_burger", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["timun", { guna: 18, gunaUnit: "g" }],
-        ["sos_tomato", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["timun", usageRange(14, 23, "g")],
+        ["sos_tomato", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -554,12 +563,12 @@ export function getProductTemplates() {
         ["patty_ayam", 1],
         ["roti_burger", 1],
         ["cheese_slice", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["kobis", { guna: 25, gunaUnit: "g" }],
-        ["bawang", { guna: 12, gunaUnit: "g" }],
-        ["sos_tomato", { guna: 8, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["kobis", usageRange(20, 33, "g")],
+        ["bawang", usageRange(10, 18, "g")],
+        ["sos_tomato", usageRange(6, 11, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -570,12 +579,12 @@ export function getProductTemplates() {
         ["patty_daging", 1],
         ["roti_burger", 1],
         ["cheese_slice", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["kobis", { guna: 25, gunaUnit: "g" }],
-        ["bawang", { guna: 12, gunaUnit: "g" }],
-        ["sos_black_pepper", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["kobis", usageRange(20, 33, "g")],
+        ["bawang", usageRange(10, 18, "g")],
+        ["sos_black_pepper", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -585,11 +594,11 @@ export function getProductTemplates() {
       usageParts: [
         ["crispy_fillet", 1],
         ["roti_burger", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["timun", { guna: 18, gunaUnit: "g" }],
-        ["sos_cheese", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 14, gunaUnit: "ml" }],
-        ["margerin", { guna: 5, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["timun", usageRange(14, 23, "g")],
+        ["sos_cheese", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(11, 17, "ml")],
+        ["margerin", usageRange(3.8, 7, "g")]
       ]
     },
     {
@@ -599,11 +608,11 @@ export function getProductTemplates() {
       usageParts: [
         ["patty_ayam", 1],
         ["roti_obolong", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["timun", { guna: 18, gunaUnit: "g" }],
-        ["sos_cili", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 14, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["timun", usageRange(14, 23, "g")],
+        ["sos_cili", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(11, 17, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -613,11 +622,11 @@ export function getProductTemplates() {
       usageParts: [
         ["patty_daging", 1],
         ["roti_obolong", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["timun", { guna: 18, gunaUnit: "g" }],
-        ["sos_tomato", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["timun", usageRange(14, 23, "g")],
+        ["sos_tomato", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -628,12 +637,12 @@ export function getProductTemplates() {
         ["patty_ayam", 1],
         ["roti_obolong", 1],
         ["cheese_slice", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["kobis", { guna: 28, gunaUnit: "g" }],
-        ["bawang", { guna: 12, gunaUnit: "g" }],
-        ["sos_tomato", { guna: 8, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["kobis", usageRange(22, 36, "g")],
+        ["bawang", usageRange(10, 18, "g")],
+        ["sos_tomato", usageRange(6, 11, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -644,12 +653,12 @@ export function getProductTemplates() {
         ["patty_daging", 1],
         ["roti_obolong", 1],
         ["cheese_slice", 1],
-        ["lettuce", { guna: 22, gunaUnit: "g" }],
-        ["kobis", { guna: 28, gunaUnit: "g" }],
-        ["bawang", { guna: 12, gunaUnit: "g" }],
-        ["sos_black_pepper", { guna: 10, gunaUnit: "ml" }],
-        ["mayonis", { guna: 12, gunaUnit: "ml" }],
-        ["margerin", { guna: 4, gunaUnit: "g" }]
+        ["lettuce", usageRange(18, 29, "g")],
+        ["kobis", usageRange(22, 36, "g")],
+        ["bawang", usageRange(10, 18, "g")],
+        ["sos_black_pepper", usageRange(8, 13, "ml")],
+        ["mayonis", usageRange(10, 15, "ml")],
+        ["margerin", usageRange(3, 5.6, "g")]
       ]
     },
     {
@@ -659,9 +668,9 @@ export function getProductTemplates() {
       usageParts: [
         ["patty_ayam", 0.5],
         ["roti_burger", 1],
-        ["sos_cili", { guna: 8, gunaUnit: "ml" }],
-        ["mayonis", { guna: 10, gunaUnit: "ml" }],
-        ["margerin", { guna: 3, gunaUnit: "g" }]
+        ["sos_cili", usageRange(6, 11, "ml")],
+        ["mayonis", usageRange(8, 13, "ml")],
+        ["margerin", usageRange(2.3, 4.2, "g")]
       ]
     },
     {
@@ -669,9 +678,9 @@ export function getProductTemplates() {
       sellingPrice: 5,
       sortIndex: 110,
       usageParts: [
-        ["kentang_goreng", { guna: 130, gunaUnit: "g" }],
-        ["serbuk_bbq", { guna: 7, gunaUnit: "g" }],
-        ["minyak_masak", { guna: 18, gunaUnit: "ml" }]
+        ["kentang_goreng", usageRange(120, 146, "g")],
+        ["serbuk_bbq", usageRange(4.9, 9.1, "g")],
+        ["minyak_masak", usageRange(15, 22, "ml")]
       ]
     },
     {
@@ -679,9 +688,9 @@ export function getProductTemplates() {
       sellingPrice: 5,
       sortIndex: 111,
       usageParts: [
-        ["kentang_goreng", { guna: 130, gunaUnit: "g" }],
-        ["serbuk_spicy", { guna: 7, gunaUnit: "g" }],
-        ["minyak_masak", { guna: 18, gunaUnit: "ml" }]
+        ["kentang_goreng", usageRange(120, 146, "g")],
+        ["serbuk_spicy", usageRange(4.9, 9.1, "g")],
+        ["minyak_masak", usageRange(15, 22, "ml")]
       ]
     },
     {
@@ -707,9 +716,9 @@ export function getProductTemplates() {
       sellingPrice: 0.5,
       sortIndex: 203,
       usageParts: [
-        ["lettuce", { guna: 35, gunaUnit: "g" }],
-        ["kobis", { guna: 25, gunaUnit: "g" }],
-        ["timun", { guna: 22, gunaUnit: "g" }]
+        ["lettuce", usageRange(28, 46, "g")],
+        ["kobis", usageRange(20, 33, "g")],
+        ["timun", usageRange(18, 29, "g")]
       ]
     }
   ];

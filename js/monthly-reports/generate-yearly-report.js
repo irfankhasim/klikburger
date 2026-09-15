@@ -139,8 +139,23 @@ export async function generateAndWriteYearlyReport(year, opts) {
   });
   totalVarianceRm = round2(totalVarianceRm);
 
+  var payrollTotal = 0;
+  var wastageTotal = 0;
+  var nowY = new Date();
+  var maxMonth = year < nowY.getFullYear() ? 12 : nowY.getMonth() + 1;
+  for (var ym = 1; ym <= maxMonth; ym += 1) {
+    var mk = monthDocId(year, ym);
+    var monthSnap = await getDoc(doc(db, COL_MONTHLY_REPORTS, mk));
+    if (!monthSnap.exists()) continue;
+    var company = monthSnap.data().company || {};
+    payrollTotal += typeof company.payrollEstimateRm === "number" ? company.payrollEstimateRm : 0;
+    wastageTotal += typeof company.wastageRm === "number" ? company.wastageRm : 0;
+  }
+  payrollTotal = round2(payrollTotal);
+  wastageTotal = round2(wastageTotal);
+
   var grossProfit = salesStats.grossProfitRm;
-  var netOperatingEstimate = round2(grossProfit - purchaseTotalRm);
+  var netOperatingEstimate = round2(grossProfit - payrollTotal - wastageTotal);
 
   var payload = {
     yearKey: key,
@@ -148,7 +163,7 @@ export async function generateAndWriteYearlyReport(year, opts) {
     boundsNote:
       "Julat masa ikut tengah malam tempatan pelayar semasa penjanaan (1 Jan – 31 Dis " + year + ").",
     generatedAt: serverTimestamp(),
-    generatorVersion: 1,
+    generatorVersion: 2,
     source: o.source || "user_regenerate",
     actorUid: o.actorUid != null ? String(o.actorUid) : "",
     sales: salesStats,
@@ -167,9 +182,11 @@ export async function generateAndWriteYearlyReport(year, opts) {
       costOfGoodsFifoRm: salesStats.totalCogsFifoRm,
       grossProfitRm: grossProfit,
       inventoryPurchasesRecordedRm: purchaseTotalRm,
+      payrollEstimateRm: payrollTotal,
+      wastageRm: wastageTotal,
       netOperatingEstimateRm: netOperatingEstimate,
       narrative:
-        "Laporan tahunan = agregat semua resit POS (bukan void) dalam tahun. Untung kasar = jualan − COGS (FIFO). Pecahan bulanan dalam monthlyBreakdown."
+        "Laporan tahunan = agregat resit POS (bukan void) dalam tahun. Untung kasar = jualan - COGS FIFO. Operasi bersih = untung kasar - gaji (jumlah laporan bulanan) - pembaziran (jumlah laporan bulanan). Pembelian stok dipaparkan berasingan dan tidak ditolak."
     }
   };
 

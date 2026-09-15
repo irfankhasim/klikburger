@@ -1,0 +1,75 @@
+/* Wastage — borang rekod buang stok (guna rangka .sd-* dari staff-dashboard.css) */
+.wg-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+  overflow: visible;
+}
+
+.wg-form .sd-field select,
+.wg-form .sd-field input,
+.wg-form .sd-field .kb-dd {
+  min-width: 0;
+  width: 100%;
+}
+
+.sd-panel:has(.wg-form) {
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+}
+
+.wg-form .sd-field .wg-qty-row input {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+.wg-qty-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wg-qty-unit {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  min-width: 2.25rem;
+}
+
+.wg-form__batch,
+.wg-form__notes {
+  grid-column: 1 / -1;
+}
+
+.wg-form__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--kb-btn-gap, 0.75rem);
+}
+
+.wg-form__actions .btn {
+  width: auto;
+  max-width: 18rem;
+}
+
+.wg-stock {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.wg-stock--low {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .wg-form__actions .btn {
+    max-width: none;
+    width: 100%;
+  }
+}

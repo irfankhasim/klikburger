@@ -1,6 +1,6 @@
 import { auth, signInWithEmailAndPassword, signOut } from "./firebase/init.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
-import { loginSession, ROLES } from "./pos-rbac-session.js";
+import { applyLoginIdentity, ROLES } from "./pos-rbac-session.js";
 import {
   getLoginLockState,
   recordLoginFailure,
@@ -8,6 +8,7 @@ import {
   isCredentialLoginFailure,
   lockoutMessageForState
 } from "./login-lockout.js";
+import { t as tr, interpolate } from "./i18n/locale.js";
 
 var MAIN_MENU_HREF = new URL("../html/main-menu.html", import.meta.url).href;
 
@@ -26,7 +27,7 @@ async function getPosUserRbacPayloadWithFallback(firebaseUser) {
     return {
       userId: firebaseUser.uid,
       displayName: (firebaseUser.displayName || "").trim() ||
-        (firebaseUser.email ? String(firebaseUser.email).split("@")[0] : "Pengguna"),
+        (firebaseUser.email ? String(firebaseUser.email).split("@")[0] : tr("login.userFallback")),
       email: firebaseUser.email || "",
       role: ROLES.CASHIER
     };
@@ -89,10 +90,10 @@ async function showResumeSessionIfNeeded() {
   wrap.querySelector(".login-resume__menu").addEventListener("click", async function () {
     try {
       var payload = await getPosUserRbacPayloadWithFallback(u);
-      loginSession(payload);
+      applyLoginIdentity(payload);
       window.location.href = MAIN_MENU_HREF;
     } catch (err) {
-      window.alert(err && err.message ? err.message : "Tidak dapat sambung ke menu.");
+      window.alert(err && err.message ? err.message : tr("login.alert.connectFail"));
     }
   });
   wrap.querySelector(".login-resume__out").addEventListener("click", async function () {
@@ -100,7 +101,7 @@ async function showResumeSessionIfNeeded() {
       var rbac = await import("./pos-rbac-session.js");
       var blockReason = await rbac.assertLogoutReady();
       if (blockReason) {
-        window.alert(blockReason + " Sila kembali ke menu utama untuk menyelesaikan clock out dan tutup drawer.");
+        window.alert(blockReason + " " + tr("login.alert.finishClock"));
         return;
       }
       await signOut(auth);
@@ -188,7 +189,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
   var email = (emailEl && emailEl.value.trim()) || "";
   var password = (pwEl && pwEl.value) || "";
   if (!email || !password) {
-    window.alert("Sila isi e-mel dan kata laluan.");
+    window.alert(tr("login.alert.fillFields"));
     return;
   }
 
@@ -197,6 +198,12 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     applyLoginLockUi(email);
     window.alert(lockoutMessageForState(lockState));
     return;
+  }
+
+  var submitBtn = this.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add("is-busy");
   }
 
   try {
@@ -210,7 +217,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     ]);
     recordLoginSuccess(email);
     var payload = await getPosUserRbacPayloadWithFallback(cred.user);
-    loginSession(payload);
+    applyLoginIdentity(payload);
     window.location.href = MAIN_MENU_HREF;
   } catch (err) {
     var code = err && err.code;
@@ -227,5 +234,11 @@ document.querySelector(".login-form").addEventListener("submit", async function 
       msg = err.message;
     }
     window.alert(msg);
+  } finally {
+    if (submitBtn && !submitBtn.hidden) {
+      var lock = getLoginLockState(email);
+      if (!lock.locked) submitBtn.disabled = false;
+      submitBtn.classList.remove("is-busy");
+    }
   }
 });

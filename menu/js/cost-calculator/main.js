@@ -1,7 +1,7 @@
 /**
  * Kalkulator kos POS — penyambungan UI, Firestore, dan navigasi hash.
  */
-import { db, Timestamp } from "../../../shared/firebase/init.js";
+import { db, Timestamp } from "../firebase/init.js";
 import { docToIngredient, docToProduct } from "./mappers.js";
 import {
   subscribeIngredients,
@@ -18,15 +18,20 @@ import {
   sortBatchesFifo
 } from "./ingredient-batch-repository.js";
 import { subscribeModifiers, addModifier, persistModifier, deleteModifier } from "./modifiers-repository.js";
+import { recordIngredientPurchaseHistory } from "../menu-costing/purchase-history-repository.js";
 import { enrichProductsWithResolvedUsage } from "./package-resolved-usage.js";
 import {
   formatRM,
+  formatRMRange,
   costPerUnit,
   productCost,
+  productCostRange,
   escapeHtml,
   escapeAttr,
   getUsagePart,
+  parseUsageBounds,
   usageBaseQty,
+  formatUsageSummary,
   isMassVolumeUnit,
   normalizeUnit
 } from "./core.js";
@@ -44,6 +49,7 @@ function setLineStatus(elementId, text, kind) {
   el.textContent = text;
   if (kind === "error") el.className = "kb-status kb-status--error";
   else if (kind === "ok") el.className = "kb-status kb-status--ok";
+  else if (kind === "warning") el.className = "kb-status kb-status--warning";
   else el.className = "kb-status";
 }
 
@@ -223,28 +229,88 @@ function ingredientStockStatusCellHtml(ing) {
 function formatIngredientStockLineHtml(ing) {
   var raw = batchesByIngredientId[ing.id] || [];
   var list = sortBatchesFifo(raw);
-  var active = getActiveFifoBatchFromList(list);
-  if (active) {
-    var when = active.purchaseOccurredAt || active.openedAt;
-    return (
-      '<p class="ing-stock-line js-ing-stock-line">Stok ini dibeli pada <strong>' +
-      escapeHtml(formatFsDate(when)) +
-      "</strong>.</p>"
-    );
+
+  // Filter keluar batch synthetic
+  var realBatches = list.filter(function (b) {
+    return !b.synthetic;
+  });
+
+  // Guna batch real terlama yang masih ada baki
+  var activeBatch = getActiveFifoBatchFromList(realBatches);
+
+  // Fallback ke semua batch jika tiada real batch
+  if (!activeBatch) {
+    activeBatch = getActiveFifoBatchFromList(list);
   }
+
+  if (activeBatch) {
+    // Paparan tarikh "Stok ini dibeli pada..." dibuang atas permintaan.
+    return '<p class="ing-stock-line js-ing-stock-line" hidden></p>';
+  }
+
   if (list.length) {
     return (
       '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada baki. <strong>Tambah belian</strong>.</p>'
     );
   }
+
   return '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada lot — <strong>Tambah belian</strong>.</p>';
 }
 
 function getActiveLedgerEntryIdForIngredient(ingId) {
-  var list = batchesByIngredientId[String(ingId)] || [];
-  var active = getActiveFifoBatchFromList(list);
-  if (!active || !active.ledgerEntryId) return null;
-  return String(active.ledgerEntryId);
+  var id = String(ingId || "");
+  if (!id) return null;
+
+  var list = batchesByIngredientId[id] || [];
+  var activeBatch = getActiveFifoBatchFromList(list);
+  if (!activeBatch) return null;
+
+  // Cuba guna ledgerEntryId dulu jika ada
+  if (activeBatch.ledgerEntryId) {
+    return String(activeBatch.ledgerEntryId);
+  }
+
+  // Fallback: match berdasarkan tarikh openedAt/purchaseOccurredAt
+  // dengan occurredAt dalam ledger snap terkini
+  if (!lastLedgerSnapForDrawer) return null;
+
+  var batchDate = activeBatch.purchaseOccurredAt || activeBatch.openedAt;
+  if (!batchDate) return null;
+
+  var batchMs = typeof batchDate.toMillis === "function"
+    ? batchDate.toMillis()
+    : (batchDate instanceof Date ? batchDate.getTime() : 0);
+
+  if (!batchMs) return null;
+
+  // Cari ledger entry yang paling hampir dengan tarikh batch aktif
+  var bestId = null;
+  var bestDiff = Infinity;
+  var TOLERANCE_MS = 24 * 60 * 60 * 1000; // 24 jam tolerance
+
+  lastLedgerSnapForDrawer.docs.forEach(function (d) {
+    var x = d.data();
+    var k = String(x.kind || "");
+    // Skip sale_consumption — kita cari purchase/initial sahaja
+    if (k === "sale_consumption") return;
+
+    var occurred = x.occurredAt;
+    if (!occurred) return;
+
+    var occMs = typeof occurred.toMillis === "function"
+      ? occurred.toMillis()
+      : (occurred instanceof Date ? occurred.getTime() : 0);
+
+    if (!occMs) return;
+
+    var diff = Math.abs(occMs - batchMs);
+    if (diff < bestDiff && diff <= TOLERANCE_MS) {
+      bestDiff = diff;
+      bestId = d.id;
+    }
+  });
+
+  return bestId;
 }
 
 function patchIngredientBatchDisplays() {
@@ -271,6 +337,12 @@ function patchIngredientBatchDisplays() {
         "</span>";
     }
   });
+
+  // Re-render ledger rows bila batch update
+  // supaya highlight FIFO sentiasa betul
+  if (lastLedgerSnapForDrawer && selectedLedgerIngredientId) {
+    renderLedgerRows(lastLedgerSnapForDrawer);
+  }
 }
 
 function setIngAddDraftError(text) {
@@ -285,6 +357,17 @@ function setIngAddDraftError(text) {
   el.hidden = false;
   el.textContent = text;
   el.className = "kb-status kb-status--error ing-add-draft__err";
+}
+
+/**
+ * Kuantiti permulaan bila bahan baharu dicentang dalam resepi. Bahan yang disukat
+ * bermula sebagai julat; bahan dikira biji bermula pada 1 (min = max) dan pengguna
+ * boleh melebarkannya sendiri di Produk & kos.
+ */
+function defaultUsageForNewIngredient(unit) {
+  if (unit === "kg" || unit === "L") return { gunaMin: 0.02, gunaMax: 0.05, gunaUnit: unit };
+  if (isMassVolumeUnit(unit)) return { gunaMin: 15, gunaMax: 25, gunaUnit: unit };
+  return 1;
 }
 
 function resetIngAddDraftForm() {
@@ -361,20 +444,24 @@ function ledgerKindLabel(k) {
   if (k === "initial") return "Daftar";
   if (k === "purchase") return "Beli";
   if (k === "price_adjust") return "Harga";
+  if (k === "sale_consumption") return "Jualan";
   return k ? String(k) : "—";
 }
 
 function docToLedgerEntry(d) {
   var x = d.data();
+  var isSaleConsumption = (x.kind || "") === "sale_consumption";
+  var rawQty = typeof x.purchaseQty === "number" ? x.purchaseQty : parseFloat(x.purchaseQty) || 0;
+  var rawPrice = typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0;
   return {
     id: d.id,
     kind: x.kind || "",
     occurredAt: x.occurredAt,
-    purchasePrice: typeof x.purchasePrice === "number" ? x.purchasePrice : parseFloat(x.purchasePrice) || 0,
-    purchaseQty: typeof x.purchaseQty === "number" ? x.purchaseQty : parseFloat(x.purchaseQty) || 0,
+    purchasePrice: isSaleConsumption ? Math.abs(rawPrice) : rawPrice,
+    purchaseQty: isSaleConsumption ? Math.abs(rawQty) : rawQty,
     unit: x.unit || "",
-    costPerUnit: typeof x.costPerUnit === "number" ? x.costPerUnit : parseFloat(x.costPerUnit) || 0,
-    notes: x.notes || ""
+    costPerUnit: typeof x.costPerUnit === "number" ? Math.abs(x.costPerUnit) : Math.abs(parseFloat(x.costPerUnit) || 0),
+    notes: x.notes ? String(x.notes).slice(0, 30) : ""
   };
 }
 
@@ -393,10 +480,22 @@ function cloneUsageDeep(u) {
   Object.keys(u).forEach(function (k) {
     var v = u[k];
     if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-      o[k] = {
-        guna: typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0,
+      var entry = {
         gunaUnit: v.gunaUnit != null && v.gunaUnit !== "" ? String(v.gunaUnit) : null
       };
+      if (typeof v.gunaMin !== "undefined") {
+        entry.gunaMin = typeof v.gunaMin === "number" ? v.gunaMin : parseFloat(v.gunaMin) || 0;
+      }
+      if (typeof v.gunaMax !== "undefined") {
+        entry.gunaMax = typeof v.gunaMax === "number" ? v.gunaMax : parseFloat(v.gunaMax) || 0;
+      }
+      if (typeof v.guna !== "undefined") {
+        entry.guna = typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0;
+      }
+      if (typeof entry.gunaMin === "undefined" && typeof entry.gunaMax === "undefined") {
+        entry.guna = typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0;
+      }
+      o[k] = entry;
     } else {
       o[k] = v;
     }
@@ -622,6 +721,41 @@ function setDrawerLogStatus(text, kind) {
   setLineStatus("ing-drawer-log-status", text, kind);
 }
 
+var LOW_MARGIN_THRESHOLD_PCT = 20;
+
+/** Produk yang guna bahan `id` dan margin jatuh di bawah threshold selepas kos naik dari oldCpu ke newCpu. */
+function affectedProductsBelowMargin(id, ing, oldCpu, newCpu) {
+  return products
+    .filter(function (p) {
+      return p.usage && p.usage[id] != null && p.sellingPrice > 0;
+    })
+    .map(function (p) {
+      var baseQty = usageBaseQty(ing, p.usage[id]);
+      var oldCost = productCost(ingredients, p);
+      var newCost = oldCost + (newCpu - oldCpu) * baseQty;
+      var newMarginPct = ((p.sellingPrice - newCost) / p.sellingPrice) * 100;
+      return { name: p.name, newMarginPct: newMarginPct };
+    })
+    .filter(function (x) {
+      return x.newMarginPct < LOW_MARGIN_THRESHOLD_PCT;
+    });
+}
+
+function renderIngredientImpactStatus(affected) {
+  if (!affected.length) {
+    setLineStatus("ing-drawer-impact-status", "", null);
+    return;
+  }
+  var names = affected.map(function (x) {
+    return x.name;
+  });
+  setLineStatus(
+    "ing-drawer-impact-status",
+    "Kos naik — " + affected.length + " produk kini margin rendah (<" + LOW_MARGIN_THRESHOLD_PCT + "%): " + names.join(", "),
+    "warning"
+  );
+}
+
 function closeIngredientDrawer() {
   selectedLedgerIngredientId = null;
   lastLedgerSnapForDrawer = null;
@@ -642,6 +776,7 @@ function closeIngredientDrawer() {
     errEl.className = "kb-status kb-status--hidden";
   }
   setDrawerLogStatus("", null);
+  renderIngredientImpactStatus([]);
 }
 
 function renderLedgerRows(snap) {
@@ -649,35 +784,105 @@ function renderLedgerRows(snap) {
   if (!tbody) return;
   if (!snap || snap.empty) {
     tbody.innerHTML =
-      '<tr><td colspan="5" class="ing-ledger-empty">Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
+      '<tr><td colspan="4" class="ing-ledger-empty">' +
+      'Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
     return;
   }
+
   var activeLedgerId = selectedLedgerIngredientId
     ? getActiveLedgerEntryIdForIngredient(selectedLedgerIngredientId)
     : null;
+
+  if (!activeLedgerId && selectedLedgerIngredientId) {
+    // Cari lot aktif dari batchesByIngredientId
+    // Lot aktif = lot paling lama (FIFO) yang masih ada baki
+    var ingBatches = batchesByIngredientId[String(selectedLedgerIngredientId)] || [];
+    var activeBatch = getActiveFifoBatchFromList(ingBatches);
+
+    if (activeBatch && activeBatch.ledgerEntryId) {
+      // Guna ledgerEntryId dari batch untuk match dengan ledger
+      activeLedgerId = String(activeBatch.ledgerEntryId);
+    } else if (activeBatch) {
+      // Fallback: cuba match berdasarkan purchaseOccurredAt
+      // dengan occurredAt dalam ledger
+      var activeBatchDate = activeBatch.purchaseOccurredAt || activeBatch.openedAt;
+      if (activeBatchDate) {
+        var activeMs =
+          typeof activeBatchDate.toMillis === "function"
+            ? activeBatchDate.toMillis()
+            : new Date(activeBatchDate).getTime();
+
+        // Cari ledger entry yang paling hampir dengan tarikh batch
+        var bestMatch = null;
+        var bestDiff = Infinity;
+        snap.docs.forEach(function (d) {
+          var x = d.data();
+          var k = x.kind || "";
+          if (k !== "purchase" && k !== "initial") return;
+          var occurred = x.occurredAt;
+          if (!occurred) return;
+          var occMs =
+            typeof occurred.toMillis === "function" ? occurred.toMillis() : new Date(occurred).getTime();
+          var diff = Math.abs(occMs - activeMs);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestMatch = d.id;
+          }
+        });
+        if (bestMatch) activeLedgerId = bestMatch;
+      }
+    }
+    // Jika tiada lot aktif (activeBatch == null kerana stok sifar / habis
+    // digunakan), activeLedgerId kekal null — TIADA baris di-highlight.
+  }
+
   tbody.innerHTML = snap.docs
-    .map(function (d) {
+    .map(function (d, i) {
       var row = docToLedgerEntry(d);
       var isActive = activeLedgerId && String(row.id) === String(activeLedgerId);
+
       var pack =
-        escapeHtml(String(row.purchasePrice)) +
-        " RM · " +
         escapeHtml(String(row.purchaseQty)) +
         " " +
-        escapeHtml(row.unit || "");
+        escapeHtml(row.unit || "") +
+        " · RM " +
+        escapeHtml(String(row.purchasePrice));
+
+      // "Perubahan" hanya bandingkan antara rekod penetapan harga (purchase/initial/price_adjust) —
+      // langkau rekod "sale_consumption" (kos FIFO batch dijual, bukan titik harga baharu).
+      var changeHtml = "-";
+      var isPriceEvent = row.kind !== "sale_consumption";
+      if (isPriceEvent) {
+        var prevRow = null;
+        for (var j = i + 1; j < snap.docs.length; j++) {
+          var candidate = docToLedgerEntry(snap.docs[j]);
+          if (candidate.kind !== "sale_consumption") {
+            prevRow = candidate;
+            break;
+          }
+        }
+        if (prevRow && prevRow.costPerUnit > 0) {
+          var pctChange = ((row.costPerUnit - prevRow.costPerUnit) / prevRow.costPerUnit) * 100;
+          var rounded = Math.round(pctChange * 10) / 10;
+          var color = rounded > 0 ? "var(--danger)" : rounded < 0 ? "var(--success)" : "var(--text-muted)";
+          var sign = rounded > 0 ? "+" : "";
+          changeHtml = '<span style="color:' + color + '">' + sign + rounded + "%</span>";
+        }
+      }
+
       return (
         "<tr" +
-        (isActive ? ' class="ing-ledger-row ing-ledger-row--active"' : "") +
-        "><td class=\"ing-ledger-date\">" +
+        (isActive
+          ? ' style="background:#FEFCE8;border-left:3px solid #EAB308"'
+          : "") +
+        '><td class="ing-ledger-date">' +
         escapeHtml(formatFsDate(row.occurredAt)) +
-        "</td><td class=\"ing-ledger-kind\">" +
-        escapeHtml(ledgerKindLabel(row.kind)) +
-        "</td><td class=\"ing-ledger-pack\">" +
+        '</td><td class="ing-ledger-pack">' +
         pack +
-        "</td><td class=\"num ing-ledger-cpu\">" +
+        '</td><td class="num ing-ledger-cpu">' +
         escapeHtml(formatRM(row.costPerUnit)) +
-        "</td><td class=\"ing-ledger-note\">" +
-        escapeHtml(row.notes || "—") +
+        '</td><td class="num ing-ledger-change">' +
+        changeHtml +
         "</td></tr>"
       );
     })
@@ -710,7 +915,6 @@ function openIngredientDrawer(ingredientId) {
   document.getElementById("ing-log-qty").value = String(ing.purchaseQty > 0 ? ing.purchaseQty : 1);
   document.getElementById("ing-log-price").value = String(ing.purchasePrice ?? 0);
   fillUnitSelectElement(document.getElementById("ing-log-unit"), ing.unit || "g");
-  document.getElementById("ing-log-notes").value = "";
   updateIngDrawerCpuPreview();
 
   if (bd) {
@@ -744,10 +948,37 @@ function openIngredientDrawer(ingredientId) {
 }
 
 function ingSummaryLine(ing, usageVal) {
-  var part = getUsagePart(ing, usageVal);
-  if (!part.guna) return "";
-  var uShow = normalizeUnit(part.gunaUnit) === "L" ? "liter" : part.gunaUnit;
-  return ing.name + " (" + part.guna + " " + uShow + ")";
+  if (!usageBaseQty(ing, usageVal, "nominal")) return "";
+  return formatUsageSummary(ing, usageVal);
+}
+
+/**
+ * Baca sepasang input min – max satu baris resepi. Min = max bermakna kuantiti
+ * tepat, dan disimpan sebagai nilai tetap `{ guna }` supaya data kekal ringkas
+ * dan serasi dengan resipi lama.
+ */
+function buildDraftUsageFromRow(row, ing) {
+  if (!row || !ing) return null;
+  var cb = row.querySelector(".js-modal-check");
+  if (!cb || !cb.checked) return null;
+
+  var minInp = row.querySelector(".js-modal-qty-min");
+  var maxInp = row.querySelector(".js-modal-qty-max");
+  var uomSel = row.querySelector(".js-modal-uom");
+  var u = uomSel ? uomSel.value : ing.unit;
+
+  var min = parseFloat(minInp && minInp.value) || 0;
+  var maxRaw = maxInp && maxInp.value;
+  var max = maxRaw === "" || maxRaw == null ? min : parseFloat(maxRaw) || 0;
+  if (max < min) {
+    var tmp = min;
+    min = max;
+    max = tmp;
+  }
+
+  if (max > min + 1e-12) return { gunaMin: min, gunaMax: max, gunaUnit: u };
+  if (isMassVolumeUnit(ing.unit)) return { guna: min, gunaUnit: u };
+  return min;
 }
 
 /** Produk dalam modal edit, atau draf tambah baharu (belum wujud di Firestore). */
@@ -807,6 +1038,25 @@ function renderPackageMemberCheckboxes() {
   });
 }
 
+var MARGIN_THRESHOLD_DANGER = 20;
+var MARGIN_THRESHOLD_WARNING = 30;
+
+function marginBadgeClass(marginPct) {
+  return marginPct == null || marginPct < MARGIN_THRESHOLD_DANGER
+    ? "badge--danger"
+    : marginPct < MARGIN_THRESHOLD_WARNING
+    ? "badge--warning"
+    : "badge--success";
+}
+
+/** Label ringkas bahasa manusia untuk margin — bantu Owner faham tanpa perlu kira sendiri. */
+function marginQualitativeLabel(marginPct) {
+  if (marginPct == null) return "-";
+  if (marginPct < MARGIN_THRESHOLD_DANGER) return "Rendah";
+  if (marginPct < MARGIN_THRESHOLD_WARNING) return "Sederhana";
+  return "Baik";
+}
+
 function productTileHtml(p) {
   if (p.menuKind === "package") {
     var mids = p.packageMemberIds && p.packageMemberIds.length ? p.packageMemberIds : [];
@@ -839,8 +1089,15 @@ function productTileHtml(p) {
       '">Padam</button></div></div></article>'
     );
   }
-  var cost = productCost(ingredients, p);
+  var costRange = productCostRange(ingredients, p);
+  var cost = costRange.nominal;
   var profit = p.sellingPrice - cost;
+  var marginPct = p.sellingPrice > 0 ? Math.round((profit / p.sellingPrice) * 1000) / 10 : null;
+  var worstMarginPct =
+    p.sellingPrice > 0 && costRange.hasRange
+      ? Math.round(((p.sellingPrice - costRange.max) / p.sellingPrice) * 1000) / 10
+      : marginPct;
+  var marginBadgeCls = marginBadgeClass(worstMarginPct);
   var lines = ingredients
     .map(function (ing) {
       var uv = p.usage[ing.id];
@@ -859,7 +1116,7 @@ function productTileHtml(p) {
     escapeHtml(ingText) +
     "</div>" +
     '<div class="product-tile__row"><span>Harga modal</span><strong>' +
-    formatRM(cost) +
+    (costRange.hasRange ? formatRMRange(costRange.min, costRange.max) : formatRM(cost)) +
     "</strong></div>" +
     '<div class="product-tile__row"><span>Harga jual</span><strong>' +
     formatRM(p.sellingPrice) +
@@ -869,7 +1126,11 @@ function productTileHtml(p) {
     (profit >= 0 ? "var(--success)" : "var(--danger)") +
     '">' +
     formatRM(profit) +
-    "</strong></div>" +
+    '</strong><span class="badge ' +
+    marginBadgeCls +
+    '">' +
+    (worstMarginPct == null ? "-" : worstMarginPct + "%") +
+    "</span></div>" +
     '<div class="product-tile__footer-actions">' +
     '<button type="button" class="btn btn--ghost btn--sm js-edit-product" data-id="' +
     escapeAttr(String(p.id)) +
@@ -1114,13 +1375,31 @@ function renderModalBody() {
   list.innerHTML = ingredients
     .map(function (ing) {
       var uv = p.usage[ing.id];
-      var part = getUsagePart(ing, uv);
-      var checked = usageBaseQty(ing, uv) > 0;
-      var lineCost = costPerUnit(ing) * (checked ? usageBaseQty(ing, uv) : 0);
+      var bounds = parseUsageBounds(uv, ing);
+      var checked = usageBaseQty(ing, uv, "nominal") > 0;
+      var lineMinCost = costPerUnit(ing) * usageBaseQty(ing, uv, "min");
+      var lineMaxCost = costPerUnit(ing) * usageBaseQty(ing, uv, "max");
+      var lineCostText =
+        bounds.isRange && lineMaxCost > lineMinCost + 1e-9
+          ? formatRMRange(lineMinCost, lineMaxCost)
+          : formatRM(checked ? lineMaxCost : 0);
       var safeId = String(ing.id).replace(/[^a-zA-Z0-9_-]/g, "_");
       var uomCell = isMassVolumeUnit(ing.unit)
-        ? uomSelectHtml(ing, part.gunaUnit)
+        ? uomSelectHtml(ing, bounds.gunaUnit)
         : uomPlaceholderHtml();
+      var qtyCell =
+        '<div class="ing-qty-range">' +
+        '<input type="number" class="js-modal-qty-min" min="0" step="0.001" value="' +
+        (checked ? bounds.gunaMin : 0) +
+        '" title="Kuantiti minimum" aria-label="Kuantiti minimum" ' +
+        (checked ? "" : "disabled") +
+        " />" +
+        '<span class="ing-qty-range__sep" aria-hidden="true">–</span>' +
+        '<input type="number" class="js-modal-qty-max" min="0" step="0.001" value="' +
+        (checked ? bounds.gunaMax : 0) +
+        '" title="Kuantiti maksimum — sama dengan min bermakna kuantiti tepat" aria-label="Kuantiti maksimum" ' +
+        (checked ? "" : "disabled") +
+        " /></div>";
       return (
         '<div class="ing-check-row' +
         (checked ? "" : " is-disabled") +
@@ -1132,23 +1411,20 @@ function renderModalBody() {
         '"' +
         (checked ? " checked" : "") +
         " />" +
-        '<label for="chk-' +
+        '<label class="ing-check-row__label" for="chk-' +
         safeId +
         '">' +
+        '<span class="ing-check-row__name">' +
         escapeHtml(ing.name) +
-        " <small style=\"color:#888\">(" +
+        '</span><span class="ing-check-row__unit-price">' +
         formatRM(costPerUnit(ing)) +
         "/" +
         escapeHtml(ing.unit) +
-        ")</small></label>" +
-        '<input type="number" class="js-modal-qty" min="0" step="0.001" value="' +
-        (checked ? part.guna : 0) +
-        '" ' +
-        (checked ? "" : "disabled") +
-        " />" +
+        "</span></label>" +
+        qtyCell +
         uomCell +
         '<span class="line-cost">' +
-        formatRM(lineCost) +
+        lineCostText +
         "</span></div>"
       );
     })
@@ -1157,7 +1433,7 @@ function renderModalBody() {
   list.querySelectorAll(".js-modal-check").forEach(function (cb) {
     cb.addEventListener("change", onModalCheck);
   });
-  list.querySelectorAll(".js-modal-qty").forEach(function (inp) {
+  list.querySelectorAll(".js-modal-qty-min, .js-modal-qty-max").forEach(function (inp) {
     inp.addEventListener("input", onModalQty);
   });
   list.querySelectorAll(".js-modal-uom").forEach(function (sel) {
@@ -1173,38 +1449,46 @@ function syncModalUsageFromDom() {
     var ing = ingredients.find(function (x) {
       return String(x.id) === String(id);
     });
-    var cb = row.querySelector(".js-modal-check");
-    var qtyInp = row.querySelector(".js-modal-qty");
-    var uomSel = row.querySelector(".js-modal-uom");
     if (!ing) return;
-    if (cb.checked) {
-      var guna = parseFloat(qtyInp.value) || 0;
-      if (isMassVolumeUnit(ing.unit)) {
-        p.usage[id] = { guna: guna, gunaUnit: uomSel ? uomSel.value : ing.unit };
-      } else {
-        p.usage[id] = guna;
-      }
-    } else {
-      delete p.usage[id];
-    }
+    var entry = buildDraftUsageFromRow(row, ing);
+    if (entry != null) p.usage[id] = entry;
+    else delete p.usage[id];
   });
 }
 
 function onModalCheck(e) {
   var row = e.target.closest(".ing-check-row");
   if (!row) return;
-  var qtyInp = row.querySelector(".js-modal-qty");
+  var id = row.dataset.ingId;
+  var ing = ingredients.find(function (x) {
+    return String(x.id) === String(id);
+  });
+  var minInp = row.querySelector(".js-modal-qty-min");
+  var maxInp = row.querySelector(".js-modal-qty-max");
   var uomSel = row.querySelector(".js-modal-uom");
   if (e.target.checked) {
     row.classList.remove("is-disabled");
-    qtyInp.disabled = false;
+    var seed = ing && isMassVolumeUnit(ing.unit) ? "10" : "1";
+    if (minInp) {
+      minInp.disabled = false;
+      if (!parseFloat(minInp.value)) minInp.value = seed;
+    }
+    if (maxInp) {
+      maxInp.disabled = false;
+      if (!parseFloat(maxInp.value)) maxInp.value = minInp ? minInp.value : seed;
+    }
     if (uomSel) uomSel.disabled = false;
-    if (!parseFloat(qtyInp.value)) qtyInp.value = "1";
   } else {
     row.classList.add("is-disabled");
-    qtyInp.disabled = true;
+    if (minInp) {
+      minInp.disabled = true;
+      minInp.value = "0";
+    }
+    if (maxInp) {
+      maxInp.disabled = true;
+      maxInp.value = "0";
+    }
     if (uomSel) uomSel.disabled = true;
-    qtyInp.value = "0";
   }
   syncModalLineCost(row);
   updateModalStats();
@@ -1228,18 +1512,17 @@ function syncModalLineCost(row) {
     return String(x.id) === String(id);
   });
   var cb = row.querySelector(".js-modal-check");
-  var qtyInp = row.querySelector(".js-modal-qty");
-  var uomSel = row.querySelector(".js-modal-uom");
   var lineEl = row.querySelector(".line-cost");
   if (!ing || !lineEl) return;
   if (!cb.checked) {
     lineEl.textContent = formatRM(0);
     return;
   }
-  var guna = parseFloat(qtyInp.value) || 0;
-  var gunaUnit = uomSel ? uomSel.value : ing.unit;
-  var baseQty = usageBaseQty(ing, isMassVolumeUnit(ing.unit) ? { guna: guna, gunaUnit: gunaUnit } : guna);
-  lineEl.textContent = formatRM(costPerUnit(ing) * baseQty);
+  var entry = buildDraftUsageFromRow(row, ing);
+  var minCost = costPerUnit(ing) * usageBaseQty(ing, entry, "min");
+  var maxCost = costPerUnit(ing) * usageBaseQty(ing, entry, "max");
+  lineEl.textContent =
+    maxCost > minCost + 1e-9 ? formatRMRange(minCost, maxCost) : formatRM(maxCost);
 }
 
 function updateModalStats() {
@@ -1257,39 +1540,64 @@ function updateModalStats() {
     var ing = ingredients.find(function (x) {
       return String(x.id) === String(id);
     });
-    var cb = row.querySelector(".js-modal-check");
-    var qtyInp = row.querySelector(".js-modal-qty");
-    var uomSel = row.querySelector(".js-modal-uom");
-    if (!cb || !cb.checked || !ing) return;
-    var guna = parseFloat(qtyInp.value) || 0;
-    if (isMassVolumeUnit(ing.unit)) {
-      draftUsage[id] = { guna: guna, gunaUnit: uomSel ? uomSel.value : ing.unit };
-    } else {
-      draftUsage[id] = guna;
-    }
+    if (!ing) return;
+    var entry = buildDraftUsageFromRow(row, ing);
+    if (entry != null) draftUsage[id] = entry;
   });
 
-  var cost = 0;
-  ingredients.forEach(function (ing) {
-    var entry = draftUsage[ing.id];
-    if (entry == null) return;
-    var bq = usageBaseQty(ing, entry);
-    if (bq > 0) cost += costPerUnit(ing) * bq;
-  });
+  var costRange = productCostRange(ingredients, { usage: draftUsage });
+  var cost = costRange.nominal;
   var profit = price - cost;
+  var foodCostPct = price > 0 ? Math.round((cost / price) * 1000) / 10 : null;
+  var marginPct = price > 0 ? Math.round((profit / price) * 1000) / 10 : null;
+  var worstMarginPct =
+    price > 0 && costRange.hasRange
+      ? Math.round(((price - costRange.max) / price) * 1000) / 10
+      : marginPct;
 
   document.getElementById("modal-ing-list").querySelectorAll(".ing-check-row").forEach(syncModalLineCost);
 
+  var costLabel = costRange.hasRange ? formatRMRange(costRange.min, costRange.max) : formatRM(cost);
+
   document.getElementById("modal-stats").innerHTML =
     '<div><span>Jumlah harga modal</span><strong>' +
-    formatRM(cost) +
-    '</strong></div><div class="stat-sell"><span>Harga jual</span><strong>' +
+    costLabel +
+    '<span class="stat-sub">' +
+    (foodCostPct == null ? "-" : foodCostPct + "% kos bahan (nominal)") +
+    (costRange.hasRange && worstMarginPct != null
+      ? " · margin terburuk " + worstMarginPct + "%"
+      : "") +
+    '</span></strong></div><div class="stat-sell"><span>Harga jual</span><strong>' +
     formatRM(price) +
     '</strong></div><div class="stat-profit' +
     (profit < 0 ? " is-loss" : "") +
     '"><span>Untung</span><strong>' +
     formatRM(profit) +
-    "</strong></div>";
+    '<span class="stat-sub">' +
+    (marginPct == null ? "-" : marginPct + "% margin") +
+    (marginPct == null
+      ? ""
+      : ' <span class="badge ' + marginBadgeClass(worstMarginPct != null ? worstMarginPct : marginPct) + '">' + marginQualitativeLabel(worstMarginPct != null ? worstMarginPct : marginPct) + "</span>") +
+    "</span></strong></div>";
+
+  renderModalPriceSuggestion(costRange.max > 0 ? costRange.max : cost);
+}
+
+function renderModalPriceSuggestion(cost) {
+  var el = document.getElementById("modal-price-suggestion");
+  if (!el) return;
+  if (!(cost > 0)) {
+    el.textContent = "";
+    return;
+  }
+  var TARGET_MARGIN = 0.3;
+  var suggested = Math.ceil((cost / (1 - TARGET_MARGIN)) * 10) / 10;
+  el.innerHTML =
+    "Cadangan (30% margin): " +
+    formatRM(suggested) +
+    '<button type="button" id="modal-price-use-suggestion" data-value="' +
+    suggested +
+    '">Guna</button>';
 }
 
 function packageMembersValid(ids) {
@@ -1631,6 +1939,15 @@ async function init() {
             purchaseUnit: unit,
             ledgerEntryId: ledgerRefNewIng.id
           });
+          await recordIngredientPurchaseHistory({
+            ingredientId: ref.id,
+            label: name,
+            qty: qty,
+            unit: unit,
+            costPerUnit: cpu,
+            totalAmountRm: price,
+            notes: "Bahan baharu"
+          });
         } catch (le) {
           console.error(le);
         }
@@ -1683,6 +2000,12 @@ async function init() {
   });
   document.getElementById("modal-name").addEventListener("input", updateModalStats);
   document.getElementById("modal-price").addEventListener("input", updateModalStats);
+  document.getElementById("modal-price-suggestion").addEventListener("click", function (e) {
+    if (e.target.id !== "modal-price-use-suggestion") return;
+    var priceInput = document.getElementById("modal-price");
+    priceInput.value = e.target.dataset.value;
+    updateModalStats();
+  });
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
@@ -1791,7 +2114,7 @@ async function init() {
       return;
     }
     var unit = document.getElementById("ing-log-unit").value;
-    var notes = document.getElementById("ing-log-notes").value.trim();
+    var notes = "";
     var purchaseAt = Timestamp.now();
     var sortIdx = typeof ing.sortIndex === "number" ? ing.sortIndex : 0;
     var draft = {
@@ -1803,6 +2126,7 @@ async function init() {
       sortIndex: sortIdx
     };
     var cpu = costPerUnit(draft);
+    var oldCpu = costPerUnit(ing);
     var submitBtn = document.getElementById("ing-log-submit");
     if (submitBtn) submitBtn.disabled = true;
     if (nameOnlyBtn) nameOnlyBtn.disabled = true;
@@ -1836,10 +2160,21 @@ async function init() {
         purchaseUnit: unit,
         ledgerEntryId: ledgerRefPurchase.id
       });
+      await recordIngredientPurchaseHistory({
+        ingredientId: id,
+        label: newName,
+        qty: qty,
+        unit: unit,
+        costPerUnit: cpu,
+        totalAmountRm: price,
+        notes: notes
+      });
       var titleEl = document.getElementById("ing-drawer-title");
       if (titleEl) titleEl.textContent = newName;
       setDrawerLogStatus("Disimpan.", "ok");
       patchIngredientBatchDisplays();
+      if (modalState.open) renderModalBody();
+      renderIngredientImpactStatus(cpu > oldCpu ? affectedProductsBelowMargin(id, ing, oldCpu, cpu) : []);
     } catch (err) {
       console.error(err);
       setDrawerLogStatus(firestoreErrorMessage(err), "error");
@@ -1926,11 +2261,16 @@ async function init() {
         purchaseUnit: unit,
         ledgerEntryId: ledgerRefQa.id
       });
-      if (isMassVolumeUnit(unit)) {
-        p.usage[ref.id] = { guna: unit === "kg" || unit === "L" ? 0.05 : 50, gunaUnit: unit };
-      } else {
-        p.usage[ref.id] = 1;
-      }
+      await recordIngredientPurchaseHistory({
+        ingredientId: ref.id,
+        label: name,
+        qty: qty,
+        unit: unit,
+        costPerUnit: costPerUnit(draftIng),
+        totalAmountRm: price,
+        notes: "Tambah bahan (resipi)"
+      });
+      p.usage[ref.id] = defaultUsageForNewIngredient(unit);
       if (!modalState.draftProduct) {
         await persistModifier(p.id, {
           name: p.name,
@@ -1954,3 +2294,405 @@ async function init() {
 init().catch(function (e) {
   console.error(e);
 });
+
+/* ===== Belian borong (bulk purchase) ===== */
+var bulkRows = [];
+var bulkRowIdCounter = 0;
+
+function bulkUnitOptions(selected) {
+  return ["g", "kg", "ml", "L", "pcs", "biji", "keping", "paket", "botol"]
+    .map(function (u) {
+      return "<option" + (u === selected ? " selected" : "") + ">" + escapeHtml(u) + "</option>";
+    })
+    .join("");
+}
+
+function bulkIngredientOptions(selectedId) {
+  return (
+    '<option value="">-- Pilih bahan --</option>' +
+    ingredients
+      .map(function (ing) {
+        return (
+          '<option value="' +
+          escapeAttr(ing.id) +
+          '"' +
+          (ing.id === selectedId ? " selected" : "") +
+          ">" +
+          escapeHtml(ing.name) +
+          "</option>"
+        );
+      })
+      .join("") +
+    '<option value="__new__">+ Tambah bahan baru...</option>'
+  );
+}
+
+function renderBulkRow(row) {
+  var rid = row.id;
+  var isNew = row.isNew;
+  var nameCell = isNew
+    ? '<div class="bulk-ing-name-wrap">' +
+      '<input type="text" class="bulk-ing-name" data-rid="' +
+      rid +
+      '" value="' +
+      escapeAttr(row.name || "") +
+      '" placeholder="Nama bahan baru" />' +
+      '<span class="bulk-tag-new">Baru</span></div>'
+    : '<select class="bulk-ing-select" data-rid="' +
+      rid +
+      '">' +
+      bulkIngredientOptions(row.ingredientId) +
+      "</select>";
+
+  return (
+    '<div class="bulk-ing-row" data-rid="' +
+    rid +
+    '">' +
+    '<div class="bulk-ing-col bulk-ing-col--name">' +
+    nameCell +
+    "</div>" +
+    '<input type="number" class="bulk-ing-qty" data-rid="' +
+    rid +
+    '" value="' +
+    (row.qty || 1) +
+    '" min="0.001" step="any" aria-label="Kuantiti">' +
+    '<input type="number" class="bulk-ing-price" data-rid="' +
+    rid +
+    '" value="' +
+    (row.price || 0) +
+    '" min="0" step="any" placeholder="0.00" aria-label="Harga RM">' +
+    '<select class="bulk-ing-unit" data-rid="' +
+    rid +
+    '" aria-label="Unit">' +
+    bulkUnitOptions(row.unit || "pcs") +
+    "</select>" +
+    '<button type="button" class="bulk-btn-del" data-rid="' +
+    rid +
+    '" aria-label="Buang baris">✕</button>' +
+    "</div>"
+  );
+}
+
+function addBulkRow(isNew) {
+  var row = {
+    id: ++bulkRowIdCounter,
+    isNew: !!isNew,
+    ingredientId: "",
+    name: "",
+    qty: 1,
+    price: 0,
+    unit: "pcs"
+  };
+  bulkRows.push(row);
+  var container = document.getElementById("bulk-rows");
+  var div = document.createElement("div");
+  div.innerHTML = renderBulkRow(row);
+  container.appendChild(div.firstChild);
+  bindBulkRowEvents(row.id);
+  recalcBulk();
+}
+
+function bindBulkRowEvents(rid) {
+  var rowEl = document.querySelector('[data-rid="' + rid + '"].bulk-ing-row');
+  if (!rowEl) return;
+  var row = bulkRows.find(function (r) {
+    return r.id === rid;
+  });
+  if (!row) return;
+
+  var selectEl = rowEl.querySelector(".bulk-ing-select");
+  if (selectEl) {
+    selectEl.addEventListener("change", function () {
+      if (this.value === "__new__") {
+        row.isNew = true;
+        row.ingredientId = "";
+        var div = document.createElement("div");
+        div.innerHTML = renderBulkRow(row);
+        rowEl.parentNode.replaceChild(div.firstChild, rowEl);
+        bindBulkRowEvents(rid);
+      } else {
+        row.ingredientId = this.value;
+        var ing = ingredients.find(function (i) {
+          return i.id === row.ingredientId;
+        });
+        if (ing) {
+          row.unit = ing.unit || "pcs";
+          var unitEl = rowEl.querySelector(".bulk-ing-unit");
+          if (unitEl) unitEl.value = row.unit;
+        }
+      }
+      recalcBulk();
+    });
+  }
+
+  var nameEl = rowEl.querySelector(".bulk-ing-name");
+  if (nameEl) {
+    nameEl.addEventListener("input", function () {
+      row.name = this.value;
+    });
+  }
+
+  var qtyEl = rowEl.querySelector(".bulk-ing-qty");
+  if (qtyEl) {
+    qtyEl.addEventListener("input", function () {
+      row.qty = parseFloat(this.value) || 0;
+      recalcBulk();
+    });
+  }
+
+  var priceEl = rowEl.querySelector(".bulk-ing-price");
+  if (priceEl) {
+    priceEl.addEventListener("input", function () {
+      row.price = parseFloat(this.value) || 0;
+      recalcBulk();
+    });
+  }
+
+  var unitEl = rowEl.querySelector(".bulk-ing-unit");
+  if (unitEl) {
+    unitEl.addEventListener("change", function () {
+      row.unit = this.value;
+    });
+  }
+
+  var delEl = rowEl.querySelector(".bulk-btn-del");
+  if (delEl) {
+    delEl.addEventListener("click", function () {
+      bulkRows = bulkRows.filter(function (r) {
+        return r.id !== rid;
+      });
+      var el = document.querySelector('.bulk-ing-row[data-rid="' + rid + '"]');
+      if (el) el.remove();
+      recalcBulk();
+    });
+  }
+}
+
+function recalcBulk() {
+  var taxVal = parseFloat(document.getElementById("bulk-tax-val").value) || 0;
+  var taxType = document.getElementById("bulk-tax-type").value;
+  var subtotal = bulkRows.reduce(function (s, r) {
+    return s + (r.price || 0);
+  }, 0);
+  var taxAmt = taxType === "pct" ? (subtotal * taxVal) / 100 : taxVal;
+  var grand = subtotal + taxAmt;
+
+  document.getElementById("bulk-tax-result").textContent = "+ RM " + taxAmt.toFixed(2);
+  document.getElementById("bulk-subtotal").textContent = "RM " + subtotal.toFixed(2);
+  document.getElementById("bulk-tax-total").textContent = "+ RM " + taxAmt.toFixed(2);
+  document.getElementById("bulk-grand-total").textContent = "RM " + grand.toFixed(2);
+
+  var taxLabel =
+    taxType === "pct" ? "Cukai (" + taxVal + "%)" : "Cukai (RM " + taxVal.toFixed(2) + ")";
+  document.getElementById("bulk-tax-label-display").textContent = taxLabel;
+  document.querySelector(".bulk-preview__title").textContent =
+    "Ringkasan & agihan cukai" +
+    (taxVal > 0 ? " (" + (taxType === "pct" ? taxVal + "%" : "RM " + taxVal.toFixed(2)) + ")" : "");
+
+  var previewRows = document.getElementById("bulk-preview-rows");
+  if (previewRows) {
+    previewRows.innerHTML = bulkRows
+      .map(function (row) {
+        var share = subtotal > 0 ? (row.price / subtotal) * taxAmt : 0;
+        var final = row.price + share;
+        var name = row.isNew
+          ? (row.name || "Bahan baru") + ' <span class="bulk-tag-new">Baru</span>'
+          : (function () {
+              var ing = ingredients.find(function (i) {
+                return i.id === row.ingredientId;
+              });
+              return escapeHtml(ing ? ing.name : "Bahan tidak dipilih");
+            })();
+        return (
+          '<div class="bulk-preview__row">' +
+          "<span>" +
+          name +
+          " &times; " +
+          row.qty +
+          " " +
+          escapeHtml(row.unit) +
+          "</span>" +
+          '<div style="text-align:right">' +
+          "<div>RM " +
+          (row.price || 0).toFixed(2) +
+          "</div>" +
+          (taxVal > 0
+            ? '<div class="bulk-preview__sub">+ cukai RM ' +
+              share.toFixed(2) +
+              " = <strong>RM " +
+              final.toFixed(2) +
+              "</strong></div>"
+            : "") +
+          "</div></div>"
+        );
+      })
+      .join("");
+  }
+
+  var previewEl = document.getElementById("bulk-preview");
+  if (previewEl) previewEl.hidden = bulkRows.length === 0;
+}
+
+function openBulkModal() {
+  bulkRows = [];
+  bulkRowIdCounter = 0;
+  document.getElementById("bulk-rows").innerHTML = "";
+  document.getElementById("bulk-tax-val").value = "0";
+  document.getElementById("bulk-preview-rows").innerHTML = "";
+  document.getElementById("bulk-preview").hidden = true;
+  document.getElementById("bulk-status").textContent = "";
+  document.getElementById("bulk-status").className = "kb-status kb-status--hidden";
+  addBulkRow(false);
+  var bd = document.getElementById("bulk-purchase-backdrop");
+  bd.hidden = false;
+  bd.removeAttribute("hidden");
+  bd.setAttribute("aria-hidden", "false");
+}
+
+function closeBulkModal() {
+  var bd = document.getElementById("bulk-purchase-backdrop");
+  bd.hidden = true;
+  bd.setAttribute("hidden", "");
+  bd.setAttribute("aria-hidden", "true");
+}
+
+async function saveBulkPurchase() {
+  var taxVal = parseFloat(document.getElementById("bulk-tax-val").value) || 0;
+  var taxType = document.getElementById("bulk-tax-type").value;
+  var subtotal = bulkRows.reduce(function (s, r) {
+    return s + (r.price || 0);
+  }, 0);
+  var taxAmt = taxType === "pct" ? (subtotal * taxVal) / 100 : taxVal;
+
+  var statusEl = document.getElementById("bulk-status");
+
+  if (!bulkRows.length) {
+    statusEl.textContent = "Tambah sekurang-kurangnya satu bahan.";
+    statusEl.className = "kb-status kb-status--error";
+    return;
+  }
+
+  for (var i = 0; i < bulkRows.length; i++) {
+    var row = bulkRows[i];
+    if (row.isNew && !String(row.name || "").trim()) {
+      statusEl.textContent = "Sila masukkan nama untuk bahan baru.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+    if (!row.isNew && !row.ingredientId) {
+      statusEl.textContent = "Sila pilih bahan untuk semua baris.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+    if (!row.qty || row.qty <= 0) {
+      statusEl.textContent = "Kuantiti mesti lebih dari 0.";
+      statusEl.className = "kb-status kb-status--error";
+      return;
+    }
+  }
+
+  var confirmBtn = document.getElementById("btn-bulk-confirm");
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Menyimpan...";
+  }
+
+  try {
+    for (var j = 0; j < bulkRows.length; j++) {
+      var r = bulkRows[j];
+      var share = subtotal > 0 ? (r.price / subtotal) * taxAmt : 0;
+      var finalPrice = r.price + share;
+      var cpu = r.qty > 0 ? finalPrice / r.qty : 0;
+      var ingId = r.ingredientId;
+
+      if (r.isNew) {
+        var newIngDoc = await addIngredient({
+          name: String(r.name).trim(),
+          purchasePrice: finalPrice,
+          purchaseQty: r.qty,
+          unit: r.unit,
+          sortIndex: 0
+        });
+        ingId = newIngDoc.id;
+      }
+
+      await addIngredientLedgerEntry({
+        ingredientId: ingId,
+        kind: "purchase",
+        occurredAt: new Date(),
+        purchasePrice: finalPrice,
+        purchaseQty: r.qty,
+        unit: r.unit,
+        costPerUnit: cpu,
+        taxAmount: share,
+        notes:
+          taxVal > 0
+            ? "Belian borong. Cukai diagihkan: RM " + share.toFixed(2)
+            : "Belian borong."
+      });
+
+      await createPurchaseBatch({
+        ingredientId: ingId,
+        qtyRemaining: r.qty,
+        qtyOriginal: r.qty,
+        costPerUnit: cpu,
+        openedAt: new Date(),
+        purchaseOccurredAt: new Date(),
+        purchaseTotalRm: finalPrice,
+        taxAmount: share
+      });
+
+      await recordIngredientPurchaseHistory({
+        ingredientId: ingId,
+        label: r.isNew
+          ? String(r.name).trim()
+          : (ingredients.find(function (i) {
+              return i.id === ingId;
+            }) || {}).name || "",
+        qty: r.qty,
+        unit: r.unit,
+        costPerUnit: cpu,
+        totalAmountRm: finalPrice,
+        taxAmount: share
+      });
+    }
+
+    statusEl.textContent = "Belian borong berjaya disimpan!";
+    statusEl.className = "kb-status kb-status--ok";
+    setTimeout(function () {
+      closeBulkModal();
+    }, 1200);
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Ralat: " + (err.message || String(err));
+    statusEl.className = "kb-status kb-status--error";
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '<i class="ti ti-check"></i> Sahkan & simpan';
+    }
+  }
+}
+
+(function bindBulkPurchaseUI() {
+  var openBtn = document.getElementById("btn-bulk-purchase");
+  if (!openBtn) return;
+  openBtn.addEventListener("click", openBulkModal);
+  document.getElementById("btn-bulk-close").addEventListener("click", closeBulkModal);
+  document.getElementById("btn-bulk-cancel").addEventListener("click", closeBulkModal);
+  document.getElementById("btn-bulk-add-existing").addEventListener("click", function () {
+    addBulkRow(false);
+  });
+  document.getElementById("btn-bulk-add-new").addEventListener("click", function () {
+    addBulkRow(true);
+  });
+  document.getElementById("btn-bulk-confirm").addEventListener("click", saveBulkPurchase);
+  document.getElementById("bulk-tax-val").addEventListener("input", recalcBulk);
+  document.getElementById("bulk-tax-type").addEventListener("change", recalcBulk);
+  var backdrop = document.getElementById("bulk-purchase-backdrop");
+  if (backdrop) {
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeBulkModal();
+    });
+  }
+})();

@@ -10,30 +10,222 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "hosting": {
-    "site": "possystem-6907d-d94e2",
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "**/mcps/**",
-      "**/scripts/**",
-      ".git/**",
-      "firebase-service-account.json",
-      "**/*.sqlite",
-      "**/*.sqlite-shm",
-      "**/*.sqlite-wal",
-      "**/*.exe",
-      "**/*.apk",
-      "**/*.msi",
-      "**/*.dll",
-      "**/*.class",
-      "**/*.jar",
-      "**/*.bin",
-      "functions/**"
-    ]
-  },
+  "hosting": [
+    {
+      "site": "possystem-6907d-d94e2",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "**/mcps/**",
+        "**/mcp/**",
+        "**/scripts/**",
+        "android/**",
+        "functions/**",
+        "www/**",
+        ".git/**",
+        "firebase-service-account.json",
+        "**/*.sqlite",
+        "**/*.sqlite-shm",
+        "**/*.sqlite-wal",
+        "**/*.exe",
+        "**/*.apk",
+        "**/*.msi",
+        "**/*.dll",
+        "**/*.class",
+        "**/*.jar",
+        "**/*.bin"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/service-worker.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/manifest.json",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/icons/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            }
+          ]
+        },
+        {
+          "source": "/ios-icon*.png",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(png|jpg|jpeg|gif|svg|woff2|webp)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000"
+          }
+        ]
+      }
+      ]
+    },
+    {
+      "site": "possystem-6907d",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "**/mcps/**",
+        "**/mcp/**",
+        "**/scripts/**",
+        "android/**",
+        "functions/**",
+        "www/**",
+        ".git/**",
+        "firebase-service-account.json",
+        "**/*.sqlite",
+        "**/*.sqlite-shm",
+        "**/*.sqlite-wal",
+        "**/*.exe",
+        "**/*.apk",
+        "**/*.msi",
+        "**/*.dll",
+        "**/*.class",
+        "**/*.jar",
+        "**/*.bin"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/service-worker.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/manifest.json",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/icons/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            }
+          ]
+        },
+        {
+          "source": "/ios-icon*.png",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(png|jpg|jpeg|gif|svg|woff2|webp)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000"
+          }
+        ]
+      }
+      ]
+    }
+  ],
   "emulators": {
     "singleProjectMode": true,
     "auth": { "port": 9099 },

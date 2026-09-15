@@ -1,0 +1,40 @@
+{
+  "id": "/",
+  "name": "TAB KAUNTER",
+  "short_name": "TAB KAUNTER",
+  "description": "POS dan back office TAB KAUNTER — Klik Burger.",
+  "start_url": "/html/login.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ms",
+  "dir": "ltr",
+  "theme_color": "#e08a18",
+  "background_color": "#fff9f1",
+  "icons": [
+    {
+      "src": "/icons/ios-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ios-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ios-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/ios-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -32,10 +32,29 @@ export function buildStaffPerformancePayload(activityDocs, receiptDocs, staffLin
     var d = new Date(ts);
     return isNaN(d.getTime()) ? 0 : d.getTime();
   }
+  function parseDetail(x) {
+    if (!x) return {};
+    if (typeof x === "object") return x;
+    try {
+      var o = JSON.parse(String(x));
+      return o && typeof o === "object" ? o : {};
+    } catch (e) {
+      return {};
+    }
+  }
   function normalizeRole(v) {
     var r = str(v).toLowerCase();
-    return r === "kitchen" ? "kitchen" : "cashier"; // default cashier — keperluan #8
+    if (r === "kitchen") return "kitchen";
+    if (r === "owner") return "owner";
+    return "cashier";
   }
+
+  var ownerIds = {};
+  (staffLines || []).forEach(function (sl) {
+    if (!sl || !sl.isOwner) return;
+    ownerIds[str(sl.staffId || sl.id || "")] = true;
+  });
+  ownerIds["owner_01"] = true;
 
   var hoursMap = {};
   (activityDocs || []).forEach(function (d) {
@@ -43,13 +62,20 @@ export function buildStaffPerformancePayload(activityDocs, receiptDocs, staffLin
     if (x.kind !== "clock_in" && x.kind !== "clock_out") return;
     var sid = str(x.staffId || "");
     if (!sid) return;
+    if (ownerIds[sid]) return;
+    var det = parseDetail(x.detail);
+    if (x.excludeFromStaffReport || x.testingSession || det.excludeFromStaffReport || det.testingSession) {
+      return;
+    }
+    var role = normalizeRole(x.workRole || det.workRole);
+    if (role === "owner") return;
     if (!hoursMap[sid]) {
       hoursMap[sid] = { name: str(x.staffName || ""), ins: [], outs: [] };
     }
     var ms = tsToMs(x.createdAt) || (typeof x.atMs === "number" ? x.atMs : 0);
     if (!ms) return;
     if (x.kind === "clock_in") {
-      hoursMap[sid].ins.push({ ms: ms, role: normalizeRole(x.workRole) });
+      hoursMap[sid].ins.push({ ms: ms, role: role });
     } else {
       hoursMap[sid].outs.push(ms);
     }
@@ -104,10 +130,11 @@ export function buildStaffPerformancePayload(activityDocs, receiptDocs, staffLin
   var salesMap = {};
   (receiptDocs || []).forEach(function (d) {
     var x = readData(d);
-    if (x.voided) return;
+    if (x.voided || x.isVoided) return;
     var sid = str(x.staffId || x.operationalStaffId || "");
     var sname = str(x.staffName || x.operationalStaffName || "");
     if (!sid && !sname) return;
+    if (sid && ownerIds[sid]) return;
     var key = sid || sname;
     if (!salesMap[key]) {
       salesMap[key] = { staffId: sid, name: sname, totalSales: 0, orderCount: 0 };
@@ -124,6 +151,7 @@ export function buildStaffPerformancePayload(activityDocs, receiptDocs, staffLin
     var sid = str(sl.staffId || sl.id || "");
     var staffName = str(sl.staffName || sl.name || "");
     var isOwner = !!sl.isOwner;
+    if (isOwner) return;
     var hours = hoursSummary[sid] || {
       totalHours: 0,
       cashierHours: 0,

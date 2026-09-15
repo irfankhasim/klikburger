@@ -1,0 +1,1241 @@
+====================================================================
+CATATAN LENGKAP SISTEM UNTUK LAPORAN FYP (A-Z)
+Nama Sistem: KlikBurger - Sistem Pengurusan POS, Kos & Inventori F&B
+Disediakan berdasarkan analisis kod sebenar dalam direktori c:\fyp
+====================================================================
+
+CARA GUNA FAIL INI
+-------------------
+Fail ini BUKAN laporan FYP siap — ia adalah "bank maklumat" yang
+sangat detail (fakta, nama fail, nama fungsi, nama koleksi database,
+seni bina sebenar) yang awak boleh salin, ubah suai bahasa/ayat, dan
+susun semula mengikut format rasmi universiti awak untuk setiap
+chapter. Semua fakta teknikal di sini diambil terus daripada kod
+sumber sebenar dalam projek (bukan andaian generik), supaya laporan
+awak tepat dan boleh dipertahankan semasa viva/pembentangan.
+
+Struktur ikut 9 chapter yang awak minta:
+  Chapter 1 - Introduction
+  Chapter 2 - Literature Review and Project Methodology
+  Chapter 3 - Analysis
+  Chapter 4 - Design
+  Chapter 5 - Implementation
+  Chapter 6 - Testing
+  Chapter 7 - Conclusion
+  Chapter 8 - References
+  Chapter 9 - Bibliography
+
+====================================================================
+RINGKASAN SISTEM (baca dulu sebelum chapter-chapter di bawah)
+====================================================================
+
+KlikBurger ialah sistem pengurusan perniagaan F&B (fokus perniagaan
+burger/gerai makanan di Malaysia — banyak UI dan komen kod dalam
+Bahasa Melayu) yang menggabungkan BEBERAPA sub-sistem dalam satu
+ekosistem Firebase:
+
+1. POS (Point of Sale) - untuk kasir/staff ambil order, proses
+   bayaran, urus cash drawer dan shift.
+2. Cost Calculator / Menu Costing Engine - untuk owner kira kos
+   bahan mentah (COGS - Cost of Goods Sold), margin untung setiap
+   menu item, secara automatik berdasarkan resipi.
+3. Back Office (BO) - portal admin untuk owner: tetapan kedai,
+   urus staff, laporan bulanan/tahunan, AI assistant.
+4. Staff Dashboard - untuk staff clock-in/clock-out, lihat
+   prestasi & kehadiran sendiri.
+5. AI Assistant (dalam browser) - chatbot berasaskan LLM
+   (OpenRouter) yang boleh "baca" data perniagaan sebenar secara
+   live dan jawab soalan owner/staff.
+6. MCP Server (Model Context Protocol) - server berasingan yang
+   membenarkan AI agent luar (contohnya Claude Desktop / Cursor)
+   berinteraksi terus dengan data perniagaan melalui 28 "tools"
+   yang dikawal ketat oleh sistem kebenaran (RBAC).
+7. Aplikasi Mobile Android - pembalut (wrapper) Capacitor di
+   atas aplikasi web yang sama, untuk versi Android.
+
+Sistem ini menggunakan Firebase (Firestore, Firebase Auth, Cloud
+Functions, Firebase Hosting) sebagai backend, dan JavaScript "vanilla"
+(tiada framework seperti React/Vue) untuk frontend.
+
+====================================================================
+CHAPTER 1: INTRODUCTION
+====================================================================
+
+1.1 Pengenalan / Overview Projek
+---------------------------------
+KlikBurger dibangunkan untuk menyelesaikan masalah operasi harian
+gerai/kedai makanan skala kecil-sederhana di Malaysia yang selalunya
+menguruskan jualan, kos bahan mentah, dan staff secara manual atau
+menggunakan Excel/buku catatan berasingan. Sistem ini
+menyepadukan (integrate) empat fungsi utama dalam SATU platform:
+jualan (POS), kos & inventori (cost calculator), pengurusan staff,
+dan analitik perniagaan berbantukan AI.
+
+Poin penting untuk seksyen ini:
+- Nyatakan konteks perniagaan F&B kecil di Malaysia: margin untung
+  nipis, kos bahan mentah naik-turun (harga ayam, daging, sayur
+  berubah setiap minggu/bulan), staff part-time/shift, keperluan
+  kawalan kewangan (cash drawer, void resit) yang ketat untuk
+  elak kecurian/kesilapan.
+- Sistem sedia ada di pasaran (StoreHub, Loyverse, Foodpanda POS,
+  Qashier dll.) biasanya HANYA fokus pada jualan (POS) sahaja,
+  dan modul "cost calculator"/COGS yang tepat berdasarkan resipi
+  jarang disediakan secara percuma/ringkas untuk peniaga kecil.
+- KlikBurger cuba menggabungkan POS + kos bahan + AI dalam satu
+  sistem yang lebih "customized" untuk gerai burger.
+
+1.2 Latar Belakang Masalah (Problem Background)
+-------------------------------------------------
+- Peniaga kecil sukar tahu kos sebenar (COGS) setiap burger yang
+  dijual sebab kos bahan berubah (harga runcit naik turun), dan
+  pengiraan manual (Excel) tidak real-time dan mudah tersilap.
+- Guna terlalu banyak sistem berasingan (POS + Excel kos + buku
+  kehadiran staff) menyebabkan data terpencar (data silos), sukar
+  audit, dan sukar buat laporan bulanan/tahunan yang tepat.
+- Kawalan kewangan lemah pada sistem POS "off-the-shelf" murah —
+  contohnya PIN pengurus untuk void resit selalunya "hardcoded"
+  atau senang diteka (isu keselamatan sebenar yang dikenal pasti
+  dan diperbaiki dalam projek ini — rujuk fail
+  files/MCP-SETUP-GUIDE.md yang mendokumenkan pembuangan PIN
+  hardcoded "2580" daripada js/pos-security-constants.js).
+- Staff attendance sukar disahkan (adakah staff benar-benar hadir
+  di kedai semasa clock-in?) — projek ini menangani ini dengan
+  geofencing GPS (dalam functions/index.js).
+- Owner tiada cara pantas untuk "tanya" data perniagaan (contoh:
+  "berapa untung bulan ni?", "stock apa dah nak habis?") tanpa
+  buka laporan berjilid-jilid — ini sebab AI Assistant dibangunkan.
+
+1.3 Pernyataan Masalah (Problem Statement)
+--------------------------------------------
+Cadangan ayat (boleh ubah suai):
+1. Peniaga F&B kecil tidak mempunyai cara automatik dan tepat untuk
+   mengira kos bahan mentah (COGS) bagi setiap item menu berdasarkan
+   resipi dan harga bahan semasa.
+2. Sistem POS sedia ada di pasaran tidak menyepadukan pengurusan
+   inventori berasaskan kaedah FIFO (First-In-First-Out) dengan
+   jualan secara automatik, menyebabkan lejar stok tidak tepat.
+3. Kawalan capaian (access control) berasaskan peranan (role) tidak
+   konsisten antara staff biasa, shift lead, admin dan owner dalam
+   sistem POS sedia ada, meningkatkan risiko penyalahgunaan (contoh:
+   void resit tanpa kebenaran).
+4. Owner tidak mempunyai cara pantas (self-service) untuk mendapatkan
+   wawasan (insight) perniagaan tanpa perlu menganalisis laporan
+   secara manual.
+
+1.4 Objektif Projek (Objectives)
+-----------------------------------
+Cadangan (SMART objectives, boleh disesuaikan ikut skop sebenar
+yang awak nak "claim" dalam laporan):
+1. Untuk membangunkan modul POS yang membenarkan staff merekod
+   jualan, mengurus shift dan cash drawer secara real-time
+   menggunakan Firebase Firestore.
+2. Untuk membangunkan enjin pengiraan kos (cost calculator) yang
+   mengira COGS dan margin untung setiap item menu secara automatik
+   berdasarkan resipi dan kaedah inventori FIFO.
+3. Untuk merekabentuk dan melaksanakan sistem kawalan capaian
+   berasaskan peranan (Role-Based Access Control, RBAC) merentasi
+   aplikasi web dan lapisan AI agent (MCP server).
+4. Untuk menyepadukan pembantu AI (AI Assistant) berasaskan Large
+   Language Model (LLM) yang membolehkan owner/staff bertanya soalan
+   berkaitan data perniagaan secara bahasa semula jadi (natural
+   language).
+5. (Jika berkaitan) Untuk membangunkan aplikasi mobile Android
+   menggunakan Capacitor bagi membolehkan capaian sistem di
+   peranti mudah alih.
+
+1.5 Skop Projek (Scope)
+--------------------------
+Skop Pengguna (User Scope):
+- Owner - kawalan penuh, tetapan kedai, urus staff, lihat semua
+  laporan kewangan.
+- Admin - hampir sama dengan owner tetapi sesetengah tindakan
+  kritikal (contoh padam dokumen) mungkin terhad.
+- Shift Lead - urus shift, void resit terhad, akses operasi.
+- Staff/Cashier - hanya ambil order, proses jualan, clock-in/out
+  sendiri.
+- AI Agent (melalui MCP) - capaian data terhad ikut tahap
+  kebenaran (read/write/admin/owner) yang ditetapkan berasingan.
+
+Skop Fungsian (Functional Scope):
+- Pengurusan menu & resipi (recipes, menu_items)
+- Pengiraan kos bahan (ingredients, ingredient_batches,
+  ingredient_ledger)
+- Modul jualan POS (pos_orders, pos_receipts, pos_shifts)
+- Pengurusan staff & kehadiran (staff, staff_activity, geofenced
+  clock-in, 2FA TOTP)
+- Laporan bulanan/tahunan (monthly_reports, yearly_reports)
+- AI Assistant dalam pelayar (browser) + MCP server untuk AI agent
+  luar
+- Log audit (pos_audit_logs) untuk semua tindakan sensitif
+
+Skop Luar (Out of Scope) - contoh untuk dinyatakan:
+- Pembayaran online sebenar (payment gateway sebenar seperti
+  Stripe/ToyyibPay) — perlu disemak sama ada wujud dalam kod
+  sebenar sebelum "claim" ia dalam skop.
+- Sistem berbilang cawangan (multi-outlet) sepenuhnya — struktur
+  data nampak direka untuk satu kedai (single-outlet) memandangkan
+  ada dokumen tunggal owner_01 dan satu store location.
+
+1.6 Kepentingan Projek (Significance)
+----------------------------------------
+- Membantu peniaga kecil buat keputusan harga menu berdasarkan
+  margin untung sebenar (bukan agakan).
+- Mengurangkan risiko kecurian/kesilapan kewangan melalui log audit
+  dan kawalan void resit yang lebih ketat.
+- Menunjukkan aplikasi praktikal teknologi AI/LLM (Model Context
+  Protocol) dalam konteks perniagaan tempatan (F&B Malaysia) —
+  nilai tambah "novelty" untuk laporan FYP.
+
+1.7 Struktur/Susunan Laporan (Chapter Outline)
+-------------------------------------------------
+Terangkan secara ringkas apa yang ada dalam Chapter 2 hingga 9
+(1 perenggan pendek setiap satu, guna kandungan chapter-chapter
+di bawah sebagai panduan).
+
+====================================================================
+CHAPTER 2: LITERATURE REVIEW AND PROJECT METHODOLOGY
+====================================================================
+
+2.1 Pengenalan
+-----------------
+Terangkan tujuan chapter: membandingkan sistem/kajian sedia ada,
+dan menjustifikasikan metodologi pembangunan yang dipilih.
+
+2.2 Kajian Sistem Sedia Ada (Existing System Review)
+--------------------------------------------------------
+Bandingkan KlikBurger dengan 2-3 sistem POS/costing sedia ada.
+Cadangan sistem untuk dibandingkan (sila cari maklumat rasmi
+produk ini secara berasingan untuk citation yang sah — jangan
+reka fakta):
+  a) StoreHub POS - popular di Malaysia, kuat pada POS & loyalty,
+     lemah pada costing/COGS terperinci berasaskan resipi.
+  b) Loyverse POS - percuma, ringkas, tiada FIFO inventory costing
+     automatik atau AI assistant.
+  c) Qashier - fokus pembayaran & POS, kos bahan (recipe costing)
+     hanya pada pelan premium.
+  d) Sistem manual (Excel + buku) - fleksibel tetapi terdedah
+     kepada kesilapan manusia, tiada automasi FIFO, tiada log
+     audit.
+
+Cadangan struktur jadual perbandingan (Table 2.1):
+  | Ciri                     | StoreHub | Loyverse | Manual | KlikBurger |
+  | POS asas                 |   Ya     |   Ya     |  Ya    |    Ya      |
+  | Recipe-based COGS        |  Terhad  |  Tiada   |  Manual|    Ya      |
+  | FIFO inventory costing   |  Tiada   |  Tiada   |  Tiada |    Ya      |
+  | RBAC berperingkat        |  Terhad  |  Terhad  |  Tiada |    Ya      |
+  | AI Assistant / MCP       |  Tiada   |  Tiada   |  Tiada |    Ya      |
+  | Geofenced clock-in staff |  Tiada   |  Tiada   |  Tiada |    Ya      |
+  | 2FA (TOTP) untuk staff   |  Tiada   |  Tiada   |  Tiada |    Ya      |
+
+(NOTA: sahkan ciri sistem pesaing melalui laman rasmi/dokumentasi
+mereka sebelum letak dalam laporan rasmi — jadual di atas cuma
+panduan struktur.)
+
+2.3 Kajian Teknologi/Tools yang Digunakan
+---------------------------------------------
+Terangkan SEBAB setiap teknologi dipilih (justifikasi):
+
+- Firebase Firestore (NoSQL) - dipilih kerana sinkronisasi
+  real-time terbina-dalam (built-in), sesuai untuk POS yang perlu
+  update stok/order secara live merentas peranti (cth kasir &
+  dashboard owner nampak data sama serentak). Berbanding SQL
+  (MySQL/PostgreSQL) yang perlukan polling/websocket tambahan
+  untuk real-time.
+- Firebase Authentication - urus login pengguna dengan selamat
+  tanpa perlu bina sistem auth sendiri dari kosong.
+- Firebase Cloud Functions (Node.js, region asia-southeast1) -
+  untuk logik "privileged" yang tidak boleh dipercayai kepada
+  client (contoh: pengesahan geofencing GPS, penjanaan/pengesahan
+  2FA TOTP menggunakan library otplib) — client-side JS boleh
+  dimanipulasi pengguna, jadi logik sensitif mesti di server.
+- Model Context Protocol (MCP) SDK (@modelcontextprotocol/sdk) -
+  standard terbuka (open standard) yang membenarkan LLM/AI agent
+  (seperti Claude) berinteraksi dengan sistem luaran melalui
+  "tools" berstruktur. Dipilih untuk membolehkan automasi/analitik
+  AI tanpa mendedahkan capaian penuh database.
+- OpenRouter (LLM API gateway) - digunakan oleh AI Assistant dalam
+  browser untuk "tool calling" terus dengan data Firestore live.
+- Capacitor - untuk bina aplikasi Android daripada codebase web
+  sedia ada tanpa tulis semula dalam Kotlin/Java (cost-effective
+  untuk projek FYP solo/kecil).
+- Vanilla JavaScript (ES Modules, tiada framework) - kemungkinan
+  dipilih untuk kawalan penuh, tiada overhead build tool
+  (Webpack/Vite), dan mudah difahami/debug untuk skop projek FYP.
+  (Nyatakan juga sebagai limitation/trade-off dalam Chapter 7:
+  kurang struktur berbanding React/Vue untuk aplikasi besar.)
+
+2.4 Metodologi Pembangunan Projek (Project Methodology)
+------------------------------------------------------------
+Berdasarkan bukti dalam kod (banyak skrip "seed", "fix",
+"backfill", "cleanup-legacy", "regen-reports" dalam folder
+scripts/, serta migrasi struktur data daripada "modifiers"
+(model lama) kepada "recipes" + "menu_items" (model baru), dan
+migrasi daripada SQLite (server/data/pos.sqlite) kepada
+Firestore sepenuhnya) — ini menunjukkan pembangunan sistem
+berlaku secara BERULANG (iterative) dan menyesuaikan (adaptive)
+mengikut keperluan sebenar yang ditemui semasa pembangunan.
+
+Justifikasi metodologi AGILE (khususnya pendekatan
+Iterative/Incremental atau Scrum-lite untuk projek solo):
+- Bukti: migrasi skema database (modifiers -> recipes/menu_items)
+  menunjukkan requirement berubah/diperhalusi semasa pembangunan,
+  bukan direka sepenuhnya di awal (bertentangan dengan Waterfall).
+- Bukti: banyak skrip "fix-duplicate-clockin.js",
+  "update-aina-danial-salary-and-regen-reports.mjs" menunjukkan
+  pembetulan pantas (rapid fix) berdasarkan data sebenar/isu
+  sebenar — ciri khas Agile (respond to change).
+- Bukti: keselamatan diperbaiki secara berperingkat (contoh
+  pembuangan PIN hardcoded "2580" didokumenkan sebagai
+  "remediation" berasingan dalam MCP-SETUP-GUIDE.md) — menunjukkan
+  security hardening berterusan (bukan sekali sahaja di awal).
+
+Cadangan carta fasa metodologi untuk laporan (Agile - Iterative
+Model), setiap iterasi merangkumi:
+  1. Requirement/Planning -> 2. Design -> 3. Implementation ->
+  4. Testing (manual script) -> 5. Review/Feedback -> (ulang)
+
+2.5 Alat & Persekitaran Pembangunan (Development Tools)
+--------------------------------------------------------------
+- Editor: Visual Studio Code (VS Code) dengan extension Claude Code
+- Version Control: Git (repositori tempatan, cawangan utama "main")
+- Package Manager: npm (root package.json, "type": "module")
+- Backend Service: Firebase (Firestore, Auth, Functions, Hosting)
+- Runtime: Node.js (untuk Cloud Functions, MCP server, skrip
+  penyelenggaraan/seed di folder scripts/)
+- Mobile Build: Android Studio + Gradle (untuk projek android/)
+- AI/LLM: OpenRouter API (AI Assistant), Claude/MCP-compatible
+  clients (untuk MCP server)
+
+2.6 Ringkasan Chapter
+------------------------
+Ringkaskan bahawa kajian literatur menunjukkan jurang (gap) pada
+sistem sedia ada (costing terperinci + AI + RBAC berperingkat
+tidak wujud bersama dalam satu sistem murah/kecil), dan metodologi
+Agile/Iterative paling sesuai kerana bukti pembangunan berulang
+dalam kod sebenar.
+
+====================================================================
+CHAPTER 3: ANALYSIS
+====================================================================
+
+3.1 Pengenalan
+-----------------
+Terangkan tujuan chapter: menganalisis keperluan sistem (functional
+& non-functional), analisis pengguna (actor), dan analisis data.
+
+3.2 Analisis Sistem Sedia Ada / Semasa (As-Is Analysis)
+-------------------------------------------------------------
+Jika laporan perlukan "current system" (contoh: kedai burger guna
+sistem manual/POS asas sebelum ini), terangkan aliran kerja sedia
+ada dan masalahnya (rujuk balik Problem Statement di Chapter 1).
+
+3.3 Keperluan Fungsian (Functional Requirements)
+-----------------------------------------------------
+Senaraikan mengikut modul (boleh dijadikan jadual FR1, FR2, ...):
+
+Modul POS:
+  FR1: Sistem mesti membenarkan staff log masuk dan mula shift
+       (pos_shifts, status "open").
+  FR2: Sistem mesti memaparkan menu secara live dari koleksi
+       Firestore "modifiers"/menu_items dengan penapis kategori.
+  FR3: Sistem mesti menyemak ketersediaan stok (ingredient_batches)
+       sebelum membenarkan jualan item (cegah jual item yang stok
+       dah habis - fungsi "can't sell" check).
+  FR4: Sistem mesti mengira cukai (tax) dan pecahan amaun jualan
+       secara automatik (fungsi splitOrderAmounts dalam
+       js/pos-tax.js).
+  FR5: Sistem mesti menolak stok bahan secara FIFO (First-In-First-
+       Out) apabila jualan disahkan (fungsi finalizePosSaleFifo
+       dalam js/pos-sale-fifo.js).
+  FR6: Sistem mesti membenarkan penutupan shift dengan pengiraan
+       varians tunai (expectedDrawer vs actualDrawer,
+       varianceCategory: balanced/short/over).
+  FR7: Resit (pos_receipts) tidak boleh diubah/dipadam terus oleh
+       client - hanya melalui admin/MCP (void_receipt tool).
+
+Modul Cost Calculator / Menu Costing:
+  FR8: Sistem mesti menukar unit bahan (kg/g/mL/L) secara automatik
+       (fungsi convertToBase dalam js/cost-calculator/core.js).
+  FR9: Sistem mesti membenarkan kuantiti penggunaan bahan
+       dinyatakan sebagai julat (range) bukan hanya nilai tetap
+       (contoh: sos 20ml-30ml), dengan pincang (bias) 65% ke arah
+       nilai maksimum untuk anggaran kos yang konservatif
+       (USAGE_NOMINAL_BIAS = 0.65).
+  FR10: Sistem mesti mengira kos resipi penuh (recipeTotalCost) dan
+        model kos item menu (menuItemCostModel) merangkumi kos,
+        julat kos, untung, dan peratus margin.
+  FR11: Sistem mesti menjejak lot pembelian bahan secara berasingan
+        (ingredient_batches) dengan kos per unit tersendiri bagi
+        setiap lot (untuk sokong FIFO costing yang tepat).
+  FR12: Sistem mesti merekod sejarah perubahan harga/pembelian bahan
+        (ingredient_ledger: initial/purchase/price_adjust).
+
+Modul Staff & Kehadiran:
+  FR13: Sistem mesti mengesahkan lokasi GPS staff berbanding lokasi
+        kedai (geofencing, jejari lalai 150 meter, formula
+        Haversine) sebelum membenarkan clock-in.
+  FR14: Sistem mesti menyokong pengesahan 2 faktor (2FA) berasaskan
+        TOTP untuk staff (bukan owner), dengan had 5 percubaan
+        sebelum akaun dikunci selama 10 minit.
+  FR15: Sistem mesti merekod log aktiviti staff (staff_activity)
+        untuk tujuan audit.
+
+Modul Laporan & AI:
+  FR16: Sistem mesti menjana laporan bulanan/tahunan secara automatik
+        (monthly_reports, yearly_reports; doc ID format "YYYY-MM"/
+        "YYYY") merangkumi jualan, COGS, prestasi staff, gaji.
+  FR17: Sistem mesti menyediakan AI Assistant yang boleh menjawab
+        soalan bahasa semula jadi tentang data perniagaan live
+        (contoh: harga bahan, senarai menu).
+  FR18: Sistem mesti menyediakan MCP server dengan 28 "tools"
+        (13 read, 6 write, 5 admin, 4 report) untuk capaian AI
+        agent luaran, dikawal ketat oleh tahap kebenaran
+        (read/write/admin/owner).
+
+3.4 Keperluan Bukan Fungsian (Non-Functional Requirements)
+-----------------------------------------------------------------
+  NFR1: Keselamatan - kawalan capaian berperingkat (RBAC) mesti
+        dikuatkuasakan pada DUA lapisan berasingan: Firestore
+        Security Rules (untuk client web) DAN permission-gate MCP
+        (untuk AI agent, kerana Admin SDK memintas/bypass Firestore
+        rules).
+  NFR2: Kebolehauditan (Auditability) - semua tindakan sensitif
+        (void resit, padam dokumen, tutup shift oleh AI agent)
+        mesti direkod dalam pos_audit_logs dengan sumber (source)
+        yang jelas (cth "MCP_AGENT").
+  NFR3: Kebolehpercayaan Data (Data Integrity) - koleksi kewangan
+        (sales, pos_sales_transactions, pos_receipts) tidak boleh
+        dikemaskini/dipadam terus oleh client (allow update, delete:
+        if false dalam firestore.rules) - hanya pembetulan melalui
+        Admin SDK/MCP.
+  NFR4: Kebolehskalaan (Scalability) - Firestore sebagai NoSQL
+        membolehkan skala baca/tulis tinggi tanpa pengurusan server
+        manual.
+  NFR5: Kebolehgunaan (Usability) - antara muka Bahasa Melayu untuk
+        memudahkan staff tempatan.
+  NFR6: Ketersediaan (Availability) - Firebase Hosting + Firestore
+        menyediakan infrastruktur awan (cloud) dengan uptime tinggi.
+  NFR7: Kebolehselenggaraan (Maintainability) - pemisahan "pure
+        function core" (contoh core.js, costing-engine.js) daripada
+        UI/Firestore membolehkan logik perniagaan diuji dan
+        diselenggara berasingan daripada paparan.
+
+3.5 Analisis Pelaku Sistem (Actor/Use Case Analysis)
+-----------------------------------------------------------
+Senaraikan actor dan use case utama setiap satu:
+
+  Owner:
+   - Urus tetapan kedai (lokasi geofence, radius)
+   - Urus staff (tambah/padam, tetapkan 2FA)
+   - Lihat semua laporan kewangan & COGS
+   - Guna AI Assistant (capaian penuh)
+   - Sahkan void resit / tutup shift
+
+  Admin:
+   - Hampir sama Owner, terhad pada sesetengah tindakan kritikal
+
+  Shift Lead:
+   - Buka/tutup shift
+   - Urus cash movements
+   - Void resit terhad
+
+  Staff/Cashier:
+   - Log masuk & clock-in (dengan semakan GPS + 2FA jika diaktifkan)
+   - Ambil order & proses jualan (POS)
+   - Lihat prestasi/kehadiran sendiri (Staff Dashboard)
+
+  AI Agent (MCP client, cth Claude Desktop):
+   - Baca data (tahap "read"): dashboard, COGS report, inventori
+   - Tulis data terhad (tahap "write"): kemaskini menu, tambah
+     pembelian, kemaskini status order
+   - Tindakan admin (tahap "admin"): urus staff, void resit, tutup
+     shift, urus inventori
+   - (tahap "owner" - paling tinggi, jika wujud dalam permission-gate)
+
+3.6 Analisis Keperluan Data (Data Requirement / Entity Analysis)
+------------------------------------------------------------------
+Senaraikan entiti utama (akan diperincikan sebagai ERD di Chapter 4
+Design):
+  ingredients, ingredient_ledger, ingredient_batches, modifiers
+  (legacy), recipes, menu_items, sales, purchase_history, staff,
+  staff_activity, staff_settings, users, pos_meta, pos_orders,
+  pos_receipts, pos_shifts, pos_sales_transactions,
+  pos_audit_logs, monthly_reports, yearly_reports, knowledge_base
+
+3.7 Keperluan Perkakasan & Perisian (System Requirements)
+-----------------------------------------------------------------
+Cadangan (sesuaikan ikut sebenar):
+  Pembangunan:
+   - Komputer riba/PC dengan Windows/Mac/Linux
+   - Node.js (versi terkini LTS)
+   - Akaun Firebase (Blaze plan jika perlu Cloud Functions)
+   - Android Studio (jika bina APK)
+  Pengguna Akhir (End User):
+   - Peranti dengan pelayar web moden (Chrome/Edge/Safari) untuk
+     akses POS/BO
+   - Telefon Android (untuk aplikasi mobile, jika digunakan)
+   - Sambungan Internet (kerana bergantung sepenuhnya pada Firebase
+     - tiada mod offline yang dikenal pasti dalam kod)
+
+3.8 Ringkasan Chapter
+-------------------------
+Ringkaskan bahawa analisis menunjukkan sistem memerlukan seni bina
+berbilang lapisan (client, server privileged, AI-agent layer) untuk
+memenuhi keperluan keselamatan dan automasi kos yang kompleks.
+
+====================================================================
+CHAPTER 4: DESIGN
+====================================================================
+
+4.1 Pengenalan
+-----------------
+Terangkan tujuan chapter: menerangkan reka bentuk seni bina sistem,
+pangkalan data, antara muka pengguna, dan keselamatan.
+
+4.2 Reka Bentuk Seni Bina Sistem (System Architecture Design)
+--------------------------------------------------------------------
+Sistem terdiri daripada EMPAT lapisan/permukaan runtime utama yang
+berkongsi SATU projek Firestore:
+
+  (1) Aplikasi Web Client (Static HTML/JS/CSS)
+      - Dihidangkan melalui Firebase Hosting
+      - Baca/tulis terus ke Firestore melalui Firebase JS SDK
+      - Dikawal oleh firestore.rules (peraturan keselamatan
+        berasaskan peranan "role" pada users/{uid}.role)
+      - Merangkumi: POS app, Back Office (BO), Staff Dashboard,
+        Menu Costing Admin app
+
+  (2) Firebase Cloud Functions (functions/index.js)
+      - Logik "privileged" yang tidak boleh dipercayakan kepada
+        client:
+        * setStoreLocation / clearStoreLocation - tetapkan lokasi
+          geofence kedai
+        * Pengesahan clock-in berasaskan formula Haversine (jarak
+          GPS), radius lalai 150 meter
+        * enrollStaffTotp / confirmStaffTotpEnrollment - 2FA TOTP
+          (guna library otplib), had 5 percubaan, kunci 10 minit
+        * assertCallerIsOwner - pengesahan pemanggil adalah owner
+      - Berjalan pada Node.js, region asia-southeast1
+
+  (3) MCP Server (mcp-server.mjs + folder mcp/)
+      - Proses Node.js berasingan untuk capaian AI agent luaran
+      - Struktur:
+        * mcp/lib/ - admin-init.mjs (init Firebase Admin SDK),
+          collections.mjs (skema koleksi), validators.mjs
+          (pengesahan input), audit-logger.mjs (tulis ke
+          pos_audit_logs dengan source: MCP_AGENT)
+        * mcp/middleware/permission-gate.mjs - kuatkuasa 4 tahap
+          kebenaran: read < write < admin < owner
+        * mcp/tools/{read,write,admin,report}/index.mjs - 28 tools:
+          - 13 read: get_dashboard_summary, get_cogs_report,
+            get_inventory_status, get_menu_items, get_ingredients,
+            get_orders, get_order_by_id, get_receipts, get_shifts,
+            get_staff_list, get_staff_by_id, get_sales_summary,
+            get_audit_logs
+          - 6 write: update_menu_item, add_purchase,
+            update_order_status, update_ingredient,
+            create_document, update_document (dengan senarai putih
+            koleksi yang dibenarkan)
+          - 5 admin: manage_staff, delete_document, void_receipt,
+            close_shift, manage_inventory
+          - 4 report: generate_monthly_report, get_sales_analytics,
+            get_staff_performance, get_cogs_report
+      - PENTING: MCP server guna Firebase Admin SDK yang MEMINTAS
+        (bypass) firestore.rules sepenuhnya - sebab itu ia perlu
+        sistem kebenaran SENDIRI (permission-gate.mjs) sebagai
+        lapisan pertahanan kedua (defense-in-depth)
+
+  (4) Aplikasi Mobile Android (folder android/, www/)
+      - Pembalut Capacitor di atas bundle web yang sama
+      - Tiada logik perniagaan native (Kotlin/Java) berasingan -
+        pada dasarnya "WebView shell"
+
+  Rajah cadangan untuk laporan: lukis rajah blok (block diagram)
+  menunjukkan 4 lapisan di atas semuanya bersambung ke SATU pusat
+  "Firebase Firestore Database", dengan anak panah dua hala untuk
+  client web dan Cloud Functions, dan anak panah dari MCP server
+  terus ke Firestore (melalui Admin SDK, memintas Rules).
+
+  AI Assistant (dalam browser) - catat berasingan daripada MCP:
+  ia berjalan di client-side, panggil OpenRouter API terus, dan
+  baca Firestore secara LIVE melalui SDK biasa (tertakluk kepada
+  firestore.rules biasa, BUKAN Admin SDK). Terdapat koleksi
+  "knowledge_base" (dokumen "owner_master") yang owner boleh edit
+  sebagai lapisan pengetahuan/FAQ tersuai untuk beri konteks
+  tambahan kepada LLM.
+
+4.3 Reka Bentuk Pangkalan Data (Database Design)
+------------------------------------------------------
+Firestore ialah pangkalan data NoSQL berorientasikan dokumen
+(document-oriented). Berikut skema koleksi utama (sumber:
+js/firebase/collections.js, turut dicerminkan di
+shared/firebase/collections.js dan mcp/lib/collections.mjs):
+
+  ingredients          - senarai bahan mentah asas
+  ingredient_ledger    - sejarah perubahan harga/pembelian
+                          (jenis: initial, purchase, price_adjust)
+  ingredient_batches   - lot pembelian individu (qtyRemaining,
+                          costPerUnit, openedAt untuk susunan FIFO,
+                          expiryAt & supplierBatchCode pilihan)
+  modifiers            - model lama (legacy) menu+resipi digabung
+                          dalam satu dokumen
+  recipes              - model baru: resipi berasingan
+  menu_items           - model baru: item menu berasingan (rujuk
+                          recipes)
+  sales                - rekod jualan (immutable dari client)
+  purchase_history     - rekod pembelian pukal/stok (dengan
+                          item baris)
+  staff                - data operasi staff (berasingan daripada
+                          akaun Firebase Auth)
+  staff_activity        - log audit aktiviti staff
+  staff_settings        - konfigurasi bonus/KPI
+  staff_totp / staff_totp_status - status 2FA (rahsia TOTP TIDAK
+                          pernah didedahkan kepada client)
+  users                - profil auth/peranan (role) POS
+  pos_meta             - kaunter (seqOrder, seqReceipt,
+                          activeShiftDocId)
+  pos_orders           - order POS (+ subkoleksi items)
+  pos_receipts         - resit (immutable dari client, void hanya
+                          melalui admin/MCP)
+  pos_shifts           - shift (status open/closed, closing:
+                          {expectedDrawer, actualDrawer, variance,
+                          varianceCategory, refundNotes}) + sub-
+                          koleksi cash_movements
+  pos_sales_transactions - transaksi jualan (immutable)
+  pos_active_shift      - shift aktif semasa (satu slot kasir
+                          dikuatkuasakan pada logik Cloud Function)
+  pos_audit_logs       - log audit sistem (termasuk tindakan
+                          MCP_AGENT)
+  monthly_reports      - laporan bulanan (doc ID format "YYYY-MM")
+  yearly_reports       - laporan tahunan (doc ID format "YYYY")
+  knowledge_base       - pengetahuan tersuai untuk AI Assistant
+                          (dokumen tunggal: owner_master)
+
+  NOTA MIGRASI (baik untuk perbincangan reka bentuk dalam laporan):
+  - Sistem pada asalnya (atau serentak) turut mempunyai prototaip
+    SQLite tempatan (server/data/pos.sqlite, guna better-sqlite3),
+    tetapi komen dalam collections.js menyatakan secara eksplisit
+    "POS (Firestore sahaja; tiada SQLite)" - menunjukkan keputusan
+    reka bentuk beralih sepenuhnya kepada Firestore. Ini contoh baik
+    untuk dibincang sebagai "design decision/trade-off" dalam
+    laporan (kenapa Firestore dipilih berbanding SQL tempatan:
+    sinkronisasi real-time, tiada keperluan urus server DB sendiri).
+  - Model data menu juga berevolusi daripada satu koleksi gabungan
+    "modifiers" (menu+resipi bersama) kepada model dinormalisasi
+    "recipes" + "menu_items" berasingan - tunjukkan diagram
+    "before/after" dalam laporan untuk demonstrasi proses reka
+    bentuk data yang matang (normalization).
+
+  Cadangan: lukis ERD (Entity Relationship Diagram) ringkas
+  menunjukkan hubungan:
+    menu_items --(1..*)--> recipes --(1..*)--> ingredients
+    ingredients --(1..*)--> ingredient_batches
+    ingredients --(1..*)--> ingredient_ledger
+    pos_orders --(1..*)--> pos_orders/items (subkoleksi)
+    pos_shifts --(1..*)--> pos_shifts/cash_movements
+    staff --(1..*)--> staff_activity
+    pos_orders --(1)--> pos_receipts
+
+4.4 Reka Bentuk Antara Muka Pengguna (UI Design)
+-------------------------------------------------------
+Senaraikan halaman utama (berdasarkan folder html/):
+  - index.html / landing.html / login.html - halaman masuk
+  - pos-order.html / pos-order-board.html - antara muka kasir
+    (grid menu, kategori, troli/cart)
+  - pos-receipts.html - paparan/urus resit
+  - pos-cost-calculator.html - kalkulator kos (owner/admin)
+  - bo-ai-assistant.html - AI Assistant untuk owner
+  - bo-monthly-reports.html - laporan bulanan/tahunan
+  - dashboard.html - papan pemuka analitik
+  - staff dashboard (clock-in/out, prestasi)
+
+  Untuk laporan, sertakan LAKARAN WIREFRAME (boleh lukis dalam
+  Figma/draw.io) bagi setiap halaman utama di atas, dengan label
+  komponen (contoh: "Grid Menu", "Troli", "Butang Bayar", "Papan
+  Status Order").
+
+  Prinsip reka bentuk UI yang boleh dinyatakan:
+  - Antara muka Bahasa Melayu untuk staff tempatan
+  - Paparan responsif (untuk peranti tablet/mobile di kaunter)
+  - Widget AI Assistant terapung (floating widget - css/ai-floating-
+    widget.css) boleh diakses dari mana-mana halaman
+
+4.5 Reka Bentuk Keselamatan (Security Design)
+--------------------------------------------------
+  a) Hierarki Peranan (Role Hierarchy):
+       owner > admin > shift_lead > staff/cashier
+     Disimpan sebagai string huruf kecil pada users/{uid}.role
+
+  b) Firestore Security Rules (firestore.rules):
+     - Fungsi pembantu: isOwner(), isAdmin(), isShiftLead(),
+       isStaff() (mana-mana pengguna sah/authenticated)
+     - Falsafah: bacaan (read) dibenarkan secara meluas untuk
+       kelancaran operasi POS; penulisan (write) dikawal ketat
+       ikut peranan
+     - Koleksi kewangan (sales, pos_sales_transactions, update pada
+       pos_receipts) TIDAK BOLEH diubah/dipadam terus oleh client
+       (allow update, delete: if false) - pembetulan mesti melalui
+       Admin SDK/MCP sahaja
+     - Peraturan "deny-all" sebagai lalai (default) di penghujung
+       fail
+
+  c) Sistem Kebenaran MCP (Berasingan):
+     - Kerana Admin SDK memintas firestore.rules sepenuhnya, MCP
+       server melaksanakan sistem kebenaran SENDIRI dalam
+       mcp/middleware/permission-gate.mjs (4 tahap: read/write/
+       admin/owner)
+     - Ini reka bentuk "defense-in-depth" (pertahanan berlapis) -
+       topik perbincangan yang kukuh untuk Chapter Design
+     - Koleksi dilindungi (users, pos_meta, pos_sales_transactions,
+       pos_receipts) TIDAK BOLEH disentuh melalui tool generik
+       create_document/update_document MCP - hanya melalui tools
+       bernama & disahkan (validated) secara khusus
+     - Setiap tindakan write/admin MCP direkod dalam pos_audit_logs
+       (source: MCP_AGENT) untuk kebolehauditan
+
+  d) Klien-side RBAC mirror:
+     - js/pos-rbac-session.js memetakan peranan mentah kepada enum
+       ROLES (OWNER, ADMIN, ...) dan mendedahkan fungsi seperti
+       canBypassStaffRestrictions, canAccessOperationalModules,
+       canUseFinancialControls, isReadOnlyMode - untuk kawal UI
+       (contoh sembunyi/nyahaktifkan butang) - INI HANYA UX,
+       penguatkuasaan sebenar tetap di firestore.rules/MCP gate.
+
+  e) Pengesahan 2 Faktor (2FA) & Geofencing:
+     - 2FA TOTP untuk staff (bukan owner - owner_01 dikecualikan)
+     - Geofencing GPS (Haversine, radius 150m lalai) untuk sahkan
+       staff benar-benar berada di lokasi kedai semasa clock-in
+
+4.6 Reka Bentuk Corak (Design Patterns) yang Digunakan
+--------------------------------------------------------------
+  - Pure-function core / thin UI shell: core.js, costing-engine.js
+    tiada pergantungan Firestore/DOM langsung - membolehkan ia
+    diuji secara berasingan (unit-testable) dan digunakan semula
+    (reusable) di beberapa bahagian aplikasi.
+  - Repository Pattern: fail *-repository.js (ingredients-
+    repository.js, modifiers-repository.js, ingredient-batch-
+    repository.js, menu-items-repository.js, recipes-repository.js,
+    purchase-history-repository.js, sales-repository.js) membalut
+    (wrap) panggilan subscribe/query Firestore, mengasingkan
+    capaian data daripada logik UI.
+  - Mapper Pattern: fail mappers.js menukar dokumen Firestore mentah
+    kepada objek bentuk aplikasi (docToProduct, docToIngredient).
+  - FIFO Inventory Costing: keputusan reka bentuk perakaunan yang
+    disengajakan (First-In-First-Out) berbanding purata wajaran
+    (weighted-average), dilaksanakan secara konsisten merentas
+    checkout POS, cost calculator, dan AI tools.
+  - Usage Range (bukan nilai tetap): resipi boleh nyatakan
+    penggunaan bahan sebagai julat min-max dengan "nominal bias"
+    boleh dikonfigurasi (0.65) ke arah maksimum untuk anggaran
+    kos/stok konservatif - contoh pemodelan ketidakpastian
+    (uncertainty modelling) dalam sistem kos.
+  - Idempotent Document IDs untuk laporan agregat (format "YYYY-MM",
+    "YYYY") berbanding ID auto-jana - memudahkan penjanaan semula
+    (regenerate)/upsert laporan.
+
+4.7 Ringkasan Chapter
+-------------------------
+Ringkaskan bahawa reka bentuk sistem mengutamakan keselamatan
+berlapis (RBAC dua peringkat), integriti data kewangan (immutable
+records), dan kebolehselenggaraan (pemisahan logik tulen daripada
+UI).
+
+====================================================================
+CHAPTER 5: IMPLEMENTATION
+====================================================================
+
+5.1 Pengenalan
+-----------------
+Terangkan tujuan chapter: menerangkan bagaimana reka bentuk di
+Chapter 4 dilaksanakan sebagai kod sebenar, merangkumi tech stack,
+struktur fail, dan fungsi/algoritma utama.
+
+5.2 Persekitaran & Tech Stack Pembangunan
+-----------------------------------------------
+  Frontend: JavaScript ES Modules (vanilla, tiada framework),
+            HTML5, CSS3 (disusun ikut fungsi/halaman dalam folder
+            html/, css/, js/)
+  Backend/DB: Google Firebase
+            - Firestore (pangkalan data NoSQL)
+            - Firebase Authentication
+            - Firebase Cloud Functions (functions/index.js) -
+              Node.js, region asia-southeast1
+            - Firebase Hosting
+  package.json (root, "type": "module") devDependencies utama:
+            - firebase-admin ^13
+            - firebase-tools ^13.29.1
+            - @modelcontextprotocol/sdk ^1.29.0
+            - zod ^3.24.0 (pengesahan skema/input)
+            - concurrently (jalankan beberapa proses serentak)
+  Cloud Functions dependencies: express, jsonwebtoken, otplib
+            (2FA TOTP), google-auth-library
+  MCP Server: mcp-server.mjs (root) - dibina atas
+            @modelcontextprotocol/sdk, guna firebase-admin terus
+  AI Layer: OpenRouter API (function/tool-calling LLM terhadap
+            data Firestore live)
+  Mobile: Capacitor (folder android/, Gradle,
+            capacitor-cordova-android-plugins), folder www/ sebagai
+            salinan aset web untuk Capacitor
+  Legacy: server/data/pos.sqlite (better-sqlite3) - prototaip
+            awal/eksperimen, kini digantikan sepenuhnya oleh
+            Firestore
+
+5.3 Struktur Folder Projek
+-------------------------------
+  c:\fyp\
+  |-- index.html, landing.html, login.html   (halaman masuk)
+  |-- html/            (semua markup halaman: BO, POS, dashboard,
+  |                      staff, menu-costing, seed tool)
+  |-- css/              (helaian gaya setiap halaman)
+  |-- js/
+  |   |-- ai-assistant/  (assistant OpenRouter: servis, tools,
+  |   |                    widget, format pengetahuan)
+  |   |-- cost-calculator/ (enjin kos tulen + repository Firestore
+  |   |                      + data seed)
+  |   |-- menu-costing/  (enjin recipes/menu_items model baru +
+  |   |                    admin app)
+  |   |-- monthly-reports/ (agregasi laporan + gaji/prestasi)
+  |   |-- reports/        (utiliti agregat)
+  |   |-- staff/           (app tetapan BO, clock/kehadiran,
+  |   |                      callable TOTP, repository staff)
+  |   |-- firebase/        (collections.js - daftar skema, init.js)
+  |   |-- vendor/          (bundle pihak ketiga)
+  |   |-- pos-*.js (root)  (POS order app, sesi RBAC, cukai, jualan
+  |                          FIFO, konstanta keselamatan, hub
+  |                          firestore)
+  |-- menu/, pos/, staff/, auth/  (bundle bersalin ikut halaman -
+  |                                 salinan css/js sendiri untuk
+  |                                 menu-costing, POS, staff
+  |                                 dashboard, login)
+  |-- mcp/               (pelaksanaan MCP server: lib/, middleware/,
+  |                        tools/{read,write,admin,report})
+  |-- mcp-server.mjs     (titik masuk MCP)
+  |-- functions/          (Firebase Cloud Functions: index.js - geo
+  |                         clock-in, TOTP 2FA)
+  |-- scripts/            (skrip seed, penyelenggaraan/fix,
+  |                         pengesahan, setup.mjs)
+  |-- shared/              (init firebase & cermin collections
+  |                          merentas modul, utils)
+  |-- server/              (data SQLite legasi/eksperimen - digantikan
+  |                          Firestore)
+  |-- android/, www/       (pembalut Capacitor Android + salinan
+  |                          aset web)
+  |-- firestore.rules, firestore.indexes.json, firebase.json
+  |                        (konfigurasi projek Firebase)
+  |-- files/MCP-SETUP-GUIDE.md (dokumen panduan penuh ekosistem MCP)
+
+5.4 Pelaksanaan Modul-Modul Utama
+---------------------------------------
+
+  A) Modul POS (js/pos-order-app.js, folder pos/, html/pos-order.html)
+     - Grid menu disegerak langsung (live-synced) daripada koleksi
+       "modifiers", dengan penapis kategori
+     - Troli (cart) dan semakan stok sedar-FIFO ("can't sell")
+       menerusi ingredient_batches
+     - UI sedar-RBAC (pos-rbac-session.js): fungsi
+       canBypassStaffRestrictions, canAccessOperationalModules,
+       canUseFinancialControls, isReadOnlyMode
+     - Pecahan cukai (js/pos-tax.js -> fungsi splitOrderAmounts)
+     - Penyelesaian jualan FIFO (js/pos-sale-fifo.js -> fungsi
+       finalizePosSaleFifo, aggregateCartConsumption)
+
+  B) Modul Cost Calculator / Menu Costing
+     - js/cost-calculator/core.js: LOGIK TULEN (pure logic), tiada
+       pergantungan Firestore/DOM (didokumenkan secara eksplisit
+       untuk tujuan kebolehujian/testability):
+         * convertToBase - penukaran unit (kg/g/mL/L)
+         * Penggunaan bahan sebagai nilai tetap ATAU julat
+           ({gunaMin, gunaMax, gunaUnit})
+         * USAGE_NOMINAL_BIAS = 0.65 - pincang 65% ke arah
+           maksimum untuk kuantiti "nominal" (anggaran konservatif
+           kos/potongan stok harian)
+         * productCost, productCostRange - kos produk
+     - js/menu-costing/costing-engine.js: dibina atas core.js:
+         * recipeTotalCost - jumlah kos resipi
+         * menuItemCostModel - model kos item menu (kos, julat kos,
+           untung, margin %, julat margin)
+         * snapshotLineCost - kos snapshot baris (line) semasa
+           transaksi (kekalkan kos sejarah walaupun harga berubah
+           kemudian)
+     - Migrasi didokumenkan daripada model lama "modifiers" (menu+
+       resipi digabung) kepada model dinormalisasi "recipes" +
+       "menu_items" (rujuk komen dalam kod yang merujuk fail
+       MENU-COSTING-ARCHITECTURE.md)
+
+  C) Modul Inventori / Stok FIFO
+     - ingredient_batches: stok per-lot pembelian (qtyRemaining,
+       costPerUnit, openedAt untuk susunan FIFO, expiryAt &
+       supplierBatchCode pilihan)
+     - ingredient_ledger: jejak audit perubahan harga/pembelian
+       (initial | purchase | price_adjust)
+     - purchase_history: rekod pembelian pukal/stok (dengan item
+       baris)
+     - js/cost-calculator/ingredient-batch-repository.js:
+         * sortBatchesFifo - susun lot ikut turutan FIFO
+         * groupBatchesByIngredientId - kumpul lot ikut bahan
+         * getActiveFifoBatchFromList - dapatkan lot aktif semasa
+           (lot pertama yang masih ada baki untuk digunakan)
+
+  D) Modul Staff & Kehadiran
+     - staff (data operasi, berasingan daripada akaun Firebase Auth)
+     - staff_activity (log audit)
+     - staff_settings (konfigurasi bonus/KPI)
+     - Clock-in bergeofence GPS melalui Cloud Functions
+     - 2FA TOTP per-staff (staff_totp/staff_totp_status, rahsia
+       TIDAK PERNAH didedahkan kepada client)
+     - pos_active_shift (siapa sedang bertugas - satu slot kasir
+       dikuatkuasakan pada logik Cloud Function, bukan Firestore
+       rules)
+     - Owner mempunyai ID dokumen tetap "owner_01"
+       (OWNER_STAFF_DOC_ID), dikecualikan daripada keperluan 2FA
+
+  E) Modul Shift & Cash Drawer
+     - pos_shifts (status open/closed, closing: {expectedDrawer,
+       actualDrawer, variance, varianceCategory: balanced/short/
+       over, refundNotes})
+     - Subkoleksi cash_movements
+
+  F) Modul Resit
+     - pos_receipts (hanya ditambah/append-only dari client, void
+       hanya melalui admin/MCP - tool void_receipt)
+
+  G) Modul Laporan
+     - monthly_reports/yearly_reports (ID dokumen "YYYY-MM"/"YYYY")
+     - Dijana oleh js/monthly-reports/generate-monthly-report.js,
+       generate-yearly-report.js, staff-performance-calc.js,
+       staff-salary-calc.js
+     - UI BO: html/bo-monthly-reports.html
+     - MCP report tools tambah nisbah COGS, pecahan jualan
+       mengikut jam, campuran kaedah bayaran, item terlaris,
+       prestasi staff
+
+  H) Modul Dashboard/Analitik
+     - dashboard.html
+     - js/reports/aggregate-utils.js
+     - MCP: get_dashboard_summary/get_sales_analytics
+
+  I) Modul AI Assistant
+     - Widget terapung (css/ai-floating-widget.css,
+       js/ai-assistant/global-widget-bootstrap.js,
+       staff-widget-bootstrap.js)
+     - Halaman khusus owner: bo-ai-assistant.html/owner-app.js
+     - js/ai-assistant/ai-tools.js: definisi tools untuk LLM
+       (contoh getIngredientPrices() - carian kos sedar-lot-FIFO,
+       getMenuItems() - pengembangan resipi guna penukaran unit
+       core.js)
+     - Panggil terus OpenRouter API (komen kod: "AI tools untuk
+       OpenRouter tool calling")
+
+  J) MCP Server
+     - mcp-server.mjs (titik masuk)
+     - mcp/lib/: admin-init.mjs, collections.mjs, validators.mjs,
+       audit-logger.mjs
+     - mcp/middleware/permission-gate.mjs
+     - mcp/tools/{read,write,admin,report}/index.mjs (28 tools -
+       rujuk senarai penuh di Chapter 4.2)
+     - Didokumenkan dalam files/MCP-SETUP-GUIDE.md (termasuk contoh
+       prompt penggunaan)
+
+  K) Skrip Seed & Penyelenggaraan (scripts/)
+     - Skrip seed data demo: seed burger menu, staff, POS bootstrap,
+       transaksi demo, lot bahan
+     - Skrip penyelenggaraan: cleanup-legacy.mjs,
+       backfill-missing-ledger-for-batches.mjs, wipe-reports.mjs,
+       regen-reports.mjs
+     - Bukti iterasi debug data sebenar: update-aina-danial-salary-
+       and-regen-reports.mjs, fix-duplicate-clockin.js
+
+5.5 Algoritma/Logik Utama (untuk perbincangan mendalam dalam laporan)
+------------------------------------------------------------------------
+  1. Algoritma FIFO Stock Consumption:
+     - Setiap kali jualan disahkan, sistem cari lot
+       (ingredient_batches) TERTUA yang masih ada baki
+       (qtyRemaining > 0) mengikut openedAt, tolak kuantiti
+       diperlukan daripada lot tersebut, bergerak ke lot seterusnya
+       jika baki lot tidak cukup.
+     - Kepentingan: kos jualan (COGS) mencerminkan kos SEBENAR bahan
+       yang digunakan (bukan purata), lebih tepat untuk perakaunan.
+
+  2. Algoritma Usage Range + Nominal Bias:
+     - Resipi boleh nyatakan penggunaan bahan sebagai julat
+       (gunaMin, gunaMax) bukan nilai tunggal.
+     - Kuantiti "nominal" dikira sebagai:
+       nominal = gunaMin + (gunaMax - gunaMin) * 0.65
+     - Bias 65% (bukan 50% purata) sengaja dipilih untuk anggaran
+       konservatif (elak under-estimate kos/potongan stok).
+
+  3. Algoritma Geofencing (Haversine):
+     - Kira jarak antara koordinat GPS staff semasa clock-in dan
+       koordinat kedai yang ditetapkan owner.
+     - Jika jarak > radius (lalai 150 meter), clock-in ditolak.
+
+  4. Algoritma Pengiraan Margin Untung:
+     - margin = ((hargaJual - kosProduk) / hargaJual) * 100%
+     - Turut dikira dalam bentuk julat (margin range) berdasarkan
+       julat kos produk.
+
+5.6 Piawaian Pengekodan (Coding Standards)
+-------------------------------------------------
+  - Penamaan fungsi: camelCase (contoh: finalizePosSaleFifo,
+    sortBatchesFifo)
+  - Pemisahan "pure logic" vs "Firestore/DOM" - fail *core*.js dan
+    *engine*.js kekal bebas kebergantungan luaran
+  - Corak Repository untuk capaian data (*-repository.js)
+  - Corak Mapper untuk transformasi data (mappers.js)
+  - ES Modules (import/export) di seluruh kod
+
+5.7 Ringkasan Chapter
+-------------------------
+Ringkaskan bahawa pelaksanaan mengikut ketat reka bentuk berlapis
+yang dirancang di Chapter 4, dengan penekanan pada ketepatan kos
+(FIFO + usage range) dan keselamatan (2FA + geofencing + RBAC
+berperingkat).
+
+====================================================================
+CHAPTER 6: TESTING
+====================================================================
+
+6.1 Pengenalan
+-----------------
+Terangkan tujuan chapter: menerangkan strategi ujian yang digunakan
+untuk mengesahkan sistem berfungsi mengikut keperluan di Chapter 3.
+
+6.2 Strategi Pengujian (Testing Strategy)
+-----------------------------------------------
+PENTING - nyatakan dengan JUJUR dalam laporan: sistem ini TIDAK
+menggunakan framework ujian automatik formal (tiada Jest, Mocha,
+Vitest dalam package.json). Sebaliknya, pengujian dilakukan melalui
+skrip Node.js "hand-rolled" (ditulis sendiri) yang dijalankan terus
+(node scripts/xxx.mjs). Ini adalah pendekatan PRAGMATIK yang sesuai
+untuk skop projek FYP solo, tetapi WAJAR dibincangkan sebagai
+limitation/area penambahbaikan dalam Chapter 7.
+
+Bahagikan strategi ujian kepada 3 peringkat untuk laporan:
+
+  a) Ujian Logik/Unit (Pure Logic Testing)
+     Fail: scripts/verify-usage-range-flow.mjs
+     - Menguji logik enjin kos (import terus fungsi daripada
+       core.js) TANPA pergantungan Firestore
+     - Guna kaunter manual pass/fail dan fungsi pembantu
+       check(label, actual, expected, tol) dengan toleransi
+       (tolerance) untuk nombor perpuluhan (fungsi "near")
+     - Menguji: pengiraan julat penggunaan bahan (min/max/nominal),
+       penukaran unit, pengiraan kos produk
+
+  b) Ujian Audit Data (Data Audit Testing)
+     Fail: scripts/audit-usage-range.mjs
+     - Mengaudit data bahan/resipi sebenar atau data seed untuk
+       isu integriti julat penggunaan (usage range)
+
+  c) Ujian Asap MCP (MCP Smoke Testing)
+     Fail: scripts/test-mcp-tools.mjs
+     - Ujian asap (smoke test) terhadap set tools MCP, dijalankan
+       terhadap Firebase Emulator (rujuk files/MCP-SETUP-GUIDE.md)
+     - Sahkan setiap 28 tools MCP boleh dipanggil dan memulangkan
+       struktur data yang dijangka
+
+6.3 Contoh Kes Ujian (Test Case Examples) - untuk jadual laporan
+------------------------------------------------------------------------
+Cadangan format jadual Test Case (Table 6.x):
+
+  | ID   | Modul          | Input                        | Output Dijangka                | Status |
+  | TC01 | Cost Calc      | gunaMin=20ml, gunaMax=30ml    | nominal = 20+(10*0.65) = 26.5ml | Lulus  |
+  | TC02 | Cost Calc      | Unit kg -> g                  | convertToBase mengembalikan g   | Lulus  |
+  | TC03 | POS FIFO       | Jual 5 unit, lot A ada 3 baki | Tolak 3 dari lot A, 2 dari lot B| Lulus  |
+  | TC04 | RBAC (rules)   | Staff cuba padam pos_receipts | Ditolak (permission-denied)     | Lulus  |
+  | TC05 | RBAC (MCP)     | Agent tahap "read" panggil manage_staff | Ditolak oleh permission-gate | Lulus |
+  | TC06 | Geofencing     | Staff GPS 200m dari kedai      | Clock-in ditolak (>150m radius) | Lulus  |
+  | TC07 | 2FA TOTP       | Kod salah 5 kali                | Akaun dikunci 10 minit          | Lulus  |
+  | TC08 | Shift Closing  | expectedDrawer=100,             | varianceCategory = "short"      | Lulus  |
+  |      |                | actualDrawer=90                 |                                  |        |
+
+  (Sila jalankan ujian SEBENAR pada sistem semasa mengisi laporan -
+  jadual di atas contoh struktur sahaja, bukan hasil ujian benar.)
+
+6.4 Ujian Penerimaan Pengguna (User Acceptance Testing - UAT)
+--------------------------------------------------------------------
+Cadangan pendekatan untuk laporan (jika belum dilaksanakan, jadikan
+sebagai cadangan kaedah):
+- Sesi ujian dengan pengguna sebenar (contoh: staff/owner gerai
+  burger sebenar) menggunakan skrip senario (contoh: "buat satu
+  order penuh dari pemilihan menu hingga cetak resit").
+- Borang soal selidik kepuasan pengguna (Likert scale 1-5) selepas
+  UAT.
+
+6.5 Had Pengujian (Testing Limitations)
+--------------------------------------------
+Nyatakan dengan telus:
+- Tiada ujian automatik untuk UI (tiada Selenium/Playwright/
+  Cypress dikesan)
+- Tiada ujian automatik untuk Cloud Functions (functions/index.js)
+- Tiada ujian integrasi penuh end-to-end automatik
+- Liputan (coverage) ujian tertumpu pada logik kos tulen (pure
+  business logic), bukan lapisan UI/integrasi
+
+6.6 Ringkasan Chapter
+-------------------------
+Ringkaskan bahawa pendekatan pengujian adalah gabungan ujian logik
+manual berskrip dan ujian asap MCP, sesuai untuk skop projek FYP,
+dengan cadangan penambahbaikan (automated testing framework) untuk
+kerja masa depan (rujuk Chapter 7).
+
+====================================================================
+CHAPTER 7: CONCLUSION
+====================================================================
+
+7.1 Ringkasan Projek
+------------------------
+Ringkaskan semula apa yang telah dibina: sistem KlikBurger yang
+menyepadukan POS, cost calculator berasaskan FIFO, pengurusan staff
+bergeofence & 2FA, laporan automatik, dan AI Assistant/MCP untuk
+capaian AI agent.
+
+7.2 Pencapaian Objektif (Objective Achievement)
+------------------------------------------------------
+Semak balik setiap objektif di Chapter 1.4 dan nyatakan status
+pencapaian (Tercapai/Tercapai Sebahagian/Belum Tercapai) dengan
+bukti (rujuk fail/fungsi berkaitan yang telah disenaraikan di
+Chapter 5).
+
+7.3 Sumbangan/Kepentingan Projek (Contribution)
+-----------------------------------------------------
+- Menunjukkan integrasi praktikal FIFO costing + usage-range
+  uncertainty modelling dalam sistem POS - jarang ditemui dalam
+  sistem POS komersial murah.
+- Menunjukkan aplikasi Model Context Protocol (MCP) dalam konteks
+  perniagaan tempatan sebagai contoh "AI-agent-ready business
+  system" - relevan dengan trend AI agentic terkini (2025/2026).
+- Reka bentuk keselamatan dua-lapisan (Firestore Rules + MCP
+  permission-gate) sebagai contoh defense-in-depth yang praktikal.
+
+7.4 Batasan Sistem (Limitations)
+--------------------------------------
+- Bergantung penuh pada sambungan Internet (tiada mod offline)
+- Tiada rangka kerja ujian automatik formal
+- Reka bentuk untuk satu kedai (single-outlet) - belum sokong
+  berbilang cawangan sepenuhnya
+- Struktur folder mempunyai duplikasi (contoh js/cost-calculator/
+  vs menu/js/cost-calculator/) - potensi isu kebolehselenggaraan
+  jangka panjang
+- Aplikasi mobile Android masih pada peringkat awal (WebView shell,
+  tiada fungsi native khusus)
+
+7.5 Cadangan Kerja Masa Depan (Future Work)
+--------------------------------------------------
+- Tambah rangka kerja ujian automatik (Jest/Playwright)
+- Sokongan berbilang cawangan (multi-outlet) sepenuhnya
+- Mod offline-first dengan penyegerakan semula (offline sync) untuk
+  kawasan liputan Internet lemah
+- Migrasi kepada framework frontend berstruktur (contoh React/Vue)
+  jika projek berkembang lebih besar
+- Integrasi payment gateway sebenar (contoh ToyyibPay/Billplz/
+  Stripe) jika belum wujud
+- Penyatuan struktur folder yang berduplikasi (refactor ke arah
+  modul dikongsi/shared module tunggal)
+
+7.6 Penutup
+--------------
+Rumusan akhir keseluruhan laporan.
+
+====================================================================
+CHAPTER 8: REFERENCES
+====================================================================
+
+NOTA PENTING: Senarai di bawah adalah PANDUAN JENIS rujukan yang
+patut awak cari dan sahkan sendiri (dengan URL/tarikh akses/tahun
+penerbitan sebenar) mengikut format rujukan rasmi universiti awak
+(APA 7th Edition adalah paling lazim untuk FYP Malaysia). JANGAN
+salin terus tanpa mengesahkan kewujudan & ketepatan sumber sebenar.
+
+Kategori rujukan yang perlu dicari & disahkan:
+  1. Dokumentasi rasmi Firebase (Firestore, Authentication, Cloud
+     Functions, Hosting) - firebase.google.com/docs
+  2. Dokumentasi rasmi Model Context Protocol (MCP) -
+     modelcontextprotocol.io atau spesifikasi rasmi Anthropic
+  3. Dokumentasi rasmi Capacitor (capacitorjs.com/docs)
+  4. Dokumentasi rasmi OpenRouter API (openrouter.ai/docs)
+  5. Dokumentasi library otplib (TOTP/2FA) - github.com/yeojz/otplib
+  6. Artikel/kertas akademik berkaitan:
+     - FIFO inventory costing method (rujuk buku/artikel
+       perakaunan kos - contoh: Cost Accounting textbook)
+     - Role-Based Access Control (RBAC) - Sandhu, R.S. et al.
+       (1996). "Role-Based Access Control Models" - cari kertas
+       asal sebenar untuk citation yang sah
+     - Haversine formula untuk pengiraan jarak GPS
+  7. Kajian/laporan industri berkaitan sistem POS di Malaysia
+     (contoh laporan MDEC/SME Corp Malaysia berkaitan digitalisasi
+     PKS/F&B)
+  8. Perbandingan produk POS sedia ada - laman rasmi StoreHub,
+     Loyverse, Qashier (pastikan tarikh akses dicatat)
+
+Format contoh (APA 7th Edition) - GANTI dengan sumber sebenar:
+  Nama Pengarang/Organisasi. (Tahun). Tajuk dokumen/artikel.
+  Nama Laman/Penerbit. URL
+
+====================================================================
+CHAPTER 9: BIBLIOGRAPHY
+====================================================================
+
+NOTA: Bibliography berbeza daripada References - ia merangkumi
+SEMUA bahan bacaan yang mempengaruhi projek (walaupun tidak
+disebut/dipetik terus dalam teks laporan). Cadangan kategori bahan
+untuk disenaraikan (cari & sahkan sumber sebenar):
+
+  1. Buku/nota kursus berkaitan Kejuruteraan Perisian (Software
+     Engineering) - metodologi Agile, SDLC
+  2. Buku/nota berkaitan Reka Bentuk Pangkalan Data (Database
+     Design) - normalisasi, NoSQL vs SQL
+  3. Buku/artikel berkaitan Keselamatan Sistem Maklumat
+     (Information Security) - RBAC, 2FA, defense-in-depth
+  4. Buku/artikel berkaitan Perakaunan Kos (Cost Accounting) - FIFO,
+     COGS, margin untung
+  5. Dokumentasi/tutorial teknikal tambahan yang dirujuk semasa
+     pembangunan (Firebase, MCP, Capacitor, JavaScript ES Modules)
+  6. Laporan/kajian pasaran berkaitan industri F&B Malaysia (jika
+     ada, untuk sokong justifikasi Problem Background di Chapter 1)
+
+====================================================================
+LAMPIRAN (APPENDIX) - CADANGAN TAMBAHAN (jika format universiti perlu)
+====================================================================
+- Lampiran A: Senarai penuh 28 MCP Tools dengan penerangan (rujuk
+  files/MCP-SETUP-GUIDE.md untuk senarai penuh & contoh prompt)
+- Lampiran B: Skema Firestore penuh (js/firebase/collections.js)
+- Lampiran C: firestore.rules penuh (peraturan keselamatan)
+- Lampiran D: Tangkapan skrin (screenshot) setiap halaman utama
+  sistem (POS, BO, Dashboard, AI Assistant, Staff Dashboard)
+- Lampiran E: Kod sumber fungsi kritikal (finalizePosSaleFifo,
+  menuItemCostModel, permission-gate.mjs)
+
+====================================================================
+SENARAI FAIL RUJUKAN PENTING (untuk sitasi terus dalam laporan)
+====================================================================
+c:\fyp\js\firebase\collections.js         - Daftar skema koleksi
+c:\fyp\firestore.rules                    - Peraturan keselamatan
+c:\fyp\functions\index.js                 - Cloud Functions (geo +
+                                             2FA)
+c:\fyp\mcp\tools\write\index.mjs          - Tools MCP (write)
+c:\fyp\mcp\middleware\permission-gate.mjs - Sistem kebenaran MCP
+c:\fyp\files\MCP-SETUP-GUIDE.md           - Panduan penuh ekosistem
+                                             MCP (28 tools)
+c:\fyp\js\cost-calculator\core.js         - Enjin kos tulen (FIFO,
+                                             usage range)
+c:\fyp\js\menu-costing\costing-engine.js  - Enjin kos menu (model
+                                             baru)
+c:\fyp\js\pos-order-app.js                - Aplikasi POS utama
+c:\fyp\js\pos-tax.js                      - Pengiraan cukai
+c:\fyp\js\pos-sale-fifo.js                - Penyelesaian jualan FIFO
+c:\fyp\js\pos-rbac-session.js             - RBAC sesi client
+c:\fyp\js\ai-assistant\ai-tools.js        - Tools AI Assistant
+c:\fyp\scripts\verify-usage-range-flow.mjs - Ujian logik usage range
+c:\fyp\scripts\test-mcp-tools.mjs         - Ujian asap MCP
+c:\fyp\package.json                        - Dependencies projek
+
+====================================================================
+TAMAT CATATAN
+====================================================================
+Fail ini dijana berdasarkan pemeriksaan sebenar kod sumber dalam
+c:\fyp pada 2026-09-03. Sila sentiasa sahkan semula fakta (terutama
+nombor seperti "28 tools", "150 meter", "0.65 bias", "5 percubaan/
+10 minit") dengan membaca fail kod terkini sebelum letak dalam
+laporan rasmi, kerana kod mungkin berubah selepas tarikh catatan
+ini dibuat.

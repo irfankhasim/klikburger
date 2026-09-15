@@ -1,16 +1,16 @@
 /**
  * Halaman ringkas: senarai menu_items + kos resipi (Firestore).
  */
-import { db } from "../../../shared/firebase/init.js";
+import { db } from "../firebase/init.js";
 import { docToIngredient } from "../cost-calculator/mappers.js";
 import { docToRecipe, docToMenuItem } from "./mappers.js";
 import { subscribeIngredients } from "../cost-calculator/ingredients-repository.js";
 import { subscribeRecipes } from "./recipes-repository.js";
 import { subscribeMenuItems, persistMenuItem } from "./menu-items-repository.js";
 import { menuItemCostModel } from "./costing-engine.js";
-import { formatRM } from "../cost-calculator/core.js";
+import { formatRM, formatRMRange } from "../cost-calculator/core.js";
 import { seedMenuCostingIfEmpty } from "./seed-menu-demo.js";
-import { serverTimestamp } from "../../../shared/firebase/init.js";
+import { serverTimestamp } from "../firebase/init.js";
 
 var ingredients = [];
 var recipes = [];
@@ -68,6 +68,11 @@ function render() {
       var recName = rec ? escapeHtml(rec.name || "(tiada resipi)") : '<span style="color:#c0392b">recipeId tidak jumpa</span>';
       var sellVal = Number(m.sellingPrice);
       if (isNaN(sellVal)) sellVal = 0;
+      var costCell = m.hasCostRange ? formatRMRange(m.costMin, m.costMax) : formatRM(m.cost);
+      var marginCell =
+        m.hasCostRange && m.sellingPrice > 0
+          ? m.marginPctMax + "% – " + m.marginPctMin + "%"
+          : m.marginPct + "%";
       return (
         '<tr data-menu-row="' +
         escapeHtml(mi.id) +
@@ -76,7 +81,7 @@ function render() {
         "</td><td>" +
         recName +
         "</td><td class=\"num\">" +
-        formatRM(m.cost) +
+        costCell +
         '</td><td class="num">' +
         '<input type="number" class="sell-price-input" step="0.01" min="0" data-menu-id="' +
         escapeHtml(mi.id) +
@@ -88,8 +93,8 @@ function render() {
         '</td><td class="num js-cell-profit">' +
         formatRM(m.profit) +
         '</td><td class="num js-cell-margin">' +
-        m.marginPct +
-        "%</td></tr>"
+        marginCell +
+        "</td></tr>"
       );
     })
     .join("");

@@ -23,8 +23,8 @@ import {
   COL_MONTHLY_REPORTS,
   COL_POS_SHIFTS
 } from "../firebase/collections.js";
-import { sortBatchesFifo } from "../cost-calculator/ingredient-batch-repository.js";
-import { usageBaseQty } from "../cost-calculator/core.js";
+import { sortBatchesFifo, applyFifoCostsToIngredients } from "../cost-calculator/ingredient-batch-repository.js";
+import { usageBaseQty, usageBaseQtyMax, usageBaseQtyMin, productCost } from "../cost-calculator/core.js";
 
 function num(v) {
   return typeof v === "number" ? v : parseFloat(v) || 0;
@@ -32,6 +32,10 @@ function num(v) {
 
 function str(v) {
   return String(v || "").trim();
+}
+
+function round4(v) {
+  return Math.round(num(v) * 10000) / 10000;
 }
 
 function nameMatches(name, filter) {
@@ -109,10 +113,26 @@ export async function getIngredientPrices(ingredientName) {
 }
 
 /**
- * Tool 2: Dapatkan senarai menu dan harga jual.
+ * Tool 2: Dapatkan senarai menu, harga jual, dan resipi.
+ *
+ * Resipi dihurai melalui core.js supaya kuantiti sentiasa dalam unit stok bahan dan
+ * julat (min–max) terpapar dengan jelas. Objek `usage` mentah TIDAK dipulangkan kerana
+ * bentuknya berbeza-beza (nombor, `{ guna }`, atau `{ gunaMin, gunaMax }`) dan mudah
+ * disalah baca sebagai 0.
+ *
  * @param {string} [menuName]
  */
 export async function getMenuItems(menuName) {
+  var ingById = await loadIngredientsById();
+  var batchesByIng = await loadPositiveBatchesByIngredientId();
+  var stamped = applyFifoCostsToIngredients(
+    Object.keys(ingById).map(function (id) { return ingById[id]; }),
+    batchesByIng
+  );
+  var stampedById = {};
+  stamped.forEach(function (ing) {
+    stampedById[ing.id] = ing;
+  });
   var snap = await getDocs(collection(db, COL_MODIFIERS));
   var out = [];
 
@@ -121,10 +141,39 @@ export async function getMenuItems(menuName) {
     var name = str(x.name) || d.id;
     if (!nameMatches(name, menuName)) return;
     var usage = x.usage && typeof x.usage === "object" ? x.usage : {};
+
+    var recipe = [];
+    Object.keys(usage).forEach(function (ingId) {
+      var ing = stampedById[ingId] || ingById[ingId];
+      if (!ing) return;
+      var qtyMin = round4(usageBaseQtyMin(ing, usage[ingId]));
+      var qtyMax = round4(usageBaseQtyMax(ing, usage[ingId]));
+      var qtyNominal = round4(usageBaseQty(ing, usage[ingId]));
+      if (qtyMax <= 0) return;
+      recipe.push({
+        ingredientName: str(ing.name) || ingId,
+        unit: str(ing.unit),
+        qtyMin: qtyMin,
+        qtyMax: qtyMax,
+        qtyNominal: qtyNominal,
+        isRange: qtyMax > qtyMin,
+        note:
+          qtyMax > qtyMin
+            ? "Julat " + qtyMin + "–" + qtyMax + " " + str(ing.unit) + "; nominal " + qtyNominal + " digunakan untuk tolakan stok & COGS."
+            : "Kuantiti tepat " + qtyNominal + " " + str(ing.unit) + "."
+      });
+    });
+
+    var recipeCostRm = Math.round(productCost(stamped, { usage: usage }, "nominal") * 100) / 100;
+    var sell = num(x.sellingPrice);
+
     out.push({
       name: name,
-      sellingPrice: num(x.sellingPrice),
-      usage: usage,
+      sellingPrice: sell,
+      recipeCostRm: recipeCostRm,
+      grossProfitRm: Math.round((sell - recipeCostRm) * 100) / 100,
+      menuKind: str(x.menuKind) || "single",
+      recipe: recipe,
       modifierId: d.id
     });
   });
@@ -183,7 +232,7 @@ function aggregatePosReceipts(docs, rangeStart, rangeEnd) {
 
   docs.forEach(function (d) {
     var x = d.data();
-    if (x.voided) return;
+    if (x.voided || x.isVoided) return;
     var createdAt = x.createdAt;
     if (createdAt && typeof createdAt.toDate === "function") {
       var at = createdAt.toDate();
@@ -366,23 +415,38 @@ export async function checkIngredientSufficiency(menuName, orderQty) {
     var ing = ingById[ingId] || {};
     // PENTING: usage boleh berbentuk objek { guna, gunaUnit } — mesti ditukar ke unit asas bahan
     // menggunakan logik yang SAMA seperti POS (usageBaseQty). num() pada objek = 0 (punca pepijat lama).
-    var perUnit = Math.round(usageBaseQty(ing, modifier.usage[ingId]) * 10000) / 10000;
-    if (perUnit <= 0) return;
-    var required = Math.round(perUnit * qty * 10000) / 10000;
+    var perUnitNominal = Math.round(usageBaseQty(ing, modifier.usage[ingId]) * 10000) / 10000;
+    var perUnitMax = Math.round(usageBaseQtyMax(ing, modifier.usage[ingId]) * 10000) / 10000;
+    if (perUnitNominal <= 0 && perUnitMax <= 0) return;
+    var required = Math.round(perUnitNominal * qty * 10000) / 10000;
     var available = Math.round(num(stockTotals[ingId]) * 10000) / 10000;
     var sufficient = available >= required;
-    var ingMax = Math.floor((available + 1e-9) / perUnit);
+    var ingMax = perUnitNominal > 0 ? Math.floor((available + 1e-9) / perUnitNominal) : 999;
     if (ingMax < maxProducibleUnits) maxProducibleUnits = ingMax;
     results.push({
       ingredientName: str(ing.name) || ingId,
       unit: str(ing.unit),
-      usagePerOrder: perUnit,
+      usagePerOrder: perUnitNominal,
+      usagePerOrderMax: perUnitMax,
       required: required,
       available: available,
       sufficient: sufficient,
       shortage: sufficient ? 0 : Math.round((required - available) * 10000) / 10000,
       maxUnitsFromThisIngredient: ingMax,
-      working: "Keperluan: " + perUnit + " " + str(ing.unit) + " × " + qty + " order = " + required + " " + str(ing.unit)
+      working:
+        "Keperluan (nominal): " +
+        perUnitNominal +
+        " " +
+        str(ing.unit) +
+        " × " +
+        qty +
+        " order = " +
+        required +
+        " " +
+        str(ing.unit) +
+        (perUnitMax > perUnitNominal + 1e-9
+          ? " · kapasiti guna max " + perUnitMax + " " + str(ing.unit) + "/order"
+          : "")
     });
   });
 
@@ -548,7 +612,7 @@ export async function getSalesByPeriod(year, month, week) {
   var dailyMap = {};
   var docsInRange = snap.docs.filter(function (d) {
     var x = d.data();
-    if (x.voided) return false;
+    if (x.voided || x.isVoided) return false;
     var at = x.createdAt && typeof x.createdAt.toDate === "function" ? x.createdAt.toDate() : null;
     return at && at >= rangeStart && at < rangeEnd;
   });
@@ -625,6 +689,7 @@ export async function getMonthlyReport(year, month) {
     netMarginPct: netMargin,
     payrollEstimate: num(company.payrollEstimateRm),
     inventoryPurchases: num(company.inventoryPurchasesRecordedRm),
+    wastageRm: num(company.wastageRm),
     totalOrders: num(sales.nonVoidReceiptCount || 0),
     topProducts: sales.topMenuItems || [],
     narrative: company.narrative || ""
@@ -717,7 +782,11 @@ export async function getStockAnalysis() {
       ? Math.round((totalConsumed / totalOriginal) * 10000) / 100
       : 0;
     var activeBatch = batches[0] || null;
-    var costPerUnit = activeBatch ? num(activeBatch.costPerUnit) : num(ing.purchasePrice);
+    var costPerUnit = activeBatch
+      ? num(activeBatch.costPerUnit)
+      : num(ing.purchaseQty) > 0
+        ? num(ing.purchasePrice) / num(ing.purchaseQty)
+        : 0;
     var stockValue = Math.round(totalRemaining * costPerUnit * 100) / 100;
 
     var flags = [];
@@ -801,7 +870,11 @@ export async function getRestockRecommendation() {
     var daysLeft = dailyAvg > 0 ? Math.floor(totalRemaining / dailyAvg) : null;
     var reorderQty = dailyAvg > 0 ? Math.ceil(dailyAvg * 14) : null;
     var activeBatch = batches[0] || null;
-    var costPerUnit = activeBatch ? num(activeBatch.costPerUnit) : num(ing.purchasePrice);
+    var costPerUnit = activeBatch
+      ? num(activeBatch.costPerUnit)
+      : num(ing.purchaseQty) > 0
+        ? num(ing.purchasePrice) / num(ing.purchaseQty)
+        : 0;
     var estimatedCost = reorderQty ? Math.round(reorderQty * costPerUnit * 100) / 100 : null;
 
     var urgency = "ok";
@@ -846,18 +919,7 @@ export async function getRestockRecommendation() {
  */
 export async function getWastageAnalysis() {
   var ingById = await loadIngredientsById();
-
-  var allBatchSnap = await getDocs(collection(db, COL_INGREDIENT_BATCHES));
-
-  var batchData = {};
-  allBatchSnap.docs.forEach(function (d) {
-    var x = d.data();
-    var ingId = str(x.ingredientId);
-    if (!ingId) return;
-    if (!batchData[ingId]) batchData[ingId] = { original: 0, remaining: 0 };
-    batchData[ingId].original += num(x.qtyOriginal);
-    batchData[ingId].remaining += num(x.qtyRemaining);
-  });
+  var batchesByIng = await loadPositiveBatchesByIngredientId();
 
   var ledgerSnap = await getDocs(query(
     collection(db, COL_INGREDIENT_LEDGER),
@@ -865,39 +927,32 @@ export async function getWastageAnalysis() {
     limit(500)
   ));
 
-  var salesConsumption = {};
+  var wastageByIng = {};
   ledgerSnap.docs.forEach(function (d) {
     var x = d.data();
-    if (x.kind !== "sale_consumption") return;
+    if (String(x.kind || "") !== "wastage") return;
     var ingId = str(x.ingredientId);
     if (!ingId) return;
-    salesConsumption[ingId] = (salesConsumption[ingId] || 0) + num(x.qty || x.purchaseQty || 0);
+    if (!wastageByIng[ingId]) wastageByIng[ingId] = { qty: 0, cost: 0 };
+    wastageByIng[ingId].qty += Math.abs(num(x.purchaseQty));
+    wastageByIng[ingId].cost += Math.abs(num(x.purchasePrice));
   });
 
   var wastageItems = [];
-  Object.keys(batchData).forEach(function (id) {
-    var bd = batchData[id];
-    var actualUsed = bd.original - bd.remaining;
-    var salesUsed = salesConsumption[id] || 0;
-    var unexplained = actualUsed - salesUsed;
-    var wastageRatePct = actualUsed > 0
-      ? Math.round((unexplained / actualUsed) * 10000) / 100
-      : 0;
-
-    if (unexplained > 0.05 && wastageRatePct > 5) {
-      var ing = ingById[id] || {};
-      var name = str(ing.name) || id;
-      var costPerUnit = num(ing.purchasePrice);
-      wastageItems.push({
-        name: name,
-        unit: str(ing.unit),
-        totalUsed: Math.round(actualUsed * 100) / 100,
-        salesAccountedFor: Math.round(salesUsed * 100) / 100,
-        unexplainedQty: Math.round(unexplained * 100) / 100,
-        wastageRatePct: wastageRatePct,
-        estimatedLossRm: Math.round(unexplained * costPerUnit * 100) / 100
-      });
-    }
+  Object.keys(wastageByIng).forEach(function (id) {
+    var row = wastageByIng[id];
+    if (!(row.qty > 0.0001)) return;
+    var ing = ingById[id] || {};
+    var batches = batchesByIng[id] || [];
+    var active = batches[0] || null;
+    var fifoCpu = active ? num(active.costPerUnit) : 0;
+    wastageItems.push({
+      name: str(ing.name) || id,
+      unit: str(ing.unit),
+      qtyWasted: Math.round(row.qty * 1000) / 1000,
+      estimatedLossRm: Math.round(row.cost * 100) / 100,
+      costPerUnitFifo: fifoCpu
+    });
   });
 
   wastageItems.sort(function (a, b) {
@@ -912,7 +967,7 @@ export async function getWastageAnalysis() {
     wastageItems: wastageItems,
     totalItemsWithWastage: wastageItems.length,
     totalEstimatedLossRm: totalLoss,
-    note: "Pengiraan berdasarkan perbezaan antara stok yang digunakan dengan penggunaan yang direkodkan dalam jualan."
+    note: "Pengiraan dari rekod pembaziran (kos lot belian FIFO), bukan anggaran dari baki stok."
   };
 }
 
@@ -941,7 +996,7 @@ export var AI_TOOLS_DEFINITION = [
     function: {
       name: "getMenuItems",
       description:
-        "Dapatkan senarai menu/produk, harga jual, dan usage bahan dari koleksi modifiers. Guna apabila ditanya tentang harga jualan menu atau senarai produk.",
+        "Dapatkan senarai menu/produk, harga jual, dan resipi bahan. Setiap baris resipi sudah dihurai kepada qtyMin, qtyMax dan qtyNominal dalam unit stok bahan. Bila isRange true, kuantiti bahan itu satu julat — nominal ialah nilai yang sistem guna untuk tolakan stok dan COGS. Guna apabila ditanya tentang harga menu, senarai produk, atau berapa banyak bahan diperlukan bagi sesuatu menu.",
       parameters: {
         type: "object",
         properties: {

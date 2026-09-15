@@ -6,31 +6,40 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <title>Ambil pesanan �?? Klik Burger</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
+    <title>Ambil pesanan - Klik Burger</title>
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/pos-ops-shared.css" />
     <style>
       html,
       body {
-        height: 100%;
         margin: 0;
+        min-height: 100%;
       }
 
       body {
         display: flex;
         flex-direction: column;
-        min-height: 100%;
         background: var(--content-bg);
         color: var(--text);
         font-family: var(--font);
       }
 
       html.kb-embed body {
-        min-height: 100vh;
+        height: auto;
+        overflow: visible;
       }
 
       .order-app {
-        flex: 1;
+        flex: 0 0 auto;
         display: flex;
         flex-direction: column;
         min-height: 0;
@@ -53,11 +62,10 @@
       }
 
       .order-body {
-        flex: 1;
         display: grid;
         grid-template-columns: 1fr min(22rem, 38vw);
         gap: 1rem;
-        min-height: 0;
+        align-items: start;
       }
 
       @media (max-width: 840px) {
@@ -108,9 +116,8 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
         gap: 0.55rem;
-        flex: 1;
         min-height: 12rem;
-        overflow-y: auto;
+        overflow: visible;
         padding: 0.15rem;
         align-content: start;
       }
@@ -119,7 +126,8 @@
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        padding: 0.65rem 0.7rem;
+        min-height: 5.5rem;
+        padding: 0.9rem 0.85rem;
         border-radius: var(--radius);
         border: 1px solid var(--border);
         background: var(--surface);
@@ -156,7 +164,7 @@
 
       .order-card__name {
         font-weight: 700;
-        font-size: 0.88rem;
+        font-size: 1.05rem;
         margin: 0 0 0.2rem;
         line-height: 1.25;
         color: var(--text);
@@ -176,7 +184,7 @@
 
       .order-card__price {
         font-weight: 700;
-        font-size: 0.95rem;
+        font-size: 1.08rem;
         color: var(--sidebar-accent);
       }
 
@@ -188,7 +196,6 @@
         background: var(--surface);
         box-shadow: var(--shadow);
         min-height: 14rem;
-        max-height: min(90vh, 820px);
       }
 
       @media (max-width: 840px) {
@@ -219,8 +226,6 @@
       }
 
       .order-cart__list {
-        flex: 1;
-        overflow-y: auto;
         padding: 0.35rem 0.5rem;
         min-height: 4rem;
       }
@@ -261,7 +266,7 @@
         grid-column: 1 / -1;
         display: flex;
         align-items: center;
-        gap: 0.35rem;
+        gap: 0.65rem;
         flex-wrap: wrap;
       }
 
@@ -274,11 +279,13 @@
       }
 
       .order-line__qty button {
-        width: 1.85rem;
-        height: 1.85rem;
+        width: var(--kb-btn-min-h, 3.15rem);
+        height: var(--kb-btn-min-h, 3.15rem);
+        min-width: var(--kb-btn-min-h, 3.15rem);
+        min-height: var(--kb-btn-min-h, 3.15rem);
         border: none;
         background: var(--surface-muted);
-        font-size: 1rem;
+        font-size: 1.25rem;
         font-weight: 600;
         cursor: pointer;
         color: var(--text);
@@ -289,17 +296,18 @@
       }
 
       .order-line__qty span {
-        min-width: 1.75rem;
+        min-width: 2.15rem;
         text-align: center;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
-        font-size: 0.85rem;
+        font-size: 1.05rem;
       }
 
       .order-line__remove {
         margin-left: auto;
-        padding: 0.2rem 0.45rem;
-        font-size: 0.72rem;
+        min-height: var(--kb-btn-min-h, 3.15rem);
+        padding: 0.65rem 0.9rem;
+        font-size: 0.82rem;
         font-weight: 600;
         border: none;
         border-radius: 4px;
@@ -333,7 +341,7 @@
       .order-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: var(--kb-btn-gap, 0.75rem);
         margin-top: 0.75rem;
       }
 
@@ -341,14 +349,16 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 0.35rem;
-        padding: 0.55rem 0.9rem;
+        gap: 0.45rem;
+        min-height: var(--kb-btn-min-h, 3.15rem);
+        padding: var(--kb-btn-pad-y, 0.8rem) var(--kb-btn-pad-x, 1.25rem);
         font: inherit;
-        font-size: 0.875rem;
+        font-size: var(--kb-btn-font, 1.0625rem);
         font-weight: 600;
         border-radius: var(--radius-md);
         border: none;
         cursor: pointer;
+        touch-action: manipulation;
         transition: opacity 0.12s, transform 0.08s;
       }
 
@@ -377,8 +387,9 @@
       }
 
       .btn--sm {
-        padding: 0.35rem 0.55rem;
-        font-size: 0.8rem;
+        min-height: var(--kb-btn-sm-min-h, 2.85rem);
+        padding: 0.65rem 1.05rem;
+        font-size: var(--kb-btn-sm-font, 1rem);
       }
 
       .order-toast {
@@ -423,21 +434,23 @@
         }
       } catch (e) {}
     </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
   </head>
-  <body>
+  <body data-i18n-doc-title="order.doc.title">
     <div class="order-app">
-      <h1 class="sr-only">Ambil pesanan</h1>
+      <h1 class="sr-only" data-i18n="order.h1">Ambil pesanan</h1>
       <div id="order-rbac-banner" class="order-rbac-banner" hidden role="status"></div>
 
       <div class="order-body">
         <section class="order-menu" aria-labelledby="order-menu-title">
-          <h2 id="order-menu-title" class="sr-only">Menu jualan</h2>
-          <div class="order-cats" id="order-cats" role="tablist" aria-label="Kategori"></div>
+          <h2 id="order-menu-title" class="sr-only" data-i18n="order.menu.title">Menu jualan</h2>
+          <div class="order-cats" id="order-cats" role="tablist" aria-label="Kategori" data-i18n-aria-label="order.cats.aria"></div>
           <div class="order-grid" id="order-grid"></div>
         </section>
 
         <aside class="order-cart" aria-labelledby="order-cart-title">
-          <div class="order-cart__head" id="order-cart-title">Pesanan semasa</div>
+          <div class="order-cart__head" id="order-cart-title" data-i18n="order.cart.title">Pesanan semasa</div>
           <p id="order-stock-alert" class="order-stock-alert" hidden role="status" aria-live="polite"></p>
           <div class="order-cart__list" id="order-cart-list"></div>
           <div class="order-cart__foot">
@@ -448,8 +461,8 @@
               </div>
             </div>
             <div class="order-actions">
-              <button type="button" class="btn btn--ghost" id="order-clear">Kosongkan troli</button>
-              <button type="button" class="btn btn--primary" id="order-submit">Hantar pesanan</button>
+              <button type="button" class="btn btn--ghost" id="order-clear" data-i18n="order.btn.clear">Kosongkan troli</button>
+              <button type="button" class="btn btn--primary" id="order-submit" data-i18n="order.btn.submit">Hantar pesanan</button>
             </div>
           </div>
         </aside>
@@ -466,7 +479,7 @@
       >
         <div class="order-flow__head">
           <h2 id="order-flow-title" class="order-flow__title">Aliran pesanan</h2>
-          <button type="button" class="btn btn--ghost btn--sm order-flow__close btn-close-x" id="order-flow-x" aria-label="Tutup">✕</button>
+          <button type="button" class="btn btn--ghost btn--sm order-flow__close btn-close-x" id="order-flow-x" aria-label="Tutup" data-i18n-aria-label="order.flow.close">✕</button>
         </div>
         <div class="order-flow__body" id="order-flow-body"></div>
         <div class="order-flow__foot" id="order-flow-foot"></div>
@@ -478,5 +491,6 @@
     <script type="module" src="../js/pos-order-app.js"></script>
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

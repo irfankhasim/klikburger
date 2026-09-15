@@ -470,8 +470,11 @@
   flex-wrap: nowrap;
 }
 
-/* base.css .btn { width:100% } memaksa butang tutup penuh baris — elak teks tajuk terpecah */
-.order-flow__head .btn {
+/*
+ * base.css .btn { width:100% } memaksa butang penuh baris — elak teks tajuk terpecah.
+ * Butang tutup dikecualikan supaya petak segi empat .btn-close-x kekal.
+ */
+.order-flow__head .btn:not(.btn-close-x) {
   width: auto;
   min-width: 2.25rem;
   flex: 0 0 auto;

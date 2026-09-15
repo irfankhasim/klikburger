@@ -1,7 +1,7 @@
 /**
  * Pakej jualan — agregat usage bahan untuk kos & FIFO POS.
  */
-import { usageBaseQty } from "./core.js";
+import { usageBaseQty, usageBaseQtyMax, usageBaseQtyMin } from "./core.js";
 
 export var MENU_CATEGORY_ORDER = ["burger", "fries", "oblong", "benjo", "addon", "other"];
 
@@ -61,15 +61,33 @@ export function parsePackageMemberIds(data) {
   });
 }
 
+/**
+ * Kumpul usage komponen ke dalam `totals` sebagai { min, max, nominal } dalam unit stok bahan.
+ * Julat dikekalkan supaya kos & had stok pakej selari dengan produk tunggal.
+ */
 function mergeScaledUsageInto(totals, ingredientsById, usageObj, scale) {
   if (!usageObj || typeof usageObj !== "object" || scale <= 0) return;
   Object.keys(usageObj).forEach(function (ingId) {
     var ing = ingredientsById[ingId];
     if (!ing) return;
-    var b = usageBaseQty(ing, usageObj[ingId]) * scale;
-    if (b <= 1e-12) return;
-    totals[ingId] = (totals[ingId] || 0) + b;
+    var entry = usageObj[ingId];
+    var nominal = usageBaseQty(ing, entry) * scale;
+    var min = usageBaseQtyMin(ing, entry) * scale;
+    var max = usageBaseQtyMax(ing, entry) * scale;
+    if (max <= 1e-12 && nominal <= 1e-12) return;
+    var acc = totals[ingId] || (totals[ingId] = { min: 0, max: 0, nominal: 0, unit: ing.unit });
+    acc.min += min;
+    acc.max += max;
+    acc.nominal += nominal;
   });
+}
+
+/** Tukar akumulator { min, max, nominal } → nilai usage (nombor tetap atau objek julat). */
+function accToUsageValue(acc) {
+  if (acc.max > acc.min + 1e-9) {
+    return { gunaMin: acc.min, gunaMax: acc.max, guna: acc.nominal, gunaUnit: acc.unit };
+  }
+  return acc.nominal;
 }
 
 export function resolveProductUsageRecursive(p, byId, ingredientsById, stack) {
@@ -87,8 +105,8 @@ export function resolveProductUsageRecursive(p, byId, ingredientsById, stack) {
     }
     var outM = {};
     Object.keys(totalsM).forEach(function (ingId) {
-      var t = totalsM[ingId];
-      if (t > 1e-12) outM[ingId] = t;
+      var accM = totalsM[ingId];
+      if (accM.max > 1e-12 || accM.nominal > 1e-12) outM[ingId] = accToUsageValue(accM);
     });
     return outM;
   }
@@ -115,8 +133,8 @@ export function resolveProductUsageRecursive(p, byId, ingredientsById, stack) {
   }
   var out = {};
   Object.keys(totals).forEach(function (ingId) {
-    var t = totals[ingId];
-    if (t > 1e-12) out[ingId] = t;
+    var acc = totals[ingId];
+    if (acc.max > 1e-12 || acc.nominal > 1e-12) out[ingId] = accToUsageValue(acc);
   });
   return out;
 }

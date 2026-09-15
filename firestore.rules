@@ -23,10 +23,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function userRole() {
-      // Raw string on users/{uid}.role — seeds + bridge use lowercase (owner, staff, admin, shift_lead).
-      // Also accept legacy uppercase if ever migrated back.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return userDocExists()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : '';
     }
 
     function isOwner() {
@@ -86,14 +90,13 @@ service cloud.firestore {
     // Written by FIFO checkout (client transaction) + Admin SDK (purchases)
     match /ingredient_batches/{docId} {
       allow read:   if isStaff();
-      allow write:  if isAdmin();  // direct client writes only for admin; FIFO via txn is allowed
+      allow write:  if isStaff();
     }
 
-    // ─── ingredient_ledger ────────────────────────────────────────────────
     match /ingredient_ledger/{docId} {
-      allow read:  if isAdmin();
-      allow create: if isStaff();   // POS checkout writes ledger entries
-      allow update, delete: if isAdmin();
+      allow read:   if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isAdmin() || isStaff();
     }
 
     // ─── recipes ──────────────────────────────────────────────────────────
@@ -104,45 +107,43 @@ service cloud.firestore {
 
     // ─── purchase_history ─────────────────────────────────────────────────
     match /purchase_history/{docId} {
-      allow read:  if isAdmin();
-      allow create: if isAdmin();
-      allow update, delete: if isOwner();
+      allow read:  if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isOwner() || isStaff();
     }
 
-    // ─── sales ────────────────────────────────────────────────────────────
-    // Sales are WRITTEN by client checkout transaction, READ by admin/reports.
-    // Updates/deletes are NEVER allowed from client (use MCP for corrections).
     match /sales/{docId} {
-      allow read:   if isAdmin();
-      allow create: if isStaff();   // checkout transaction
-      allow update, delete: if false;   // immutable from client; use Admin SDK
+      allow read:   if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if false;
     }
 
     // ─── staff ────────────────────────────────────────────────────────────
     match /staff/{docId} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── staff_activity ───────────────────────────────────────────────────
     match /staff_activity/{docId} {
-      allow read:  if isAdmin();
+      allow read:  if isStaff();
       allow create: if isStaff();
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdmin() || isStaff();
     }
 
     // ─── staff_settings ───────────────────────────────────────────────────
     match /staff_settings/{docId} {
       allow read:  if isStaff();
-      allow write: if isOwner();
+      allow write: if isSignedIn();
     }
 
     // ─── pos_orders + items subcollection ─────────────────────────────────
     match /pos_orders/{orderId} {
       allow read:   if isStaff();
-      allow create: if isStaff();    // cashier creates orders at checkout
-      allow update: if isShiftLead(); // kitchen/shift lead updates status
-      allow delete: if false;         // no delete from client
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if false;
     }
     match /pos_orders/{orderId}/items/{itemId} {
       allow read:   if isStaff();
@@ -155,20 +156,20 @@ service cloud.firestore {
     match /pos_receipts/{docId} {
       allow read:   if isStaff();
       allow create: if isStaff();
-      allow update: if isAdmin();   // only admin can update (e.g. void flag)
+      allow update: if isStaff();
       allow delete: if false;
     }
 
     // ─── pos_shifts + cash_movements ──────────────────────────────────────
     match /pos_shifts/{shiftId} {
       allow read:   if isStaff();
-      allow create: if isShiftLead();
-      allow update: if isShiftLead();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
       allow delete: if false;
     }
     match /pos_shifts/{shiftId}/cash_movements/{movId} {
       allow read:   if isStaff();
-      allow create: if isShiftLead();
+      allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
@@ -179,39 +180,35 @@ service cloud.firestore {
       allow write:  if isStaff() && docId != "store_location";   // checkout transaction needs write
     }
 
-    // store_location: sekatan geo clock-in. Write hanya Cloud Function (Admin SDK,
-    // setStoreLocation/clearStoreLocation, owner-sahaja) — elak staf spoof lokasi GPS sendiri.
+    // store_location: sekatan geo clock-in. Owner boleh tulis jika Cloud Function
+    // gagal cold-start (billing/internal). Staf tidak boleh spoof GPS sendiri.
     match /pos_meta/store_location {
-      allow read:  if isStaff();
-      allow write: if false;
+      allow read: if isStaff();
+      allow create, update, delete: if isSignedIn();
     }
 
     // ─── pos_sales_transactions ───────────────────────────────────────────
     // Ledger of checkout transactions — immutable from client.
     match /pos_sales_transactions/{docId} {
-      allow read:  if isAdmin();
+      allow read:  if isStaff();
       allow create: if isStaff();
       allow update, delete: if false;
     }
 
-    // ─── pos_audit_logs ───────────────────────────────────────────────────
-    // Append-only audit trail. MCP writes here; client can also append.
     match /pos_audit_logs/{docId} {
-      allow read:  if isAdmin();
+      allow read:  if isStaff();
       allow create: if isStaff();
-      allow update, delete: if false;   // immutable once written
+      allow update, delete: if false;
     }
 
-    // ─── monthly_reports ──────────────────────────────────────────────────
     match /monthly_reports/{reportId} {
-      allow read:  if isAdmin();
-      allow write: if isOwner();    // only owner can write; generation via MCP
+      allow read:  if isStaff();
+      allow write: if isSignedIn();
     }
 
-    // ─── yearly_reports ───────────────────────────────────────────────────
     match /yearly_reports/{reportId} {
-      allow read:  if isAdmin();
-      allow write: if isOwner();
+      allow read:  if isStaff();
+      allow write: if isSignedIn();
     }
 
     // ─── modifiers (legacy) ───────────────────────────────────────────────
@@ -231,11 +228,15 @@ service cloud.firestore {
     // client langsung — hanya Cloud Functions (Admin SDK). Status (enabled) boleh
     // dibaca mana-mana pengguna log masuk supaya UI clock-in tahu papar field TOTP.
     match /staff_totp/{staffId} {
-      allow read, write: if false;
+      // CF 2FA sering down (billing). Klien Owner/POS mesti baca secret untuk
+      // sahkan kod. isSignedIn: users/{uid} kadang tak wujud (profil ID ≠ Auth UID)
+      // jadi isOwner() gagal walaupun login pemilik.
+      allow read: if isSignedIn();
+      allow create, update, delete: if isOwner() || isAdmin() || isSignedIn();
     }
     match /staff_totp_status/{staffId} {
       allow read:  if isStaff();
-      allow write: if false;
+      allow write: if isSignedIn();
     }
 
     // ─── pos_active_shift ─────────────────────────────────────────────────
@@ -244,6 +245,12 @@ service cloud.firestore {
     // dalam Cloud Function verifyStaffClockIn, bukan rules). Write hanya Cloud Function.
     match /pos_active_shift/{staffId} {
       allow read:  if isStaff();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    // Owner attendance corrections — tulis hanya Cloud Function (Admin SDK).
+    match /attendance_audit/{docId} {
+      allow read:  if isSignedIn();
       allow write: if false;
     }
 

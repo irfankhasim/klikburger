@@ -5,12 +5,12 @@
  * Syarat: hanya dijalankan jika kedua-dua koleksi `ingredients` dan `modifiers` kosong,
  * supaya tidak overwrite data sedia. Kosongkan koleksi tersebut dalam Firestore jika mahu isi semula.
  */
-import { db, collection, getDocs, Timestamp, addDoc, serverTimestamp } from "../../../shared/firebase/init.js";
+import { db, collection, getDocs, Timestamp, addDoc, serverTimestamp } from "../firebase/init.js";
 import {
   COL_INGREDIENTS,
   COL_MODIFIERS,
   COL_PURCHASE_HISTORY
-} from "../../../shared/firebase/collections.js";
+} from "../firebase/collections.js";
 import { addIngredient } from "./ingredients-repository.js";
 import { addIngredientLedgerEntry } from "./ingredient-ledger-repository.js";
 import { createPurchaseBatch } from "./ingredient-batch-repository.js";

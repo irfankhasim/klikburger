@@ -190,13 +190,13 @@ export const readTools = [
     },
     async handler(input) {
       const db = await getAdminFirestore();
-      let q = db.collection(COL.SALES).orderBy('createdAt', 'desc');
+      let q = db.collection(COL.POS_RECEIPTS).orderBy('createdAt', 'desc');
       if (input?.staffId)  q = q.where('staffId', '==', input.staffId);
       if (input?.dateFrom) q = q.where('createdAt', '>=', new Date(input.dateFrom));
       if (input?.dateTo)   q = q.where('createdAt', '<=', new Date(input.dateTo));
       q = q.limit(input?.limit ?? 50);
       const snap = await q.get();
-      const sales = serialize(snapToArray(snap));
+      const sales = serialize(snapToArray(snap)).filter((x) => !(x.voided || x.isVoided));
       const totalRevenue = sales.reduce((s, x) => s + (x.subtotal ?? 0), 0);
       const totalCOGS    = sales.reduce((s, x) => s + (x.totalCogsFifo ?? 0), 0);
       const totalProfit  = sales.reduce((s, x) => s + (x.totalGrossProfitFifo ?? 0), 0);
@@ -229,14 +229,40 @@ export const readTools = [
     },
     async handler(input) {
       const db = await getAdminFirestore();
-      let q = db.collection(COL.INGREDIENTS).limit(input?.limit ?? 100);
-      if (input?.category) q = q.where('category', '==', input.category);
-      const snap = await q.get();
-      let items = serialize(snapToArray(snap));
+      const [ingSnap, batchSnap] = await Promise.all([
+        (input?.category
+          ? db.collection(COL.INGREDIENTS).where('category', '==', input.category)
+          : db.collection(COL.INGREDIENTS)
+        ).limit(input?.limit ?? 100).get(),
+        db.collection(COL.INGREDIENT_BATCHES).get(),
+      ]);
+      const stockByIng = {};
+      const fifoCpuByIng = {};
+      const fifoOpened = {};
+      snapToArray(batchSnap).forEach((b) => {
+        const iid = String(b.ingredientId || '');
+        if (!iid) return;
+        const q = typeof b.qtyRemaining === 'number' ? b.qtyRemaining : parseFloat(b.qtyRemaining) || 0;
+        stockByIng[iid] = (stockByIng[iid] || 0) + Math.max(0, q);
+        if (q > 0) {
+          const opened = b.openedAt && typeof b.openedAt.toMillis === 'function' ? b.openedAt.toMillis() : 0;
+          if (fifoOpened[iid] == null || opened < fifoOpened[iid]) {
+            fifoOpened[iid] = opened;
+            fifoCpuByIng[iid] = typeof b.costPerUnit === 'number' ? b.costPerUnit : parseFloat(b.costPerUnit) || 0;
+          }
+        }
+      });
+      let items = serialize(snapToArray(ingSnap)).map((i) => {
+        const qty = stockByIng[i.id] || 0;
+        return {
+          ...i,
+          qtyRemaining: +qty.toFixed(4),
+          costPerUnitFifo: +(fifoCpuByIng[i.id] || 0).toFixed(4),
+          stockStatus: qty <= 0 ? 'habis' : qty <= 5 ? 'rendah' : 'ok',
+        };
+      });
       if (input?.lowStock) {
-        items = items.filter(i =>
-          i.reorderLevel !== undefined && (i.currentStock ?? 0) < i.reorderLevel
-        );
+        items = items.filter((i) => i.qtyRemaining <= 5);
       }
       return { count: items.length, ingredients: items };
     },
@@ -323,7 +349,7 @@ export const readTools = [
     inputSchema: {
       type: 'object',
       properties: {
-        isVoided: { type: 'boolean' },
+        isVoided: { type: 'boolean', description: 'Filter voided receipts (POS field: voided)' },
         staffId:  { type: 'string' },
         dateFrom: { type: 'string' },
         dateTo:   { type: 'string' },
@@ -333,13 +359,16 @@ export const readTools = [
     async handler(input) {
       const db = await getAdminFirestore();
       let q = db.collection(COL.POS_RECEIPTS).orderBy('createdAt', 'desc');
-      if (input?.isVoided !== undefined) q = q.where('isVoided', '==', input.isVoided);
       if (input?.staffId) q = q.where('staffId', '==', input.staffId);
       if (input?.dateFrom) q = q.where('createdAt', '>=', new Date(input.dateFrom));
       if (input?.dateTo)   q = q.where('createdAt', '<=', new Date(input.dateTo));
       q = q.limit(input?.limit ?? 30);
       const snap = await q.get();
-      return { count: snap.size, receipts: serialize(snapToArray(snap)) };
+      let receipts = serialize(snapToArray(snap));
+      if (input?.isVoided !== undefined) {
+        receipts = receipts.filter((x) => !!(x.voided || x.isVoided) === input.isVoided);
+      }
+      return { count: receipts.length, receipts };
     },
   },
 
@@ -401,34 +430,42 @@ export const readTools = [
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const [metaSnap, salesSnap, lowStockSnap, ordersSnap, openShiftSnap] =
+      const [metaSnap, receiptsSnap, ingSnap, batchSnap, ordersSnap, openShiftSnap] =
         await Promise.all([
           db.collection(COL.POS_META).doc(META_DOC.COUNTERS).get(),
-          db.collection(COL.SALES).where('createdAt', '>=', todayStart).get(),
+          db.collection(COL.POS_RECEIPTS).where('createdAt', '>=', todayStart).get(),
           db.collection(COL.INGREDIENTS).get(),
+          db.collection(COL.INGREDIENT_BATCHES).get(),
           db.collection(COL.POS_ORDERS).orderBy('createdAt', 'desc').limit(5).get(),
           db.collection(COL.POS_SHIFTS).where('status', '==', 'open').limit(1).get(),
         ]);
 
-      const meta       = metaSnap.exists ? metaSnap.data() : {};
-      const sales      = snapToArray(salesSnap);
-      const ingAll     = snapToArray(lowStockSnap);
-      const lowStock   = ingAll.filter(i =>
-        i.reorderLevel !== undefined && (i.currentStock ?? 0) < i.reorderLevel
-      );
+      const meta = metaSnap.exists ? metaSnap.data() : {};
+      const sales = snapToArray(receiptsSnap).filter((x) => !(x.voided || x.isVoided));
+      const stockByIng = {};
+      snapToArray(ingSnap).forEach((i) => {
+        stockByIng[i.id] = 0;
+      });
+      snapToArray(batchSnap).forEach((b) => {
+        const iid = String(b.ingredientId || '');
+        if (!iid) return;
+        const q = typeof b.qtyRemaining === 'number' ? b.qtyRemaining : parseFloat(b.qtyRemaining) || 0;
+        stockByIng[iid] = (stockByIng[iid] || 0) + Math.max(0, q);
+      });
+      const lowStockCount = Object.values(stockByIng).filter((q) => q <= 5).length;
       const todayRevenue = sales.reduce((s, x) => s + (x.subtotal ?? 0), 0);
-      const todayProfit  = sales.reduce((s, x) => s + (x.totalGrossProfitFifo ?? 0), 0);
+      const todayProfit = sales.reduce((s, x) => s + (x.totalGrossProfitFifo ?? 0), 0);
       const recentOrders = serialize(snapToArray(ordersSnap));
-      const activeShift  = openShiftSnap.empty ? null : serialize(toJson(openShiftSnap.docs[0]));
+      const activeShift = openShiftSnap.empty ? null : serialize(toJson(openShiftSnap.docs[0]));
 
       return {
         activeShift,
         today: {
-          salesCount:   sales.length,
-          revenue:      +todayRevenue.toFixed(2),
-          grossProfit:  +todayProfit.toFixed(2),
+          salesCount: sales.length,
+          revenue: +todayRevenue.toFixed(2),
+          grossProfit: +todayProfit.toFixed(2),
         },
-        inventory: { lowStockCount: lowStock.length },
+        inventory: { lowStockCount },
         pos: {
           activeShiftDocId: meta.activeShiftDocId ?? null,
           seqOrder:         meta.seqOrder ?? null,

@@ -719,8 +719,9 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(8, 8, 8, 0.55);
-  backdrop-filter: blur(6px);
+  background: rgba(18, 18, 18, 0.34);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -811,11 +812,12 @@
 .lp-field input,
 .lp-field textarea {
   width: 100%;
-  padding: 0.62rem 0.75rem;
+  min-height: var(--kb-control-min-h, 3.15rem);
+  padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--kb-control-font, 1.0625rem);
   background: #fff;
 }
 

@@ -179,3 +179,76 @@ export function validateWritableCollection(collection) {
     return err(`Collection '${collection}' is not in the writable allowlist`);
   return OK;
 }
+
+// ─── Recipe usage validator ───────────────────────────────────────────────────
+
+/** Collections whose documents carry a recipe `usage` map. */
+const USAGE_COLLECTIONS = ['modifiers', 'recipes'];
+
+/**
+ * Validate and normalise a recipe `usage` map before it reaches Firestore.
+ *
+ * An entry is a fixed quantity (plain number, or `{ guna, gunaUnit }`) or a range
+ * (`{ gunaMin, gunaMax, gunaUnit }`). Readers in js/cost-calculator/core.js tolerate
+ * inverted or half-specified ranges, but we normalise here so bad shapes never get
+ * stored in the first place.
+ *
+ * @returns {{ valid: true, usage?: object } | { valid: false, error: string }}
+ */
+export function validateUsageMap(usage) {
+  if (usage == null) return OK;
+  if (typeof usage !== 'object' || Array.isArray(usage))
+    return err('usage must be an object keyed by ingredient id');
+
+  const out = {};
+
+  for (const ingId of Object.keys(usage)) {
+    const v = usage[ingId];
+    const where = `usage['${ingId}']`;
+
+    if (typeof v === 'number') {
+      if (!isNonNeg(v)) return err(`${where} must be a finite quantity >= 0`);
+      out[ingId] = v;
+      continue;
+    }
+
+    if (v == null || typeof v !== 'object' || Array.isArray(v))
+      return err(`${where} must be a number or an object with guna / gunaMin / gunaMax`);
+
+    const unit = v.gunaUnit != null && String(v.gunaUnit).trim() !== '' ? String(v.gunaUnit).trim() : null;
+    const hasMin = v.gunaMin != null && v.gunaMin !== '';
+    const hasMax = v.gunaMax != null && v.gunaMax !== '';
+
+    if (hasMin || hasMax) {
+      let min = hasMin ? Number(v.gunaMin) : Number(v.gunaMax);
+      let max = hasMax ? Number(v.gunaMax) : Number(v.gunaMin);
+      if (!isNonNeg(min) || !isNonNeg(max))
+        return err(`${where}: gunaMin/gunaMax must be finite quantities >= 0`);
+      if (max < min) [min, max] = [max, min];
+      out[ingId] = max > min ? { gunaMin: min, gunaMax: max, gunaUnit: unit } : { guna: min, gunaUnit: unit };
+      continue;
+    }
+
+    if (v.guna == null || v.guna === '')
+      return err(`${where} must define guna, or gunaMin/gunaMax`);
+    const guna = Number(v.guna);
+    if (!isNonNeg(guna)) return err(`${where}: guna must be a finite quantity >= 0`);
+    out[ingId] = { guna: guna, gunaUnit: unit };
+  }
+
+  return { valid: true, usage: out };
+}
+
+/**
+ * Normalise `usage` inside a generic create/update payload for recipe collections.
+ * Returns the payload unchanged when it carries no usage map.
+ */
+export function validateUsagePayload(collection, payload) {
+  if (!USAGE_COLLECTIONS.includes(collection)) return { valid: true, payload: payload };
+  if (!payload || typeof payload !== 'object' || !('usage' in payload))
+    return { valid: true, payload: payload };
+
+  const res = validateUsageMap(payload.usage);
+  if (!res.valid) return res;
+  return { valid: true, payload: { ...payload, usage: res.usage } };
+}

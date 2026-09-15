@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <meta name="theme-color" content="#1a1a1a" />
     <meta name="description" content="TAB KAUNTER — menu utama, navigasi sisi." />
     <title>Menu utama — TAB KAUNTER</title>
@@ -17,8 +26,11 @@
     />
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/main-menu.css" />
-    <link rel="stylesheet" href="../css/pos-ops-shared.css" />
+    <link rel="stylesheet" href="../css/pos-ops-shared.css?v=56" />
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
+    <link rel="stylesheet" href="../css/pos-clock-ops.css?v=59" />
     <!-- Gaya kritikal: elak kilat putih / layout sebelum CSS penuh -->
     <style>
       .page-main-menu.kb-app-boot {
@@ -54,14 +66,15 @@
       aria-busy="true"
       aria-live="polite"
       aria-label="Memuatkan menu"
+      data-i18n-aria-label="common.loadingMenu"
     >
       <div class="kb-app-loader__inner">
         <span class="kb-app-loader__ring" aria-hidden="true"></span>
-        <span class="kb-app-loader__label">Memuatkan…</span>
+        <span class="kb-app-loader__label" data-i18n="common.loading">Memuatkan…</span>
       </div>
     </div>
     <div class="layout">
-      <aside class="sidebar" aria-label="Menu TAB KAUNTER">
+      <aside class="sidebar" id="kb-sidebar" aria-label="Menu TAB KAUNTER" data-i18n-aria-label="shell.sidebarLabel">
         <button
           type="button"
           class="sidebar__brand js-module-trigger"
@@ -70,6 +83,7 @@
           aria-controls="module-layer"
           aria-haspopup="dialog"
         >
+          <span class="sidebar__brand-mark" aria-hidden="true">TK</span>
           <div class="sidebar__titles">
             <span class="sidebar__name">TAB <span class="sidebar__name-accent">KAUNTER</span></span>
             <span class="sidebar__tag js-module-tag">Point Of Sale</span>
@@ -78,17 +92,17 @@
         </button>
 
         <!-- Menu: jualan / kaunter -->
-        <nav class="sidebar__nav sidebar__nav--pos js-nav-pos" aria-label="Menu jualan">
-          <p class="sidebar__section">Operasi</p>
+        <nav class="sidebar__nav sidebar__nav--pos js-nav-pos" aria-label="Menu jualan" data-i18n-aria-label="nav.posLabel">
+          <p class="sidebar__section" data-i18n="nav.section.operations">Operasi</p>
           <ul class="sidebar__list">
             <li>
               <a
                 class="sidebar__link js-nav-clock"
                 href="#"
-                data-pos-lead="Clock in diperlukan untuk staf sebelum jualan. Owner boleh langkau."
+                data-pos-lead="lead.clockIn"
               >
                 <i class="fa-solid fa-user-clock" aria-hidden="true"></i>
-                <span>Clock In</span>
+                <span data-i18n="nav.clockIn">Clock In</span>
               </a>
             </li>
             <li>
@@ -97,12 +111,12 @@
                 href="#"
                 data-pos-embed="pos-order.html"
                 data-rbac-lock="clocked"
-                data-pos-topbar="Ambil pesanan"
-                data-pos-title="Ambil pesanan — TAB KAUNTER"
-                data-pos-lead="Aliran: troli → semakan → pembayaran → resit &amp; senarai dapur. Disambung dengan <strong>Resit</strong> dan <strong>Senarai pesanan</strong>."
+                data-pos-topbar="topbar.takeOrder"
+                data-pos-title="embed.title.takeOrder"
+                data-pos-lead="lead.sales"
               >
                 <i class="fa-solid fa-cash-register" aria-hidden="true"></i>
-                <span>Jualan</span>
+                <span data-i18n="nav.sales">Jualan</span>
               </a>
             </li>
             <li>
@@ -111,12 +125,12 @@
                 href="#"
                 data-pos-embed="pos-receipts.html"
                 data-rbac-lock="clocked"
-                data-pos-topbar="Resit"
-                data-pos-title="Resit — TAB KAUNTER"
-                data-pos-lead="Senarai resit — disegerakkan dengan jualan. Drawer tunai &amp; audit: menu <strong>Clock In</strong>."
+                data-pos-topbar="nav.receipts"
+                data-pos-title="embed.title.receipts"
+                data-pos-lead="lead.receipts"
               >
                 <i class="fa-solid fa-receipt" aria-hidden="true"></i>
-                <span>Resit</span>
+                <span data-i18n="nav.receipts">Resit</span>
               </a>
             </li>
             <li>
@@ -125,79 +139,85 @@
                 href="#"
                 data-pos-embed="pos-order-board.html"
                 data-rbac-lock="clocked"
-                data-pos-topbar="Senarai pesanan"
-                data-pos-title="Senarai pesanan — TAB KAUNTER"
-                data-pos-lead="Papan dapur (KDS) — status pesanan selepas bayaran."
+                data-pos-topbar="nav.orderList"
+                data-pos-title="embed.title.orderList"
+                data-pos-lead="lead.orderList"
               >
                 <i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
-                <span>Senarai pesanan</span>
+                <span data-i18n="nav.orderList">Senarai pesanan</span>
               </a>
             </li>
           </ul>
         </nav>
 
         <!-- Menu: Back office -->
-        <nav class="sidebar__nav sidebar__nav--bo js-nav-bo is-hidden" aria-label="Menu pejabat belakang" hidden>
-          <p class="sidebar__section">Ringkasan</p>
+        <nav class="sidebar__nav sidebar__nav--bo js-nav-bo is-hidden" aria-label="Menu pejabat belakang" data-i18n-aria-label="nav.boLabel" hidden>
+          <p class="sidebar__section" data-i18n="nav.section.overview">Ringkasan</p>
           <ul class="sidebar__list">
             <li>
               <a class="sidebar__link is-active js-bo-dashboard" href="#">
                 <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
-                <span>Papan pemuka</span>
+                <span data-i18n="nav.dashboard">Papan pemuka</span>
               </a>
             </li>
           </ul>
-          <p class="sidebar__section">Laporan</p>
+          <p class="sidebar__section" data-i18n="nav.section.reports">Laporan</p>
           <ul class="sidebar__list">
             <li>
               <a class="sidebar__link js-bo-monthly-reports" href="#">
                 <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
-                <span>Laporan penuh</span>
+                <span data-i18n="nav.fullReport">Laporan penuh</span>
               </a>
             </li>
           </ul>
-          <p class="sidebar__section">Produk &amp; kakitangan</p>
+          <p class="sidebar__section" data-i18n="nav.section.productsStaff">Produk &amp; kakitangan</p>
           <ul class="sidebar__list">
             <li>
               <a
                 class="sidebar__link js-bo-calc"
                 href="#"
                 data-calc-tab="modifiers"
-                data-topbar="Menu produk"
+                data-topbar="topbar.productMenu"
                 data-bo-calc-copy="catalog"
               >
                 <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
-                <span>Produk</span>
+                <span data-i18n="nav.products">Produk</span>
               </a>
             </li>
             <li>
               <a class="sidebar__link js-bo-staff" href="#">
                 <i class="fa-solid fa-users" aria-hidden="true"></i>
-                <span>Kakitangan</span>
+                <span data-i18n="nav.staff">Kakitangan</span>
               </a>
             </li>
           </ul>
-          <p class="sidebar__section">Inventori</p>
+          <p class="sidebar__section" data-i18n="nav.section.inventory">Inventori</p>
           <ul class="sidebar__list">
             <li>
               <a class="sidebar__link js-bo-calc" href="#" data-calc-tab="ingredients">
                 <i class="fa-solid fa-carrot" aria-hidden="true"></i>
-                <span>Bahan mentah</span>
+                <span data-i18n="nav.ingredients">Bahan mentah</span>
               </a>
             </li>
             <li>
               <a class="sidebar__link js-bo-calc" href="#" data-calc-tab="modifiers">
                 <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
-                <span>Produk &amp; kos</span>
+                <span data-i18n="nav.productsCost">Produk &amp; kos</span>
+              </a>
+            </li>
+            <li>
+              <a class="sidebar__link js-bo-wastage" href="#">
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+                <span data-i18n="nav.wastage">Pembaziran</span>
               </a>
             </li>
           </ul>
-          <p class="sidebar__section">Sistem</p>
+          <p class="sidebar__section" data-i18n="nav.section.system">Sistem</p>
           <ul class="sidebar__list">
             <li>
               <a class="sidebar__link js-bo-settings" href="#">
                 <i class="fa-solid fa-gear" aria-hidden="true"></i>
-                <span>Tetapan</span>
+                <span data-i18n="nav.settings">Tetapan</span>
               </a>
             </li>
           </ul>
@@ -205,17 +225,42 @@
 
         <div class="sidebar__footer">
           <div id="kb-status-bar" class="kb-status-bar" aria-live="polite"></div>
+          <button
+            type="button"
+            class="sidebar__collapse"
+            id="kb-sidebar-collapse"
+            aria-controls="kb-sidebar"
+            aria-expanded="true"
+            aria-label="Sembunyikan menu sisi"
+            data-i18n-aria-label="nav.sidebarCollapse"
+          >
+            <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+          </button>
           <a class="sidebar__out" href="login.html">
             <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
-            <span>Log keluar</span>
+            <span data-i18n="common.logout">Log keluar</span>
           </a>
         </div>
       </aside>
 
       <div class="layout__main">
         <header class="topbar">
-          <h1 class="topbar__title js-topbar-title">Laman utama — jualan</h1>
+          <div class="topbar__start">
+            <button
+              type="button"
+              class="topbar__sidebar-btn"
+              id="kb-sidebar-toggle"
+              aria-controls="kb-sidebar"
+              aria-expanded="true"
+              aria-label="Sembunyikan menu sisi"
+              data-i18n-aria-label="nav.sidebarCollapse"
+            >
+              <i class="fa-solid fa-bars" aria-hidden="true"></i>
+            </button>
+            <h1 class="topbar__title js-topbar-title">Laman utama — jualan</h1>
+          </div>
           <p class="topbar__rbac-hint js-rbac-hint" hidden></p>
+          <div class="topbar__lang" data-lang-toggle></div>
         </header>
         <div class="topbar__embed-lead js-topbar-embed-lead" hidden>
           <p class="topbar__embed-lead__text js-topbar-embed-lead-text"></p>
@@ -232,22 +277,14 @@
               </div>
             </div>
           </div>
-          <div class="content__embed-wrap" id="content-embed-wrap" hidden>
-            <iframe
-              class="content__embed"
-              id="content-embed"
-              title="Kalkulator kos — TAB KAUNTER"
-              src=""
-              loading="lazy"
-            ></iframe>
-          </div>
+          <div class="content__embed-wrap" id="content-embed-wrap" hidden></div>
         </main>
       </div>
     </div>
 
     <!-- Popup: pilih modul jualan atau pejabat belakang -->
     <div class="module-layer" id="module-layer" hidden>
-      <button type="button" class="module-layer__backdrop js-module-close" aria-label="Tutup"></button>
+      <button type="button" class="module-layer__backdrop js-module-close" aria-label="Tutup" data-i18n-aria-label="common.close"></button>
       <div
         class="module-layer__panel"
         role="dialog"
@@ -256,10 +293,10 @@
         aria-describedby="module-layer-desc"
       >
         <div class="module-layer__head">
-          <h2 id="module-layer-title" class="module-layer__title">Pilih modul</h2>
-          <button type="button" class="btn btn--ghost btn--sm btn-close-x js-module-close" aria-label="Tutup">✕</button>
+          <h2 id="module-layer-title" class="module-layer__title" data-i18n="module.title">Pilih modul</h2>
+          <button type="button" class="btn btn--ghost btn--sm btn-close-x js-module-close" aria-label="Tutup" data-i18n-aria-label="common.close">✕</button>
         </div>
-        <p id="module-layer-desc" class="module-layer__desc">
+        <p id="module-layer-desc" class="module-layer__desc" data-i18n="module.desc">
           Setiap modul mempunyai menu yang berbeza di bar sisi.
         </p>
         <div class="module-layer__choices">
@@ -267,7 +304,7 @@
             <span class="module-choice__icon" aria-hidden="true"><i class="fa-solid fa-cash-register"></i></span>
             <span class="module-choice__text">
               <span class="module-choice__label">Point Of Sale</span>
-              <span class="module-choice__hint">Jualan, giliran kerja, resit</span>
+              <span class="module-choice__hint" data-i18n="module.posHint">Jualan, giliran kerja, resit</span>
             </span>
             <i class="fa-solid fa-chevron-right module-choice__go" aria-hidden="true"></i>
           </button>
@@ -275,7 +312,7 @@
             <span class="module-choice__icon" aria-hidden="true"><i class="fa-solid fa-briefcase"></i></span>
             <span class="module-choice__text">
               <span class="module-choice__label">Back Office</span>
-              <span class="module-choice__hint">Laporan, produk, pentadbiran</span>
+              <span class="module-choice__hint" data-i18n="module.boHint">Laporan, produk, pentadbiran</span>
             </span>
             <i class="fa-solid fa-chevron-right module-choice__go" aria-hidden="true"></i>
           </button>
@@ -295,7 +332,8 @@
       </div>
     </div>
 
-    <script type="module" src="../js/main-menu.js"></script>
+    <script type="module" src="../js/main-menu.js?v=59"></script>
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

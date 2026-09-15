@@ -38,6 +38,24 @@
   --kb-control-border: var(--border);
   --kb-control-border-strong: var(--border-strong);
   --kb-control-active-bar: var(--sidebar-accent);
+
+  /* Butang & medan sentuh — iPad (~50px), teks ≥16px elak zum iOS */
+  --kb-btn-min-h: 3.15rem;
+  --kb-btn-sm-min-h: 2.85rem;
+  --kb-btn-pad-y: 0.8rem;
+  --kb-btn-pad-x: 1.25rem;
+  --kb-btn-font: 1.0625rem;
+  --kb-btn-sm-font: 1rem;
+  --kb-btn-gap: 0.85rem;
+  --kb-control-min-h: 3.15rem;
+  --kb-control-pad-y: 0.72rem;
+  --kb-control-pad-x: 0.85rem;
+  --kb-control-font: 1.0625rem;
+  --kb-check-size: 1.45rem;
+  --kb-scrollbar-size: 10px;
+  --kb-scrollbar-thumb: #c4c4c4;
+  --kb-scrollbar-thumb-hover: #a3a3a3;
+  --kb-scrollbar-thumb-sidebar: #5a5a5a;
 }
 
 *,
@@ -91,12 +109,14 @@ body {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.4;
   letter-spacing: -0.02em;
   color: var(--text);
+  padding-bottom: 0.22rem;
 }
 
 .brand__tag {
-  margin: 0.35rem 0 0;
+  margin: 0.62rem 0 0;
   font-size: 0.9rem;
   color: var(--text-muted);
   font-weight: 500;
@@ -137,17 +157,18 @@ body {
 
 .field__label {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
 
 .field__input {
   width: 100%;
-  padding: 0.55rem 0.65rem;
+  min-height: var(--kb-control-min-h);
+  padding: var(--kb-control-pad-y) var(--kb-control-pad-x);
   font: inherit;
-  font-size: 1rem;
+  font-size: var(--kb-control-font);
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -175,14 +196,23 @@ body {
   justify-content: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.65rem 1rem;
+  min-height: var(--kb-btn-min-h);
+  padding: var(--kb-btn-pad-y) var(--kb-btn-pad-x);
   font: inherit;
-  font-size: 0.95rem;
+  font-size: var(--kb-btn-font);
   font-weight: 600;
+  line-height: 1.25;
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
+  touch-action: manipulation;
   transition: opacity 0.15s, transform 0.1s, background 0.15s;
+}
+
+.btn--sm {
+  min-height: var(--kb-btn-sm-min-h);
+  padding: 0.65rem 1.05rem;
+  font-size: var(--kb-btn-sm-font);
 }
 
 .btn:active:not(:disabled) {
@@ -268,18 +298,53 @@ body {
   cursor: not-allowed;
 }
 
-/** Butang tutup modal/panel — paparan ✕ seragam; kekalkan aria-label="Tutup" untuk aksesibiliti. */
-.btn-close-x {
-  width: auto;
+/**
+ * Butang tutup modal/panel — petak ✕ seragam yang jelas kelihatan tanpa perlu hover.
+ * Pemilih `button.btn-close-x` sengaja lebih spesifik supaya petak ini menang
+ * terhadap gaya komponen (.rc-btn--line, .bulk-modal__close, .ai-modal__close) tanpa
+ * `!important`. Kekalkan aria-label="Tutup" untuk aksesibiliti.
+ */
+button.btn-close-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.85rem;
+  height: 2.85rem;
+  min-width: 2.85rem;
+  min-height: 2.85rem;
   margin-top: 0;
-  min-width: 2.25rem;
-  min-height: 2.25rem;
-  padding: 0.35rem 0.5rem;
-  font-size: 1rem;
-  line-height: 1;
-  font-weight: 400;
-  letter-spacing: 0;
+  padding: 0;
   flex-shrink: 0;
+  border: 1px solid var(--border-strong, #ccc);
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface, #fff);
+  color: var(--text, #1a1a1a);
+  font-size: 0.95rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+button.btn-close-x:hover:not(:disabled) {
+  background: var(--surface-muted, #fafafa);
+  border-color: var(--text-muted, #5c5c5c);
+  color: var(--text, #1a1a1a);
+}
+
+button.btn-close-x:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+button.btn-close-x:focus-visible {
+  outline: none;
+  border-color: var(--text-muted, #5c5c5c);
+  box-shadow: 0 0 0 3px var(--accent-ring, rgba(245, 166, 35, 0.35));
 }
 
 /**
@@ -292,7 +357,10 @@ body {
   align-items: center;
   justify-content: center;
   margin: 0;
+  min-height: var(--kb-btn-sm-min-h);
+  padding: 0.55rem 0.95rem;
   font: inherit;
+  font-size: var(--kb-btn-sm-font);
   font-weight: 600;
   color: var(--text-muted);
   background: transparent;
@@ -390,16 +458,17 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.7rem;
 }
 
 .kb-page-title {
   margin: 0;
   font-size: 1.45rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.4;
   letter-spacing: -0.02em;
   color: var(--text);
+  padding-bottom: 0.22rem;
 }
 
 .kb-page-lead {
@@ -448,31 +517,71 @@ html {
   -webkit-overflow-scrolling: touch;
 }
 
+/**
+ * Halaman dibenam: tinggi ikut kandungan, skrol menegak pada pane induk sahaja.
+ */
+html.kb-embed,
+html.kb-embed body {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  overflow: visible !important;
+}
+html.kb-embed .layout,
+html.kb-embed .layout__main,
+html.kb-embed .content,
+html.kb-embed .app-main,
+html.kb-embed .sd-app,
+html.kb-embed .ops-app,
+html.kb-embed .order-app,
+html.kb-embed .ai-app,
+html.kb-embed .mr-app,
+html.kb-embed .dash-content,
+html.kb-embed .dash-page-shell {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  overflow: visible !important;
+}
+
 button, a, input[type="submit"] {
   touch-action: manipulation;
+}
+
+input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="image"]),
+select,
+textarea {
+  min-height: var(--kb-control-min-h);
+  padding: var(--kb-control-pad-y) var(--kb-control-pad-x);
+  font-size: var(--kb-control-font);
+  line-height: 1.3;
+}
+
+textarea {
+  min-height: 7rem;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: var(--kb-check-size);
+  height: var(--kb-check-size);
+  min-width: var(--kb-check-size);
+  min-height: var(--kb-check-size);
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--sidebar-accent);
+  cursor: pointer;
 }
 
 /* Tablet portrait — 600px ke atas */
 @media screen and (min-width: 600px) {
   body {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   /* Sidebar lebih lebar dalam tablet */
   .app-sidebar {
     width: 220px !important;
-  }
-
-  /* Butang lebih besar untuk touch */
-  .btn {
-    min-height: 40px;
-    padding: 8px 16px;
-  }
-
-  /* Input field lebih besar */
-  input, select, textarea {
-    min-height: 40px;
-    font-size: 15px;
   }
 
   /* Grid POS lebih banyak kolum */
@@ -498,19 +607,19 @@ button, a, input[type="submit"] {
 
   /* Butang POS lebih besar */
   .order-card {
-    min-height: 80px !important;
-    font-size: 15px !important;
+    min-height: 5.75rem !important;
+    font-size: 1.05rem !important;
   }
 
-  /* Modal — saiz lalai tablet */
-  [role="dialog"] {
-    max-width: 560px !important;
+  /* Modal — saiz lalai tablet; drawer AI dikecualikan */
+  [role="dialog"]:not(.ai-staff-drawer):not(.bulk-modal) {
+    max-width: 660px !important;
   }
 
   /* Belian borong modal — lebih lebar */
   #bulk-purchase-backdrop [role="dialog"],
   .bulk-modal {
-    max-width: 760px !important;
+    max-width: 840px !important;
   }
 
   /* AI chat drawer — kekal width asal */
@@ -531,13 +640,13 @@ button, a, input[type="submit"] {
   }
 
   .order-card {
-    min-height: 90px !important;
+    min-height: 6.25rem !important;
   }
 }
 
 /* Fix orientation change */
 @media screen and (orientation: landscape) {
-  .app-main {
+  html:not(.kb-embed) .app-main {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }

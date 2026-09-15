@@ -22,6 +22,7 @@ import {
 } from "./firebase/collections.js";
 import { waitForAuthUser, getPosUserRbacPayload } from "./pos-firebase-auth-bridge.js";
 import { normalizePaymentMethod } from "./pos-firestore-hub.js";
+import { t as tr, onLocaleChange, getLocale } from "./i18n/locale.js";
 
 var KB_RESTORE_SS = "fyp_klikburger_restore_v1";
 var KB_RESTORE_LS = "fyp_klikburger_restore_ls_v1";
@@ -36,6 +37,11 @@ var latestBundle = null;
 var prevDayTotals = null;
 var pendingPrevFetch = null;
 var prevDayFetchScheduledFor = "";
+
+/** Tag locale untuk format tarikh/masa — mata wang kekal RM dalam kedua bahasa. */
+function dateLocaleTag() {
+  return getLocale() === "en" ? "en-MY" : "ms-MY";
+}
 
 function pad2(n) {
   return (n < 10 ? "0" : "") + n;
@@ -127,9 +133,9 @@ function formatRM(n) {
 function formatShortPrevLabel(scopeKey) {
   var prev = addCalendarDaysKey(scopeKey, -1);
   try {
-    return parseCalendarKeyLocal(prev).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
+    return parseCalendarKeyLocal(prev).toLocaleDateString(dateLocaleTag(), { day: "numeric", month: "short" });
   } catch (e) {
-    return "hari sebelumnya";
+    return tr("dash.prevDayFallback");
   }
 }
 
@@ -226,7 +232,7 @@ function receiptQuery(bounds) {
 function filterVoidedReceiptDocs(docs) {
   return docs.filter(function (d) {
     var x = d.data();
-    return !x.voided;
+    return !(x.voided || x.isVoided);
   });
 }
 
@@ -282,7 +288,7 @@ function buildHourlySeries(receiptDocs, bounds) {
 
   receiptDocs.forEach(function(d) {
     var x = d.data();
-    if (x.voided) return;
+    if (x.voided || x.isVoided) return;
     var ms = toMillis(x.createdAt);
     if (ms < bounds.startMs || ms >= bounds.endMs) return;
     var h = new Date(ms).getHours();
@@ -354,11 +360,11 @@ function aggregatePayment(receiptDocs, bounds) {
 }
 
 function buildOrderCards(receiptDocs, bounds) {
-  var dayShort = parseCalendarKeyLocal(bounds.dateKey || effectiveCalendarKey()).toLocaleDateString("ms-MY", { day: "numeric", month: "short" });
+  var dayShort = parseCalendarKeyLocal(bounds.dateKey || effectiveCalendarKey()).toLocaleDateString(dateLocaleTag(), { day: "numeric", month: "short" });
   return receiptDocs
     .filter(function (d) {
       var x = d.data();
-      if (x.voided) return false;
+      if (x.voided || x.isVoided) return false;
       var ms = toMillis(x.createdAt);
       return ms >= bounds.startMs && ms < bounds.endMs;
     })
@@ -367,7 +373,7 @@ function buildOrderCards(receiptDocs, bounds) {
       var ms = toMillis(x.createdAt);
       var tstr = "—";
       try {
-        tstr = new Date(ms).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
+        tstr = new Date(ms).toLocaleTimeString(dateLocaleTag(), { hour: "2-digit", minute: "2-digit", hour12: true });
       } catch (e) {}
       return {
         no: String(x.receiptNo || d.id).slice(0, 24),
@@ -381,13 +387,14 @@ function buildOrderCards(receiptDocs, bounds) {
 
 function computeKpiDeltas(sales, orderCount, cogs, profit, prev) {
   var prevLbl = formatShortPrevLabel(activeCalendarKey);
+  var noCompare = tr("dash.delta.noCompare");
   if (!prev || (prev.sales <= 0 && prev.count <= 0 && sales <= 0 && orderCount <= 0)) {
     return {
-      jumlahJualanDelta: "Tiada perbandingan (" + prevLbl + ")",
-      jumlahOrderDelta: "Tiada perbandingan (" + prevLbl + ")",
-      purataOrderDelta: "Tiada perbandingan",
-      cogsDelta: "Tiada perbandingan (" + prevLbl + ")",
-      profitDelta: "Tiada perbandingan (" + prevLbl + ")"
+      jumlahJualanDelta: noCompare + " (" + prevLbl + ")",
+      jumlahOrderDelta: noCompare + " (" + prevLbl + ")",
+      purataOrderDelta: noCompare,
+      cogsDelta: noCompare + " (" + prevLbl + ")",
+      profitDelta: noCompare + " (" + prevLbl + ")"
     };
   }
   var dSales = prev.sales > 0 ? ((sales - prev.sales) / prev.sales) * 100 : sales > 0 ? 100 : 0;
@@ -401,7 +408,7 @@ function computeKpiDeltas(sales, orderCount, cogs, profit, prev) {
   var dProfit = prevProfit > 0 ? ((profit - prevProfit) / prevProfit) * 100 : profit > 0 ? 100 : 0;
   return {
     jumlahJualanDelta: (dSales >= 0 ? "+" : "") + dSales.toFixed(1) + "% vs " + prevLbl,
-    jumlahOrderDelta: (dOrd >= 0 ? "+" : "") + dOrd + " order vs " + prevLbl,
+    jumlahOrderDelta: (dOrd >= 0 ? "+" : "") + dOrd + " " + tr("dash.delta.orderUnit") + " vs " + prevLbl,
     purataOrderDelta: (dAvg >= 0 ? "+" : "−") + "RM " + Math.abs(dAvg).toFixed(2),
     cogsDelta: (dCogs >= 0 ? "+" : "") + dCogs.toFixed(1) + "% vs " + prevLbl,
     profitDelta: (dProfit >= 0 ? "+" : "") + dProfit.toFixed(1) + "% vs " + prevLbl
@@ -414,7 +421,7 @@ function renderOrdersScope() {
   var d = parseCalendarKeyLocal(activeCalendarKey);
   el.textContent =
     "· " +
-    d.toLocaleDateString("ms-MY", {
+    d.toLocaleDateString(dateLocaleTag(), {
       weekday: "short",
       day: "numeric",
       month: "short",
@@ -444,7 +451,7 @@ function renderOrders(cards) {
   var el = $("od-orders-mount");
   if (!el) return;
   if (!cards || !cards.length) {
-    el.innerHTML = emptyBlock("Belum ada pesanan untuk tarikh ini.");
+    el.innerHTML = emptyBlock(tr("dash.orders.empty"));
     return;
   }
   el.innerHTML = cards
@@ -477,7 +484,7 @@ function renderProducts(list) {
   var el = $("od-products-mount");
   if (!el) return;
   if (!list || !list.length) {
-    el.innerHTML = emptyBlock("Tiada data produk untuk tempoh ini.");
+    el.innerHTML = emptyBlock(tr("dash.products.empty"));
     return;
   }
   var max = list.length ? list[0].pct : 0;
@@ -506,11 +513,13 @@ function renderPayment(pay) {
   var el = $("od-pay-mount");
   if (!el) return;
   if (!pay || pay.empty) {
-    el.innerHTML = emptyBlock("Tiada data pembayaran untuk tempoh ini.");
+    el.innerHTML = emptyBlock(tr("dash.payment.empty"));
     return;
   }
   el.innerHTML =
-    '<div class="dash-bar-row"><div class="dash-bar-row__lbl"><span>Tunai</span><span>' +
+    '<div class="dash-bar-row"><div class="dash-bar-row__lbl"><span>' +
+    escapeHtml(tr("dash.payment.cash")) +
+    '</span><span>' +
     pay.cashPct + "% · RM " + pay.cashAmt.toFixed(2) +
     '</span></div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:' +
     pay.cashPct + '%"></div></div></div>' +
@@ -555,7 +564,7 @@ function renderChart(series) {
     if (old) old.remove();
   }
   if (!sum) {
-    if (wrap) wrap.insertAdjacentHTML("beforeend", emptyBlock("Tiada data jualan mengikut jam untuk tarikh ini."));
+    if (wrap) wrap.insertAdjacentHTML("beforeend", emptyBlock(tr("dash.chart.empty")));
     return;
   }
   new Chart(canvas.getContext("2d"), {
@@ -611,16 +620,16 @@ function renderKpiPeriod() {
   try {
     var key = effectiveCalendarKey();
     var d = parseCalendarKeyLocal(key);
-    var shortDate = d.toLocaleDateString("ms-MY", {
+    var shortDate = d.toLocaleDateString(dateLocaleTag(), {
       weekday: "short",
       day: "numeric",
       month: "short",
       year: "numeric"
     });
     if (viewingIsToday()) {
-      periodEl.textContent = "Hari ini · " + shortDate;
+      periodEl.textContent = tr("dash.period.today") + " · " + shortDate;
     } else {
-      periodEl.textContent = "Sejarah · " + shortDate;
+      periodEl.textContent = tr("dash.period.history") + " · " + shortDate;
     }
   } catch (e2) {
     periodEl.textContent = "—";
@@ -646,7 +655,7 @@ async function renderFromBundle() {
   var deltas = computeKpiDeltas(sales, orderCount, cogs, profit, prevDayTotals);
   applyKpi({
     jumlahJualan: formatRM(sales),
-    jumlahOrder: orderCount + " transaksi",
+    jumlahOrder: orderCount + " " + tr("dash.kpi.transactionsUnit"),
     kosBahan: formatRM(cogs),
     untungKasar: formatRM(profit),
     jumlahJualanDelta: deltas.jumlahJualanDelta,
@@ -761,7 +770,7 @@ function clearInsightPanels() {
   if (wrap) {
     var old = wrap.querySelector(".dash-empty-state");
     if (old) old.remove();
-    if (canvas) wrap.insertAdjacentHTML("beforeend", emptyBlock("Log masuk diperlukan untuk memuatkan papan pemuka."));
+    if (canvas) wrap.insertAdjacentHTML("beforeend", emptyBlock(tr("dash.auth.chartRequired")));
   }
 }
 
@@ -779,7 +788,7 @@ function refreshDashboardForScope() {
       jumlahOrder: "—",
       purataOrder: "—",
       masaTungguAvg: "—",
-      jumlahJualanDelta: "Log masuk untuk melihat data.",
+      jumlahJualanDelta: tr("dash.auth.loginToView"),
       jumlahOrderDelta: "",
       purataOrderDelta: "",
       masaTungguDelta: "",
@@ -832,7 +841,7 @@ function tickClock() {
   var el = $("od-clock");
   if (el) {
     try {
-      el.textContent = new Date().toLocaleString("ms-MY", {
+      el.textContent = new Date().toLocaleString(dateLocaleTag(), {
         weekday: "short",
         day: "2-digit",
         month: "short",
@@ -861,7 +870,7 @@ async function bindTopbarUser() {
   if (!nameEl || !roleEl || !avEl) return;
   var u = auth.currentUser;
   if (!u) {
-    nameEl.textContent = "Tetamu";
+    nameEl.textContent = tr("dash.user.guest");
     roleEl.textContent = "—";
     avEl.textContent = "?";
     return;
@@ -889,6 +898,9 @@ async function main() {
   syncDateInputBounds();
   updateFilterDateUi();
   renderKpiPeriod();
+  // Teks "memuatkan" pada kad KPI ditulis oleh JS supaya ia ikut bahasa aktif.
+  var salesDelta = $("od-kpi-sales-delta");
+  if (salesDelta) salesDelta.textContent = tr("common.loading");
   tickClock();
   window.setInterval(tickClock, 1000);
   await waitForAuthUser();
@@ -896,6 +908,18 @@ async function main() {
   refreshDashboardForScope();
   finishDashBoot();
 }
+
+// Teks yang dibina oleh JS (KPI, carta, panel) perlu dilukis semula bila bahasa
+// bertukar — applyI18n hanya menyapu elemen bertanda dalam HTML.
+onLocaleChange(function () {
+  bindTopbarUser();
+  tickClock();
+  if (latestBundle) {
+    renderFromBundle().catch(function () {});
+  } else {
+    refreshDashboardForScope();
+  }
+});
 
 main().catch(function (e) {
   console.error(e);

@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <title>Senarai pesanan — Klik Burger</title>
     <link
       rel="stylesheet"
@@ -20,10 +29,12 @@
         if (window.self !== window.parent) document.documentElement.classList.add("kb-embed");
       } catch (e) {}
     </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
   </head>
-  <body>
+  <body data-i18n-doc-title="order.board.doc.title">
     <div class="ops-app">
-      <h1 class="sr-only">Senarai pesanan</h1>
+      <h1 class="sr-only" data-i18n="order.board.h1">Senarai pesanan</h1>
       <p id="kb-board-rbac" class="ops-muted" style="margin: 0 0 0.65rem; padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; display: none" role="status" hidden></p>
 
       <div class="ops-kanban" id="kb-root"></div>
@@ -31,5 +42,6 @@
     <script type="module" src="../js/pos-order-board-app.js"></script>
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

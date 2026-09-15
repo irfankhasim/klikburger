@@ -10,8 +10,7 @@
 /* Iframe Tetapan / BO — jangan paksa tinggi skrin penuh; scroll utama di induk */
 html.kb-embed body.staff-dash {
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 html.kb-embed .staff-dash .sd-app {
@@ -79,10 +78,16 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
 .sd-field input,
 .sd-field select {
   min-width: 10rem;
-  padding: 0.45rem 0.55rem;
+  min-height: var(--kb-control-min-h, 3.15rem);
+  padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font: inherit;
+  font-size: var(--kb-control-font, 1.0625rem);
+}
+
+.sd-field .kb-dd {
+  min-width: 10rem;
 }
 
 .sd-metrics {
@@ -222,8 +227,7 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
 }
 
 .sd-table-wrap--log {
-  max-height: 280px;
-  overflow-y: auto;
+  overflow-x: auto;
 }
 
 .sd-table {
@@ -459,11 +463,13 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(18, 18, 18, 0.34);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 1.5rem 1rem;
+  padding: 1.5rem;
   overflow-y: auto;
 }
 
@@ -501,7 +507,8 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
   border-bottom: 1px solid var(--border);
 }
 
-.sd-modal__head .btn {
+/* Butang tutup dikecualikan supaya petak segi empat .btn-close-x kekal. */
+.sd-modal__head .btn:not(.btn-close-x) {
   width: auto;
   margin-top: 0;
   flex: 0 0 auto;
@@ -530,7 +537,7 @@ html.kb-embed .staff-dash .sd-app.bs-settings:not(.bs-settings--shell) {
 .sd-modal__foot {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--kb-btn-gap, 0.75rem);
   justify-content: flex-end;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);

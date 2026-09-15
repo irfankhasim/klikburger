@@ -2,6 +2,7 @@
  * Kalkulator kos POS — penyambungan UI, Firestore, dan navigasi hash.
  */
 import { db, Timestamp } from "../firebase/init.js";
+import { t, onLocaleChange } from "../i18n/locale.js";
 import { docToIngredient, docToProduct } from "./mappers.js";
 import {
   subscribeIngredients,
@@ -15,6 +16,7 @@ import {
   subscribeIngredientBatches,
   groupBatchesByIngredientId,
   getActiveFifoBatchFromList,
+  applyFifoCostsToIngredients,
   sortBatchesFifo
 } from "./ingredient-batch-repository.js";
 import { subscribeModifiers, addModifier, persistModifier, deleteModifier } from "./modifiers-repository.js";
@@ -22,12 +24,16 @@ import { recordIngredientPurchaseHistory } from "../menu-costing/purchase-histor
 import { enrichProductsWithResolvedUsage } from "./package-resolved-usage.js";
 import {
   formatRM,
+  formatRMRange,
   costPerUnit,
   productCost,
+  productCostRange,
   escapeHtml,
   escapeAttr,
   getUsagePart,
+  parseUsageBounds,
   usageBaseQty,
+  formatUsageSummary,
   isMassVolumeUnit,
   normalizeUnit
 } from "./core.js";
@@ -82,14 +88,14 @@ function touchFocusIngredientRow(docId) {
 }
 
 function firestoreErrorMessage(err) {
-  if (!err) return "Ralat tidak diketahui.";
+  if (!err) return t("calc.err.unknown");
   var c = err.code;
   if (c === "permission-denied") {
-    return "Firestore menafikan baca/tulis. Kemas kini firestore.rules (contoh: benarkan baca/tulis untuk pembangunan) atau gunakan Emulator — lihat PANDUAN-FIREBASE.md.";
+    return t("calc.err.permissionDenied");
   }
   var msg = err.message || String(err);
   if (msg.indexOf("index") !== -1 && msg.indexOf("https://") !== -1) {
-    return "Sejarah tidak dimuatkan: Firestore memerlukan indeks untuk koleksi ingredient_ledger. Buka konsol pelayar (F12) untuk pautan “create index”, atau jalankan firebase deploy --only firestore:indexes.";
+    return t("calc.err.indexMissing");
   }
   if (msg.length > 360) {
     return msg.slice(0, 300).trim() + "…";
@@ -163,8 +169,8 @@ function getIngredientStockStatus(ing) {
   if (!list.length) {
     return {
       key: "nolot",
-      label: "Tiada lot",
-      title: "Tiada rekod lot. Tambah belian untuk mula jejak stok."
+      label: t("calc.status.noLot"),
+      title: t("calc.status.noLotTitle")
     };
   }
   var sumRem = 0;
@@ -175,8 +181,8 @@ function getIngredientStockStatus(ing) {
   if (sumRem <= 0 || !active) {
     return {
       key: "out",
-      label: "Habis",
-      title: "Tiada baki untuk jualan (semua lot kosong)."
+      label: t("calc.status.out"),
+      title: t("calc.status.outTitle")
     };
   }
   var orig = typeof active.qtyOriginal === "number" ? active.qtyOriginal : parseFloat(active.qtyOriginal) || 0;
@@ -184,27 +190,25 @@ function getIngredientStockStatus(ing) {
   if (orig <= 0) {
     return {
       key: "ok",
-      label: "OK",
-      title: "Lot aktif ada baki; kuantiti asal tidak sah untuk nisbah."
+      label: t("calc.status.ok"),
+      title: t("calc.status.okInvalidTitle")
     };
   }
   var ratio = rem / orig;
+  var thresholdPct = Math.round(LOW_STOCK_ACTIVE_LOT_FRACTION * 100);
   if (ratio <= LOW_STOCK_ACTIVE_LOT_FRACTION) {
     return {
       key: "low",
-      label: "Rendah",
-      title:
-        "Lot FIFO aktif tinggal " +
-        Math.round(ratio * 100) +
-        "% daripada asal (ambang rendah ≤ " +
-        Math.round(LOW_STOCK_ACTIVE_LOT_FRACTION * 100) +
-        "%)."
+      label: t("calc.status.low"),
+      title: t("calc.status.lowTitle")
+        .replace("{pct}", String(Math.round(ratio * 100)))
+        .replace("{threshold}", String(thresholdPct))
     };
   }
   return {
     key: "ok",
-    label: "OK",
-    title: "Lot FIFO aktif melebihi ambang stok rendah (" + Math.round(LOW_STOCK_ACTIVE_LOT_FRACTION * 100) + "%)."
+    label: t("calc.status.ok"),
+    title: t("calc.status.okTitle").replace("{threshold}", String(thresholdPct))
   };
 }
 
@@ -246,11 +250,11 @@ function formatIngredientStockLineHtml(ing) {
 
   if (list.length) {
     return (
-      '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada baki. <strong>Tambah belian</strong>.</p>'
+      '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">' + t("calc.ing.noRemaining") + "</p>"
     );
   }
 
-  return '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">Tiada lot — <strong>Tambah belian</strong>.</p>';
+  return '<p class="ing-stock-line js-ing-stock-line ing-stock-line--muted">' + t("calc.ing.noLotLine") + "</p>";
 }
 
 function getActiveLedgerEntryIdForIngredient(ingId) {
@@ -309,6 +313,10 @@ function getActiveLedgerEntryIdForIngredient(ingId) {
   return bestId;
 }
 
+function stampIngredientFifoCosts() {
+  ingredients = applyFifoCostsToIngredients(ingredients, batchesByIngredientId);
+}
+
 function patchIngredientBatchDisplays() {
   var tbody = document.getElementById("ing-tbody");
   if (!tbody || !ingredients.length) return;
@@ -355,6 +363,17 @@ function setIngAddDraftError(text) {
   el.className = "kb-status kb-status--error ing-add-draft__err";
 }
 
+/**
+ * Kuantiti permulaan bila bahan baharu dicentang dalam resepi. Bahan yang disukat
+ * bermula sebagai julat; bahan dikira biji bermula pada 1 (min = max) dan pengguna
+ * boleh melebarkannya sendiri di Produk & kos.
+ */
+function defaultUsageForNewIngredient(unit) {
+  if (unit === "kg" || unit === "L") return { gunaMin: 0.02, gunaMax: 0.05, gunaUnit: unit };
+  if (isMassVolumeUnit(unit)) return { gunaMin: 15, gunaMax: 25, gunaUnit: unit };
+  return 1;
+}
+
 function resetIngAddDraftForm() {
   var nameEl = document.getElementById("ing-draft-name");
   var priceEl = document.getElementById("ing-draft-price");
@@ -367,17 +386,30 @@ function resetIngAddDraftForm() {
   setIngAddDraftError("");
 }
 
+function ingAddDraftBackdrop() {
+  return document.getElementById("ing-add-draft-backdrop");
+}
+
 function isIngAddDraftVisible() {
+  var backdrop = ingAddDraftBackdrop();
+  if (backdrop) return !backdrop.hidden;
   var panel = document.getElementById("ing-add-draft");
   return !!(panel && !panel.hidden);
 }
 
 function showIngAddDraftPanel() {
+  var backdrop = ingAddDraftBackdrop();
   var panel = document.getElementById("ing-add-draft");
-  if (!panel) return;
   resetIngAddDraftForm();
-  panel.hidden = false;
-  panel.removeAttribute("hidden");
+  if (backdrop) {
+    backdrop.hidden = false;
+    backdrop.removeAttribute("hidden");
+    backdrop.setAttribute("aria-hidden", "false");
+  }
+  if (panel) {
+    panel.hidden = false;
+    panel.removeAttribute("hidden");
+  }
   var nameEl = document.getElementById("ing-draft-name");
   if (nameEl) {
     try {
@@ -389,10 +421,17 @@ function showIngAddDraftPanel() {
 }
 
 function hideIngAddDraftPanel() {
+  var backdrop = ingAddDraftBackdrop();
   var panel = document.getElementById("ing-add-draft");
-  if (!panel) return;
-  panel.hidden = true;
-  panel.setAttribute("hidden", "");
+  if (backdrop) {
+    backdrop.hidden = true;
+    backdrop.setAttribute("hidden", "");
+    backdrop.setAttribute("aria-hidden", "true");
+  }
+  if (panel) {
+    panel.hidden = true;
+    panel.setAttribute("hidden", "");
+  }
   resetIngAddDraftForm();
 }
 
@@ -419,17 +458,18 @@ function formatFsDate(v) {
   try {
     var d = typeof v.toDate === "function" ? v.toDate() : null;
     if (!d || isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString(t("calc.dateLocale"), { day: "numeric", month: "short", year: "numeric" });
   } catch (e) {
     return "—";
   }
 }
 
 function ledgerKindLabel(k) {
-  if (k === "initial") return "Daftar";
-  if (k === "purchase") return "Beli";
-  if (k === "price_adjust") return "Harga";
-  if (k === "sale_consumption") return "Jualan";
+  if (k === "initial") return t("calc.ledger.initial");
+  if (k === "purchase") return t("calc.ledger.purchase");
+  if (k === "price_adjust") return t("calc.ledger.price");
+  if (k === "sale_consumption") return t("calc.ledger.sale");
+  if (k === "wastage") return t("calc.ledger.wastage");
   return k ? String(k) : "—";
 }
 
@@ -450,14 +490,27 @@ function docToLedgerEntry(d) {
   };
 }
 
+var INGREDIENT_UNITS = ["g", "kg", "ml", "L", "pcs", "biji", "keping", "paket", "botol"];
+
+function normalizeIngredientUnit(unit) {
+  var u = String(unit || "").trim();
+  var low = u.toLowerCase();
+  if (low === "pc" || low === "pcs" || low === "piece" || low === "pieces") return "pcs";
+  return u;
+}
+
 function fillUnitSelectElement(el, current) {
   if (!el) return;
-  var cur = current || "g";
-  el.innerHTML = ["g", "kg", "ml", "L", "biji", "keping", "paket"]
+  var cur = normalizeIngredientUnit(current) || "g";
+  var units = INGREDIENT_UNITS.slice();
+  if (cur && units.indexOf(cur) === -1) units.unshift(cur);
+  el.innerHTML = units
     .map(function (unit) {
       return "<option" + (unit === cur ? " selected" : "") + ">" + escapeHtml(unit) + "</option>";
     })
     .join("");
+  el.value = cur;
+  el.disabled = false;
 }
 
 function cloneUsageDeep(u) {
@@ -465,10 +518,22 @@ function cloneUsageDeep(u) {
   Object.keys(u).forEach(function (k) {
     var v = u[k];
     if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-      o[k] = {
-        guna: typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0,
+      var entry = {
         gunaUnit: v.gunaUnit != null && v.gunaUnit !== "" ? String(v.gunaUnit) : null
       };
+      if (typeof v.gunaMin !== "undefined") {
+        entry.gunaMin = typeof v.gunaMin === "number" ? v.gunaMin : parseFloat(v.gunaMin) || 0;
+      }
+      if (typeof v.gunaMax !== "undefined") {
+        entry.gunaMax = typeof v.gunaMax === "number" ? v.gunaMax : parseFloat(v.gunaMax) || 0;
+      }
+      if (typeof v.guna !== "undefined") {
+        entry.guna = typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0;
+      }
+      if (typeof entry.gunaMin === "undefined" && typeof entry.gunaMax === "undefined") {
+        entry.guna = typeof v.guna === "number" ? v.guna : parseFloat(v.guna) || 0;
+      }
+      o[k] = entry;
     } else {
       o[k] = v;
     }
@@ -507,9 +572,13 @@ function setModalPanelsVisibility(mode) {
   var priceInp = document.getElementById("modal-price");
   var priceField = priceInp ? priceInp.closest(".field") : null;
   var statsEl = document.getElementById("modal-stats");
+  var toolbar = document.getElementById("modal-ing-toolbar");
   if (single) {
     single.hidden = mode !== "single";
     single.style.display = mode === "single" ? "" : "none";
+  }
+  if (toolbar) {
+    toolbar.hidden = mode !== "single";
   }
   if (pkg) {
     pkg.hidden = mode !== "package";
@@ -523,14 +592,14 @@ function setModalPanelsVisibility(mode) {
 }
 
 var isPackageCatalogMode = false;
-var MODIFIERS_UI_FULL = {
-  titleText: "Produk & kos",
-  descHtml: "<strong>Produk</strong> — resipi &amp; harga. Pakej: <strong>Menu Produk</strong> (pejabat belakang)."
-};
-var MODIFIERS_UI_CATALOG = {
-  titleText: "Pakej",
-  descHtml: "Produk tunggal: <strong>Inventori → Produk &amp; kos</strong>."
-};
+
+/** Tajuk & keterangan halaman Produk — dibaca semasa render supaya ikut bahasa aktif. */
+function modifiersPageChrome() {
+  if (isPackageCatalogMode) {
+    return { titleText: t("calc.mod.titleCatalog"), descHtml: t("calc.mod.descCatalog") };
+  }
+  return { titleText: t("calc.mod.titleFull"), descHtml: t("calc.mod.descFull") };
+}
 
 function syncPackageCatalogChrome() {
   document.documentElement.classList.toggle("kb-package-catalog", isPackageCatalogMode);
@@ -538,7 +607,7 @@ function syncPackageCatalogChrome() {
   if (navIng) navIng.hidden = isPackageCatalogMode;
   var h = document.getElementById("h-mod");
   var desc = document.querySelector("#page-modifiers .page-desc");
-  var src = isPackageCatalogMode ? MODIFIERS_UI_CATALOG : MODIFIERS_UI_FULL;
+  var src = modifiersPageChrome();
   if (h) h.textContent = src.titleText;
   if (desc) desc.innerHTML = src.descHtml;
 }
@@ -584,7 +653,21 @@ var ingSuccessMsgTimer = null;
 var appLoadingEl = document.getElementById("app-loading");
 var streamsReady = { ingredients: false, modifiers: false };
 
-var modalState = { open: false, productId: null, snapshot: null, draftProduct: null, mode: "single" };
+var modalState = {
+  open: false,
+  productId: null,
+  snapshot: null,
+  draftProduct: null,
+  mode: "single",
+  titleKey: ""
+};
+
+/** Tajuk modal disimpan sebagai kunci supaya ia boleh dipasang semula bila bahasa bertukar. */
+function setModalTitle(key) {
+  modalState.titleKey = key;
+  var el = document.getElementById("modal-title");
+  if (el) el.textContent = t(key);
+}
 
 var selectedLedgerIngredientId = null;
 var ledgerUnsubscribe = null;
@@ -623,10 +706,12 @@ function recomputeProductsFromRaw() {
 }
 
 function unitOptions(current) {
-  var units = ["g", "kg", "ml", "L", "biji", "keping", "paket"];
+  var cur = normalizeIngredientUnit(current);
+  var units = INGREDIENT_UNITS.slice();
+  if (cur && units.indexOf(cur) === -1) units.unshift(cur);
   return units
     .map(function (u) {
-      return "<option" + (u === current ? " selected" : "") + ">" + escapeHtml(u) + "</option>";
+      return "<option" + (u === cur ? " selected" : "") + ">" + escapeHtml(u) + "</option>";
     })
     .join("");
 }
@@ -642,19 +727,29 @@ function renderIngTable() {
     tr.innerHTML =
       '<td class="ing-cell-name">' +
       '<span class="ing-name-display">' +
-      escapeHtml(ing.name && String(ing.name).trim() ? ing.name.trim() : "Tanpa nama") +
+      escapeHtml(ing.name && String(ing.name).trim() ? ing.name.trim() : t("calc.unnamed")) +
       "</span>" +
       formatIngredientStockLineHtml(ing) +
       "</td>" +
-      '<td class="ing-col-num ing-col-baki ing-col--readonly" title="Baki / asal (ikut giliran lot)">' +
-      '<span class="ing-ref-pack ing-ref-pack--baki js-ing-baki-pack" aria-label="Baki berbanding asal">' +
+      '<td class="ing-col-num ing-col-baki ing-col--readonly" title="' +
+      escapeAttr(t("calc.ing.bakiTitle")) +
+      '">' +
+      '<span class="ing-ref-pack ing-ref-pack--baki js-ing-baki-pack" aria-label="' +
+      escapeAttr(t("calc.ing.bakiAria")) +
+      '">' +
       escapeHtml(formatIngredientBakiPackDisplay(ing)) +
       "</span></td>" +
-      '<td class="ing-col-unit ing-col--readonly" title="Unit pakej rujukan">' +
+      '<td class="ing-col-unit ing-col--readonly" title="' +
+      escapeAttr(t("calc.ing.unitTitle")) +
+      '">' +
       '<span class="ing-ref-unit">' +
       escapeHtml(ing.unit || "—") +
       "</span></td>" +
-      '<td class="num ing-col-cpu" data-label="Kos / unit" title="Kos seunit">' +
+      '<td class="num ing-col-cpu" data-label="' +
+      escapeAttr(t("calc.th.costPerUnit")) +
+      '" title="' +
+      escapeAttr(t("calc.ing.cpuTitle")) +
+      '">' +
       formatRM(cpu) +
       "</td>" +
       ingredientStockStatusCellHtml(ing) +
@@ -662,10 +757,16 @@ function renderIngTable() {
       '<div class="ing-actions">' +
       '<button type="button" class="btn btn--outline btn--sm js-open-ing-drawer" data-id="' +
       escapeAttr(String(ing.id)) +
-      '" title="Tambah belian">Tambah belian</button>' +
+      '" title="' +
+      escapeAttr(t("calc.ing.addPurchase")) +
+      '">' +
+      escapeHtml(t("calc.ing.addPurchase")) +
+      "</button>" +
       '<button type="button" class="btn btn--danger btn--sm js-remove-ing" data-id="' +
       escapeAttr(String(ing.id)) +
-      '">Buang</button>' +
+      '">' +
+      escapeHtml(t("calc.btn.remove")) +
+      "</button>" +
       "</div></td>";
     tbody.appendChild(tr);
   });
@@ -724,7 +825,10 @@ function renderIngredientImpactStatus(affected) {
   });
   setLineStatus(
     "ing-drawer-impact-status",
-    "Kos naik — " + affected.length + " produk kini margin rendah (<" + LOW_MARGIN_THRESHOLD_PCT + "%): " + names.join(", "),
+    t("calc.impact.warning")
+      .replace("{count}", String(affected.length))
+      .replace("{threshold}", String(LOW_MARGIN_THRESHOLD_PCT))
+      .replace("{names}", names.join(", ")),
     "warning"
   );
 }
@@ -758,7 +862,8 @@ function renderLedgerRows(snap) {
   if (!snap || snap.empty) {
     tbody.innerHTML =
       '<tr><td colspan="4" class="ing-ledger-empty">' +
-      'Tiada sejarah. Simpan rekod pertama di atas.</td></tr>';
+      escapeHtml(t("calc.drawer.historyEmpty")) +
+      "</td></tr>";
     return;
   }
 
@@ -876,7 +981,7 @@ function openIngredientDrawer(ingredientId) {
   var bd = document.getElementById("ing-drawer-backdrop");
   var title = document.getElementById("ing-drawer-title");
   var sub = document.getElementById("ing-drawer-sub");
-  if (title) title.textContent = ing.name || "Bahan";
+  if (title) title.textContent = ing.name || t("calc.ingredientFallback");
   if (sub) {
     var u = ing.unit || "";
     var cpu = formatRM(ingredientDisplayCostPerUnit(ing));
@@ -921,10 +1026,40 @@ function openIngredientDrawer(ingredientId) {
 }
 
 function ingSummaryLine(ing, usageVal) {
-  var part = getUsagePart(ing, usageVal);
-  if (!part.guna) return "";
-  var uShow = normalizeUnit(part.gunaUnit) === "L" ? "liter" : part.gunaUnit;
-  return ing.name + " (" + part.guna + " " + uShow + ")";
+  if (!usageBaseQty(ing, usageVal, "nominal")) return "";
+  return formatUsageSummary(ing, usageVal);
+}
+
+/**
+ * Baca sepasang input min – max satu baris resepi. Min = max bermakna kuantiti
+ * tepat, dan disimpan sebagai nilai tetap `{ guna }` supaya data kekal ringkas
+ * dan serasi dengan resipi lama.
+ */
+function buildDraftUsageFromRow(row, ing) {
+  if (!row || !ing) return null;
+  var cb = row.querySelector(".js-modal-check");
+  if (!cb || !cb.checked) return null;
+
+  var minInp = row.querySelector(".js-modal-qty-min");
+  var maxInp = row.querySelector(".js-modal-qty-max");
+  var uomSel = row.querySelector(".js-modal-uom");
+  var u = uomSel ? uomSel.value : ing.unit;
+
+  var min = parseFloat(minInp && minInp.value) || 0;
+  var maxRaw = maxInp && maxInp.value;
+  var max = maxRaw === "" || maxRaw == null ? min : parseFloat(maxRaw) || 0;
+  if (max < min) {
+    var tmp = min;
+    min = max;
+    max = tmp;
+  }
+
+  if (max > min + 1e-12) {
+    var bounds = parseUsageBounds({ gunaMin: min, gunaMax: max, gunaUnit: u }, ing);
+    return { gunaMin: min, gunaMax: max, guna: bounds.gunaNominal, gunaUnit: u };
+  }
+  if (isMassVolumeUnit(ing.unit)) return { guna: min, gunaUnit: u };
+  return min;
 }
 
 /** Produk dalam modal edit, atau draf tambah baharu (belum wujud di Firestore). */
@@ -951,8 +1086,7 @@ function renderPackageMemberCheckboxes() {
     return x.menuKind !== "package" && String(x.id) !== String(modalState.productId || "");
   });
   if (!singles.length) {
-    wrap.innerHTML =
-      '<p class="modal-package-empty">Tiada produk tunggal — tambah di <strong>Produk &amp; kos</strong>.</p>';
+    wrap.innerHTML = '<p class="modal-package-empty">' + t("calc.modal.noSingles") + "</p>";
     return;
   }
   wrap.innerHTML = singles
@@ -998,9 +1132,9 @@ function marginBadgeClass(marginPct) {
 /** Label ringkas bahasa manusia untuk margin — bantu Owner faham tanpa perlu kira sendiri. */
 function marginQualitativeLabel(marginPct) {
   if (marginPct == null) return "-";
-  if (marginPct < MARGIN_THRESHOLD_DANGER) return "Rendah";
-  if (marginPct < MARGIN_THRESHOLD_WARNING) return "Sederhana";
-  return "Baik";
+  if (marginPct < MARGIN_THRESHOLD_DANGER) return t("calc.margin.low");
+  if (marginPct < MARGIN_THRESHOLD_WARNING) return t("calc.margin.medium");
+  return t("calc.margin.good");
 }
 
 function productTileHtml(p) {
@@ -1008,7 +1142,7 @@ function productTileHtml(p) {
     var mids = p.packageMemberIds && p.packageMemberIds.length ? p.packageMemberIds : [];
     var ingText =
       mids.length === 0
-        ? escapeHtml("Tiada produk dipilih")
+        ? escapeHtml(t("calc.tile.noProducts"))
         : mids
             .map(function (mid) {
               var comp = products.find(function (x) {
@@ -1022,20 +1156,27 @@ function productTileHtml(p) {
       '<div class="product-tile__head">' +
       '<h3 class="product-tile__name">' +
       escapeHtml(p.name) +
-      '</h3><span class="product-tile__tag product-tile__tag--pkg">Pakej</span></div>' +
+      '</h3><span class="product-tile__tag product-tile__tag--pkg">' +
+      escapeHtml(t("calc.tile.packageTag")) +
+      "</span></div>" +
       '<div class="product-tile__ings">' +
       ingText +
       '</div><div class="product-tile__footer">' +
       '<div class="product-tile__footer-actions">' +
       '<button type="button" class="btn btn--ghost btn--sm js-edit-product" data-id="' +
       escapeAttr(String(p.id)) +
-      '">Sunting</button>' +
+      '">' +
+      escapeHtml(t("calc.btn.edit")) +
+      "</button>" +
       '<button type="button" class="btn btn--danger btn--sm js-delete-product" data-id="' +
       escapeAttr(String(p.id)) +
-      '">Padam</button></div></div></article>'
+      '">' +
+      escapeHtml(t("calc.btn.delete")) +
+      "</button></div></div></article>"
     );
   }
-  var cost = productCost(ingredients, p);
+  var costRange = productCostRange(ingredients, p);
+  var cost = costRange.nominal;
   var profit = p.sellingPrice - cost;
   var marginPct = p.sellingPrice > 0 ? Math.round((profit / p.sellingPrice) * 1000) / 10 : null;
   var marginBadgeCls = marginBadgeClass(marginPct);
@@ -1046,7 +1187,7 @@ function productTileHtml(p) {
       return usageBaseQty(ing, uv) > 0 ? ingSummaryLine(ing, uv) : null;
     })
     .filter(Boolean);
-  var ingText = lines.length ? lines.join(" · ") : "Tiada bahan";
+  var ingText = lines.length ? lines.join(" · ") : t("calc.tile.noIngredients");
   return (
     '<article class="product-tile">' +
     '<div class="product-tile__head">' +
@@ -1056,14 +1197,20 @@ function productTileHtml(p) {
     '<div class="product-tile__ings">' +
     escapeHtml(ingText) +
     "</div>" +
-    '<div class="product-tile__row"><span>Harga modal</span><strong>' +
+    '<div class="product-tile__row"><span>' +
+    escapeHtml(t("calc.tile.costPrice")) +
+    "</span><strong>" +
     formatRM(cost) +
     "</strong></div>" +
-    '<div class="product-tile__row"><span>Harga jual</span><strong>' +
+    '<div class="product-tile__row"><span>' +
+    escapeHtml(t("calc.tile.sellPrice")) +
+    "</span><strong>" +
     formatRM(p.sellingPrice) +
     "</strong></div>" +
     '<div class="product-tile__footer">' +
-    '<div class="product-tile__footer-profit"><span>Untung</span><strong style="color:' +
+    '<div class="product-tile__footer-profit"><span>' +
+    escapeHtml(t("calc.tile.profit")) +
+    '</span><strong style="color:' +
     (profit >= 0 ? "var(--success)" : "var(--danger)") +
     '">' +
     formatRM(profit) +
@@ -1075,10 +1222,14 @@ function productTileHtml(p) {
     '<div class="product-tile__footer-actions">' +
     '<button type="button" class="btn btn--ghost btn--sm js-edit-product" data-id="' +
     escapeAttr(String(p.id)) +
-    '">Sunting</button>' +
+    '">' +
+    escapeHtml(t("calc.btn.edit")) +
+    "</button>" +
     '<button type="button" class="btn btn--danger btn--sm js-delete-product" data-id="' +
     escapeAttr(String(p.id)) +
-    '">Padam</button></div></div></article>'
+    '">' +
+    escapeHtml(t("calc.btn.delete")) +
+    "</button></div></div></article>"
   );
 }
 
@@ -1092,7 +1243,9 @@ function renderProductGrid() {
     html = pkgs.map(productTileHtml).join("");
     html +=
       '<div class="product-grid__add-row">' +
-      '<button type="button" class="product-tile tile-add tile-add--pkg" id="btn-add-package"><span>+</span>Pakej</button>' +
+      '<button type="button" class="product-tile tile-add tile-add--pkg" id="btn-add-package"><span>+</span>' +
+      escapeHtml(t("calc.grid.addPackage")) +
+      "</button>" +
       "</div>";
   } else {
     var singlesForGrid = products.filter(function (x) {
@@ -1101,7 +1254,9 @@ function renderProductGrid() {
     html = singlesForGrid.map(productTileHtml).join("");
     html +=
       '<div class="product-grid__add-row">' +
-      '<button type="button" class="product-tile tile-add" id="btn-add-product"><span>+</span>Produk</button>' +
+      '<button type="button" class="product-tile tile-add" id="btn-add-product"><span>+</span>' +
+      escapeHtml(t("calc.grid.addProduct")) +
+      "</button>" +
       "</div>";
   }
   grid.innerHTML = html;
@@ -1140,7 +1295,7 @@ function openCreateProductModal() {
   };
   document.getElementById("modal-name").value = "";
   document.getElementById("modal-price").value = "0";
-  document.getElementById("modal-title").textContent = "Tambah item (resipi)";
+  setModalTitle("calc.modal.titleAddItem");
   var delBtn = document.getElementById("modal-delete");
   if (delBtn) delBtn.hidden = true;
   var qa = document.getElementById("ing-quick-add");
@@ -1161,7 +1316,7 @@ function openCreatePackageModal() {
   if (!singles.length) {
     setLineStatus(
       "mod-firestore-status",
-      "Tambah produk tunggal di Produk & kos dahulu.",
+      t("calc.msg.addSingleFirst"),
       "error"
     );
     return;
@@ -1183,7 +1338,7 @@ function openCreatePackageModal() {
   };
   document.getElementById("modal-name").value = "";
   document.getElementById("modal-price").value = "0";
-  document.getElementById("modal-title").textContent = "Tambah pakej";
+  setModalTitle("calc.modal.titleAddPackage");
   var delBtn = document.getElementById("modal-delete");
   if (delBtn) delBtn.hidden = true;
   var qa = document.getElementById("ing-quick-add");
@@ -1227,7 +1382,7 @@ function openModal(productId) {
   }
   document.getElementById("modal-name").value = p.name;
   document.getElementById("modal-price").value = String(isPkg ? 0 : p.sellingPrice);
-  document.getElementById("modal-title").textContent = isPkg ? "Sunting pakej" : "Sunting item (resipi)";
+  setModalTitle(isPkg ? "calc.modal.titleEditPackage" : "calc.modal.titleEditItem");
   var delBtn = document.getElementById("modal-delete");
   if (delBtn) delBtn.hidden = false;
   var qa = document.getElementById("ing-quick-add");
@@ -1284,12 +1439,8 @@ async function onDeleteProduct(productId) {
     return String(x.id) === id;
   });
   if (!p) return;
-  var label = p.name && p.name.trim() ? p.name : "produk ini";
-  if (
-    !confirm(
-      'Padam "' + label + '" dari Produk & kos?\n\nDokumen akan dibuang dari Firestore (modifiers). Tindakan ini tidak boleh dibuat asal.'
-    )
-  ) {
+  var label = p.name && p.name.trim() ? p.name : t("calc.thisProduct");
+  if (!confirm(t("calc.confirm.deleteProduct").replace("{name}", label))) {
     return;
   }
   try {
@@ -1316,13 +1467,35 @@ function renderModalBody() {
   list.innerHTML = ingredients
     .map(function (ing) {
       var uv = p.usage[ing.id];
-      var part = getUsagePart(ing, uv);
-      var checked = usageBaseQty(ing, uv) > 0;
-      var lineCost = costPerUnit(ing) * (checked ? usageBaseQty(ing, uv) : 0);
+      var bounds = parseUsageBounds(uv, ing);
+      var checked = usageBaseQty(ing, uv, "nominal") > 0;
+      var lineNomCost = costPerUnit(ing) * usageBaseQty(ing, uv, "nominal");
+      var lineCostText = formatRM(checked ? lineNomCost : 0);
       var safeId = String(ing.id).replace(/[^a-zA-Z0-9_-]/g, "_");
       var uomCell = isMassVolumeUnit(ing.unit)
-        ? uomSelectHtml(ing, part.gunaUnit)
+        ? uomSelectHtml(ing, bounds.gunaUnit)
         : uomPlaceholderHtml();
+      var qtyCell =
+        '<div class="ing-qty-range">' +
+        '<input type="number" class="js-modal-qty-min" min="0" step="0.001" value="' +
+        (checked ? bounds.gunaMin : 0) +
+        '" title="' +
+        escapeAttr(t("calc.modal.qtyMin")) +
+        '" aria-label="' +
+        escapeAttr(t("calc.modal.qtyMin")) +
+        '" ' +
+        (checked ? "" : "disabled") +
+        " />" +
+        '<span class="ing-qty-range__sep" aria-hidden="true">–</span>' +
+        '<input type="number" class="js-modal-qty-max" min="0" step="0.001" value="' +
+        (checked ? bounds.gunaMax : 0) +
+        '" title="' +
+        escapeAttr(t("calc.modal.qtyMaxTitle")) +
+        '" aria-label="' +
+        escapeAttr(t("calc.modal.qtyMax")) +
+        '" ' +
+        (checked ? "" : "disabled") +
+        " /></div>";
       return (
         '<div class="ing-check-row' +
         (checked ? "" : " is-disabled") +
@@ -1344,15 +1517,12 @@ function renderModalBody() {
         "/" +
         escapeHtml(ing.unit) +
         "</span></label>" +
-        '<input type="number" class="js-modal-qty" min="0" step="0.001" value="' +
-        (checked ? part.guna : 0) +
-        '" ' +
-        (checked ? "" : "disabled") +
-        " />" +
+        '<div class="ing-check-row__controls">' +
+        qtyCell +
         uomCell +
         '<span class="line-cost">' +
-        formatRM(lineCost) +
-        "</span></div>"
+        lineCostText +
+        "</span></div></div>"
       );
     })
     .join("");
@@ -1360,7 +1530,7 @@ function renderModalBody() {
   list.querySelectorAll(".js-modal-check").forEach(function (cb) {
     cb.addEventListener("change", onModalCheck);
   });
-  list.querySelectorAll(".js-modal-qty").forEach(function (inp) {
+  list.querySelectorAll(".js-modal-qty-min, .js-modal-qty-max").forEach(function (inp) {
     inp.addEventListener("input", onModalQty);
   });
   list.querySelectorAll(".js-modal-uom").forEach(function (sel) {
@@ -1376,38 +1546,46 @@ function syncModalUsageFromDom() {
     var ing = ingredients.find(function (x) {
       return String(x.id) === String(id);
     });
-    var cb = row.querySelector(".js-modal-check");
-    var qtyInp = row.querySelector(".js-modal-qty");
-    var uomSel = row.querySelector(".js-modal-uom");
     if (!ing) return;
-    if (cb.checked) {
-      var guna = parseFloat(qtyInp.value) || 0;
-      if (isMassVolumeUnit(ing.unit)) {
-        p.usage[id] = { guna: guna, gunaUnit: uomSel ? uomSel.value : ing.unit };
-      } else {
-        p.usage[id] = guna;
-      }
-    } else {
-      delete p.usage[id];
-    }
+    var entry = buildDraftUsageFromRow(row, ing);
+    if (entry != null) p.usage[id] = entry;
+    else delete p.usage[id];
   });
 }
 
 function onModalCheck(e) {
   var row = e.target.closest(".ing-check-row");
   if (!row) return;
-  var qtyInp = row.querySelector(".js-modal-qty");
+  var id = row.dataset.ingId;
+  var ing = ingredients.find(function (x) {
+    return String(x.id) === String(id);
+  });
+  var minInp = row.querySelector(".js-modal-qty-min");
+  var maxInp = row.querySelector(".js-modal-qty-max");
   var uomSel = row.querySelector(".js-modal-uom");
   if (e.target.checked) {
     row.classList.remove("is-disabled");
-    qtyInp.disabled = false;
+    var seed = ing && isMassVolumeUnit(ing.unit) ? "10" : "1";
+    if (minInp) {
+      minInp.disabled = false;
+      if (!parseFloat(minInp.value)) minInp.value = seed;
+    }
+    if (maxInp) {
+      maxInp.disabled = false;
+      if (!parseFloat(maxInp.value)) maxInp.value = minInp ? minInp.value : seed;
+    }
     if (uomSel) uomSel.disabled = false;
-    if (!parseFloat(qtyInp.value)) qtyInp.value = "1";
   } else {
     row.classList.add("is-disabled");
-    qtyInp.disabled = true;
+    if (minInp) {
+      minInp.disabled = true;
+      minInp.value = "0";
+    }
+    if (maxInp) {
+      maxInp.disabled = true;
+      maxInp.value = "0";
+    }
     if (uomSel) uomSel.disabled = true;
-    qtyInp.value = "0";
   }
   syncModalLineCost(row);
   updateModalStats();
@@ -1431,18 +1609,18 @@ function syncModalLineCost(row) {
     return String(x.id) === String(id);
   });
   var cb = row.querySelector(".js-modal-check");
-  var qtyInp = row.querySelector(".js-modal-qty");
-  var uomSel = row.querySelector(".js-modal-uom");
   var lineEl = row.querySelector(".line-cost");
   if (!ing || !lineEl) return;
   if (!cb.checked) {
     lineEl.textContent = formatRM(0);
     return;
   }
-  var guna = parseFloat(qtyInp.value) || 0;
-  var gunaUnit = uomSel ? uomSel.value : ing.unit;
-  var baseQty = usageBaseQty(ing, isMassVolumeUnit(ing.unit) ? { guna: guna, gunaUnit: gunaUnit } : guna);
-  lineEl.textContent = formatRM(costPerUnit(ing) * baseQty);
+  var entry = buildDraftUsageFromRow(row, ing);
+  var nomCost = costPerUnit(ing) * usageBaseQty(ing, entry, "nominal");
+  lineEl.textContent = formatRM(nomCost);
+  var minCost = costPerUnit(ing) * usageBaseQty(ing, entry, "min");
+  var maxCost = costPerUnit(ing) * usageBaseQty(ing, entry, "max");
+  lineEl.title = maxCost > minCost + 1e-9 ? formatRMRange(minCost, maxCost) : "";
 }
 
 function updateModalStats() {
@@ -1460,44 +1638,37 @@ function updateModalStats() {
     var ing = ingredients.find(function (x) {
       return String(x.id) === String(id);
     });
-    var cb = row.querySelector(".js-modal-check");
-    var qtyInp = row.querySelector(".js-modal-qty");
-    var uomSel = row.querySelector(".js-modal-uom");
-    if (!cb || !cb.checked || !ing) return;
-    var guna = parseFloat(qtyInp.value) || 0;
-    if (isMassVolumeUnit(ing.unit)) {
-      draftUsage[id] = { guna: guna, gunaUnit: uomSel ? uomSel.value : ing.unit };
-    } else {
-      draftUsage[id] = guna;
-    }
+    if (!ing) return;
+    var entry = buildDraftUsageFromRow(row, ing);
+    if (entry != null) draftUsage[id] = entry;
   });
 
-  var cost = 0;
-  ingredients.forEach(function (ing) {
-    var entry = draftUsage[ing.id];
-    if (entry == null) return;
-    var bq = usageBaseQty(ing, entry);
-    if (bq > 0) cost += costPerUnit(ing) * bq;
-  });
+  var costRange = productCostRange(ingredients, { usage: draftUsage });
+  var cost = costRange.nominal;
   var profit = price - cost;
-  var foodCostPct = price > 0 ? Math.round((cost / price) * 1000) / 10 : null;
   var marginPct = price > 0 ? Math.round((profit / price) * 1000) / 10 : null;
 
   document.getElementById("modal-ing-list").querySelectorAll(".ing-check-row").forEach(syncModalLineCost);
 
+  var costLabel = formatRM(cost);
+
   document.getElementById("modal-stats").innerHTML =
-    '<div><span>Jumlah harga modal</span><strong>' +
-    formatRM(cost) +
-    '<span class="stat-sub">' +
-    (foodCostPct == null ? "-" : foodCostPct + "% kos bahan") +
-    '</span></strong></div><div class="stat-sell"><span>Harga jual</span><strong>' +
+    '<div><span>' +
+    escapeHtml(t("calc.stats.totalCost")) +
+    '</span><strong>' +
+    costLabel +
+    '</strong></div><div class="stat-sell"><span>' +
+    escapeHtml(t("calc.tile.sellPrice")) +
+    '</span><strong>' +
     formatRM(price) +
     '</strong></div><div class="stat-profit' +
     (profit < 0 ? " is-loss" : "") +
-    '"><span>Untung</span><strong>' +
+    '"><span>' +
+    escapeHtml(t("calc.tile.profit")) +
+    '</span><strong>' +
     formatRM(profit) +
     '<span class="stat-sub">' +
-    (marginPct == null ? "-" : marginPct + "% margin") +
+    (marginPct == null ? "-" : marginPct + t("calc.stats.marginSuffix")) +
     (marginPct == null
       ? ""
       : ' <span class="badge ' + marginBadgeClass(marginPct) + '">' + marginQualitativeLabel(marginPct) + "</span>") +
@@ -1690,6 +1861,7 @@ async function init() {
       ingredients.sort(function (a, b) {
         return (a.sortIndex || 0) - (b.sortIndex || 0);
       });
+      stampIngredientFifoCosts();
       clearStatusIfError("ing-firestore-status");
       renderIngTable();
       if (pendingFocusIngredientId) {
@@ -1731,7 +1903,13 @@ async function init() {
     subscribeIngredientBatches(
     function (snap) {
       batchesByIngredientId = groupBatchesByIngredientId(snap);
+      stampIngredientFifoCosts();
       patchIngredientBatchDisplays();
+      renderProductGrid();
+      if (modalState.open) {
+        renderModalBody();
+        updateModalStats();
+      }
       if (selectedLedgerIngredientId && lastLedgerSnapForDrawer) {
         renderLedgerRows(lastLedgerSnapForDrawer);
       }
@@ -1739,7 +1917,9 @@ async function init() {
     function (err) {
       console.error(err);
       batchesByIngredientId = {};
+      stampIngredientFifoCosts();
       patchIngredientBatchDisplays();
+      renderProductGrid();
       if (selectedLedgerIngredientId && lastLedgerSnapForDrawer) {
         renderLedgerRows(lastLedgerSnapForDrawer);
       }
@@ -1795,6 +1975,24 @@ async function init() {
       hideIngAddDraftPanel();
     });
   }
+  var ingDraftClose = document.getElementById("ing-draft-close");
+  if (ingDraftClose) {
+    ingDraftClose.addEventListener("click", function () {
+      hideIngAddDraftPanel();
+    });
+  }
+  var ingDraftBackdrop = document.getElementById("ing-add-draft-backdrop");
+  if (ingDraftBackdrop) {
+    ingDraftBackdrop.addEventListener("click", function (e) {
+      if (e.target === ingDraftBackdrop) hideIngAddDraftPanel();
+    });
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && isIngAddDraftVisible()) {
+      e.preventDefault();
+      hideIngAddDraftPanel();
+    }
+  });
 
   var ingDraftForm = document.getElementById("ing-add-draft-form");
   if (ingDraftForm) {
@@ -1909,6 +2107,24 @@ async function init() {
   });
 
   window.addEventListener("hashchange", syncPageFromHash);
+
+  onLocaleChange(function () {
+    syncPackageCatalogChrome();
+    renderIngTable();
+    renderProductGrid();
+    if (modalState.open) {
+      if (modalState.titleKey) setModalTitle(modalState.titleKey);
+      renderModalBody();
+      updateModalStats();
+    }
+    if (selectedLedgerIngredientId && lastLedgerSnapForDrawer) {
+      renderLedgerRows(lastLedgerSnapForDrawer);
+    }
+    var bulkBd = document.getElementById("bulk-purchase-backdrop");
+    if (bulkBd && !bulkBd.hidden) {
+      rerenderBulkTable();
+    }
+  });
 
   document.getElementById("modal-close").addEventListener("click", closeModal);
   document.getElementById("modal-cancel").addEventListener("click", closeModal);
@@ -2036,7 +2252,11 @@ async function init() {
       setDrawerLogStatus("Jumlah dibeli mesti > 0.", "error");
       return;
     }
-    var unit = document.getElementById("ing-log-unit").value;
+    var unit = normalizeIngredientUnit(
+      (document.getElementById("ing-log-unit") && document.getElementById("ing-log-unit").value) ||
+        ing.unit ||
+        "g"
+    );
     var notes = "";
     var purchaseAt = Timestamp.now();
     var sortIdx = typeof ing.sortIndex === "number" ? ing.sortIndex : 0;
@@ -2096,6 +2316,7 @@ async function init() {
       if (titleEl) titleEl.textContent = newName;
       setDrawerLogStatus("Disimpan.", "ok");
       patchIngredientBatchDisplays();
+      if (modalState.open) renderModalBody();
       renderIngredientImpactStatus(cpu > oldCpu ? affectedProductsBelowMargin(id, ing, oldCpu, cpu) : []);
     } catch (err) {
       console.error(err);
@@ -2192,11 +2413,7 @@ async function init() {
         totalAmountRm: price,
         notes: "Tambah bahan (resipi)"
       });
-      if (isMassVolumeUnit(unit)) {
-        p.usage[ref.id] = { guna: unit === "kg" || unit === "L" ? 0.05 : 50, gunaUnit: unit };
-      } else {
-        p.usage[ref.id] = 1;
-      }
+      p.usage[ref.id] = defaultUsageForNewIngredient(unit);
       if (!modalState.draftProduct) {
         await persistModifier(p.id, {
           name: p.name,
@@ -2226,7 +2443,7 @@ var bulkRows = [];
 var bulkRowIdCounter = 0;
 
 function bulkUnitOptions(selected) {
-  return ["g", "kg", "ml", "L", "pcs", "biji", "keping", "paket", "botol"]
+  return INGREDIENT_UNITS
     .map(function (u) {
       return "<option" + (u === selected ? " selected" : "") + ">" + escapeHtml(u) + "</option>";
     })
@@ -2257,14 +2474,17 @@ function renderBulkRow(row) {
   var rid = row.id;
   var isNew = row.isNew;
   var nameCell = isNew
-    ? '<div style="display:flex;align-items:center;gap:4px">' +
+    ? '<div class="bulk-ing-name-wrap">' +
       '<input type="text" class="bulk-ing-name" data-rid="' +
       rid +
-      '" ' +
-      'value="' +
+      '" value="' +
       escapeAttr(row.name || "") +
-      '" placeholder="Nama bahan baru" style="flex:1">' +
-      '<span class="bulk-tag-new">Baru</span></div>'
+      '" placeholder="' +
+      escapeAttr(t("calc.bulk.newNamePh")) +
+      '" />' +
+      '<span class="bulk-tag-new">' +
+      escapeHtml(t("calc.bulk.tagNew")) +
+      "</span></div>"
     : '<select class="bulk-ing-select" data-rid="' +
       rid +
       '">' +
@@ -2275,30 +2495,47 @@ function renderBulkRow(row) {
     '<div class="bulk-ing-row" data-rid="' +
     rid +
     '">' +
+    '<div class="bulk-ing-col bulk-ing-col--name">' +
     nameCell +
+    "</div>" +
     '<input type="number" class="bulk-ing-qty" data-rid="' +
     rid +
-    '" ' +
-    'value="' +
+    '" value="' +
     (row.qty || 1) +
-    '" min="0.001" step="any">' +
+    '" min="0.001" step="any" aria-label="' +
+    escapeAttr(t("calc.bulk.colQty")) +
+    '">' +
     '<input type="number" class="bulk-ing-price" data-rid="' +
     rid +
-    '" ' +
-    'value="' +
+    '" value="' +
     (row.price || 0) +
-    '" min="0" step="any" placeholder="RM">' +
+    '" min="0" step="any" placeholder="0.00" aria-label="' +
+    escapeAttr(t("calc.bulk.priceAria")) +
+    '">' +
     '<select class="bulk-ing-unit" data-rid="' +
     rid +
+    '" aria-label="' +
+    escapeAttr(t("calc.field.unit")) +
     '">' +
     bulkUnitOptions(row.unit || "pcs") +
     "</select>" +
     '<button type="button" class="bulk-btn-del" data-rid="' +
     rid +
-    '" ' +
-    'aria-label="Buang baris">✕</button>' +
+    '" aria-label="' +
+    escapeAttr(t("calc.bulk.removeRowAria")) +
+    '">✕</button>' +
     "</div>"
   );
+}
+
+function rerenderBulkTable() {
+  var container = document.getElementById("bulk-rows");
+  if (!container) return;
+  container.innerHTML = bulkRows.map(renderBulkRow).join("");
+  bulkRows.forEach(function (r) {
+    bindBulkRowEvents(r.id);
+  });
+  recalcBulk();
 }
 
 function addBulkRow(isNew) {
@@ -2411,10 +2648,12 @@ function recalcBulk() {
   document.getElementById("bulk-grand-total").textContent = "RM " + grand.toFixed(2);
 
   var taxLabel =
-    taxType === "pct" ? "Cukai (" + taxVal + "%)" : "Cukai (RM " + taxVal.toFixed(2) + ")";
+    taxType === "pct"
+      ? t("calc.bulk.taxPct").replace("{value}", String(taxVal))
+      : t("calc.bulk.taxRm").replace("{value}", taxVal.toFixed(2));
   document.getElementById("bulk-tax-label-display").textContent = taxLabel;
   document.querySelector(".bulk-preview__title").textContent =
-    "Ringkasan & agihan cukai" +
+    t("calc.bulk.previewTitle") +
     (taxVal > 0 ? " (" + (taxType === "pct" ? taxVal + "%" : "RM " + taxVal.toFixed(2)) + ")" : "");
 
   var previewRows = document.getElementById("bulk-preview-rows");
@@ -2424,12 +2663,15 @@ function recalcBulk() {
         var share = subtotal > 0 ? (row.price / subtotal) * taxAmt : 0;
         var final = row.price + share;
         var name = row.isNew
-          ? (row.name || "Bahan baru") + ' <span class="bulk-tag-new">Baru</span>'
+          ? (row.name || t("calc.bulk.newIngredient")) +
+            ' <span class="bulk-tag-new">' +
+            escapeHtml(t("calc.bulk.tagNew")) +
+            "</span>"
           : (function () {
               var ing = ingredients.find(function (i) {
                 return i.id === row.ingredientId;
               });
-              return escapeHtml(ing ? ing.name : "Bahan tidak dipilih");
+              return escapeHtml(ing ? ing.name : t("calc.bulk.noIngSelected"));
             })();
         return (
           '<div class="bulk-preview__row">' +
@@ -2445,7 +2687,8 @@ function recalcBulk() {
           (row.price || 0).toFixed(2) +
           "</div>" +
           (taxVal > 0
-            ? '<div class="bulk-preview__sub">+ cukai RM ' +
+            ? '<div class="bulk-preview__sub">' +
+              t("calc.bulk.plusTax") +
               share.toFixed(2) +
               " = <strong>RM " +
               final.toFixed(2) +
@@ -2495,7 +2738,7 @@ async function saveBulkPurchase() {
   var statusEl = document.getElementById("bulk-status");
 
   if (!bulkRows.length) {
-    statusEl.textContent = "Tambah sekurang-kurangnya satu bahan.";
+    statusEl.textContent = t("calc.bulk.errNoRows");
     statusEl.className = "kb-status kb-status--error";
     return;
   }
@@ -2503,17 +2746,17 @@ async function saveBulkPurchase() {
   for (var i = 0; i < bulkRows.length; i++) {
     var row = bulkRows[i];
     if (row.isNew && !String(row.name || "").trim()) {
-      statusEl.textContent = "Sila masukkan nama untuk bahan baru.";
+      statusEl.textContent = t("calc.bulk.errNewName");
       statusEl.className = "kb-status kb-status--error";
       return;
     }
     if (!row.isNew && !row.ingredientId) {
-      statusEl.textContent = "Sila pilih bahan untuk semua baris.";
+      statusEl.textContent = t("calc.bulk.errSelectIng");
       statusEl.className = "kb-status kb-status--error";
       return;
     }
     if (!row.qty || row.qty <= 0) {
-      statusEl.textContent = "Kuantiti mesti lebih dari 0.";
+      statusEl.textContent = t("calc.bulk.errQty");
       statusEl.className = "kb-status kb-status--error";
       return;
     }
@@ -2522,7 +2765,7 @@ async function saveBulkPurchase() {
   var confirmBtn = document.getElementById("btn-bulk-confirm");
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = "Menyimpan...";
+    confirmBtn.textContent = t("calc.bulk.saving");
   }
 
   try {
@@ -2585,19 +2828,22 @@ async function saveBulkPurchase() {
       });
     }
 
-    statusEl.textContent = "Belian borong berjaya disimpan!";
+    statusEl.textContent = t("calc.bulk.savedOk");
     statusEl.className = "kb-status kb-status--ok";
     setTimeout(function () {
       closeBulkModal();
     }, 1200);
   } catch (err) {
     console.error(err);
-    statusEl.textContent = "Ralat: " + (err.message || String(err));
+    statusEl.textContent = t("calc.bulk.errPrefix") + (err.message || String(err));
     statusEl.className = "kb-status kb-status--error";
   } finally {
     if (confirmBtn) {
       confirmBtn.disabled = false;
-      confirmBtn.innerHTML = '<i class="ti ti-check"></i> Sahkan & simpan';
+      confirmBtn.innerHTML =
+        '<i class="ti ti-check"></i> <span data-i18n="calc.bulk.confirm">' +
+        t("calc.bulk.confirm") +
+        "</span>";
     }
   }
 }

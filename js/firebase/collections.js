@@ -9,12 +9,16 @@
  * - (pilihan / laporan) category, supplier, minStockQty, stockStatus — disimpan oleh seed & borang masa hadapan
  * - Rujukan pakej; stok sebenar & FIFO dalam `ingredient_batches` (+ sejarah `ingredient_ledger`)
  *
+ * Kuantiti resepi (`usage`) disimpan sebagai julat `{ gunaMin, gunaMax, gunaUnit }`, atau
+ * sebagai nilai tetap (number / `{ guna, gunaUnit }`) apabila min = max, iaitu kuantiti tepat.
+ * Kedua-dua bentuk dibaca oleh `js/cost-calculator/core.js`.
+ *
  * **modifiers** (legacy — gabungan “menu + resipi” dalam satu dokumen)
- * - name, sellingPrice, usage{...}, sortIndex
+ * - name, sellingPrice, usage{ ingredientId: number | { guna, gunaUnit } | { gunaMin, gunaMax, gunaUnit } }, sortIndex
  * - Kekalkan untuk UI `pos-cost-calculator.html` sedia ada; pelan migrasi: MENU-COSTING-ARCHITECTURE.md
  *
  * **recipes** (resipi / BOM sahaja)
- * - name, usage{ ingredientId: number | { guna, gunaUnit } }, sortIndex
+ * - name, usage{ ingredientId: number | { guna, gunaUnit } | { gunaMin, gunaMax, gunaUnit } }, sortIndex
  * - Tiada harga jual — dikongsi oleh satu atau lebih menu_items
  *
  * **menu_items** (SKU menu + harga jual)
@@ -27,9 +31,11 @@
  * **purchase_history** (belian stok / bulk)
  * - createdAt, totalAmount, supplier?, lines[{ ingredientId?, label, qty, unit, unitCost, lineTotal }], notes?
  *
- * **ingredient_ledger** (sejarah harga & pembelian per bahan)
- * - ingredientId, kind: initial | purchase | price_adjust, occurredAt, createdAt
+ * **ingredient_ledger** (sejarah harga, belian, jualan FIFO, pembaziran)
+ * - ingredientId, kind: initial | purchase | price_adjust | sale_consumption | wastage, occurredAt, createdAt
  * - purchasePrice, purchaseQty, unit, costPerUnit, notes?, nameSnapshot?
+ * - sale_consumption: qty & kos FIFO pada jualan POS (selari COGS resit)
+ * - wastage: qty & kos lot belian yang dibuang
  *
  * **ingredient_batches** (stok FIFO per lot belian)
  * - ingredientId, qtyRemaining, qtyOriginal, costPerUnit, openedAt (Timestamp — susunan FIFO, unik per simpanan)

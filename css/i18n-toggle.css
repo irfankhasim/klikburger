@@ -1,0 +1,158 @@
+/**
+ * Butang tukar bahasa BM | EN.
+ * Bentuk segmen mengikut corak .kb-surface-btn dalam base.css.
+ */
+
+.kb-lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--surface-muted, #f8f9fb);
+}
+
+/*
+ * Gaya lengkap dan berdikari — jangan bergantung pada .kb-surface-btn dalam
+ * base.css, kerana halaman seperti login.html hanya memuatkan CSS sendiri.
+ */
+.kb-lang-toggle__btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.6rem;
+  min-height: 2.15rem;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.kb-lang-toggle__btn:hover:not(.is-active) {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.kb-lang-toggle__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring, rgba(217, 119, 6, 0.35));
+}
+
+.kb-app-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.kb-app-refresh {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-muted, #f8f9fb);
+  color: var(--text, #111827);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.kb-app-refresh:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.kb-app-refresh:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring, rgba(217, 119, 6, 0.35));
+}
+
+.kb-app-refresh:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.kb-app-refresh__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  display: block;
+}
+
+.kb-app-refresh.is-busy .kb-app-refresh__icon {
+  animation: kb-app-refresh-spin 0.7s linear infinite;
+}
+
+@keyframes kb-app-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Halaman tanpa hos khusus — lekat di sudut supaya sentiasa dicapai. */
+.kb-app-tools--floating,
+.kb-lang-toggle--floating {
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
+  z-index: 60;
+}
+
+.kb-app-tools--floating .kb-lang-toggle,
+.kb-app-tools--floating .kb-app-refresh,
+.kb-lang-toggle--floating {
+  background: var(--surface, #fff);
+  box-shadow: var(--shadow, 0 1px 3px rgba(0, 0, 0, 0.12));
+}
+
+/*
+ * Fallback bila base.css tidak dimuatkan (cth. login.css sahaja): tanpa ini
+ * .kb-surface-btn tiada gaya dan butang nampak seperti butang mentah pelayar.
+ */
+.kb-lang-toggle__btn:not(.is-active) {
+  color: var(--text-muted, #6b7280);
+}
+
+.kb-lang-toggle__btn.is-active {
+  color: var(--text, #111827);
+  background: var(--kb-control-surface, #fff);
+  border-color: var(--kb-control-border, #d1d5db);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 640px) {
+  .kb-lang-toggle__btn {
+    min-width: 2.6rem;
+    min-height: 2.5rem;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+  }
+
+  .kb-app-refresh {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-app-refresh.is-busy .kb-app-refresh__icon {
+    animation: none;
+  }
+}

@@ -1,0 +1,176 @@
+/* Dropdown seragam — senarai sentiasa ke bawah (bukan native <select>). */
+.kb-dd {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.kb-dd.is-open {
+  z-index: 60;
+}
+
+.kb-dd__native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.kb-dd__btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--kb-control-min-h, 3.15rem);
+  padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface, #fff);
+  color: var(--text, #1a1a1a);
+  font: inherit;
+  font-size: var(--kb-control-font, 1.0625rem);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.kb-dd__btn:hover:not(:disabled) {
+  background: var(--surface-muted, #fafafa);
+}
+
+.kb-dd.is-open .kb-dd__btn {
+  border-color: var(--border-strong, #ccc);
+}
+
+.kb-dd__btn:focus-visible {
+  outline: 2px solid var(--accent-ring, rgba(245, 166, 35, 0.35));
+  outline-offset: 1px;
+  border-color: var(--sidebar-accent, #f5a623);
+}
+
+.kb-dd--invalid .kb-dd__btn {
+  border-color: var(--danger, #c0392b);
+}
+
+.kb-dd__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kb-dd__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-dd__chevron {
+  flex: 0 0 auto;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-top: -0.15rem;
+  border-right: 2px solid var(--text-muted, #5c5c5c);
+  border-bottom: 2px solid var(--text-muted, #5c5c5c);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease, margin 0.15s ease;
+}
+
+.kb-dd.is-open .kb-dd__chevron {
+  margin-top: 0.2rem;
+  transform: rotate(225deg);
+}
+
+.kb-dd__list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 61;
+  margin: 0;
+  padding: 0.3rem 0;
+  max-height: 18rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow, 0 2px 8px rgba(0, 0, 0, 0.08));
+  scrollbar-width: thin;
+  scrollbar-color: #c4c4c4 transparent;
+}
+
+.kb-dd__list[hidden] {
+  display: none !important;
+}
+
+.kb-dd__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.kb-dd__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kb-dd__list::-webkit-scrollbar-thumb {
+  background: #c4c4c4;
+  border-radius: 999px;
+}
+
+.kb-dd__opt {
+  display: flex;
+  align-items: center;
+  min-height: 2.85rem;
+  padding: 0.7rem 0.85rem;
+  font-size: var(--kb-control-font, 1.0625rem);
+  cursor: pointer;
+  color: var(--text, #1a1a1a);
+}
+
+.kb-dd__opt:hover,
+.kb-dd__opt.is-active {
+  background: var(--accent-soft, rgba(245, 166, 35, 0.18));
+}
+
+.kb-dd__opt.is-disabled {
+  color: var(--text-muted, #5c5c5c);
+  cursor: default;
+  background: transparent;
+}
+
+/* Lebar medan biasa — native <select> sudah tersembunyi. */
+.sd-field > .kb-dd,
+.mr-field > .kb-dd,
+.ai-field > .kb-dd {
+  min-width: 10rem;
+}
+
+.wg-form .sd-field > .kb-dd {
+  min-width: 0;
+}
+
+.rc-filters__pay > .kb-dd {
+  min-width: 9.5rem;
+}
+
+.kb-clock-in-staff-modal .kb-dd {
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 0.35rem;
+}
+
+td .kb-dd,
+th .kb-dd,
+.table-wrap .kb-dd {
+  min-width: 0;
+}

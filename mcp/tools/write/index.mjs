@@ -20,6 +20,7 @@ import {
   validateAddPurchase,
   validateUpdateOrderStatus,
   validateWritableCollection,
+  validateUsagePayload,
 } from '../../lib/validators.mjs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -275,17 +276,21 @@ export const writeTools = [
       if (!input.data || typeof input.data !== 'object')
         return resultErr('data must be a non-empty object');
 
+      const uv = validateUsagePayload(input.collection, input.data);
+      if (!uv.valid) return resultErr(uv.error);
+      const data = uv.payload;
+
       const db  = await getAdminFirestore();
       const col = db.collection(input.collection);
       const ref = input.docId ? col.doc(input.docId) : col.doc();
 
-      const doc = { ...input.data, createdAt: ts(), createdBy: 'MCP_AGENT' };
+      const doc = { ...data, createdAt: ts(), createdBy: 'MCP_AGENT' };
       await ref.set(doc);
 
       await auditLog({
         action: 'create_document', status: 'success',
         targetId: ref.id, targetCollection: input.collection,
-        payload: input.data, operatorId: input.operatorId,
+        payload: data, operatorId: input.operatorId,
       });
 
       return resultOk({ docId: ref.id, collection: input.collection });
@@ -314,17 +319,21 @@ export const writeTools = [
       if (!input.updates || typeof input.updates !== 'object' || Object.keys(input.updates).length === 0)
         return resultErr('updates must be a non-empty object');
 
+      const uv = validateUsagePayload(input.collection, input.updates);
+      if (!uv.valid) return resultErr(uv.error);
+      const updates = uv.payload;
+
       const db  = await getAdminFirestore();
       const ref = db.collection(input.collection).doc(input.docId);
       if (!(await ref.get()).exists)
         return resultErr(`Document '${input.docId}' not found in '${input.collection}'`);
 
-      await ref.update({ ...input.updates, updatedAt: ts(), updatedBy: 'MCP_AGENT' });
+      await ref.update({ ...updates, updatedAt: ts(), updatedBy: 'MCP_AGENT' });
 
       await auditLog({
         action: 'update_document', status: 'success',
         targetId: input.docId, targetCollection: input.collection,
-        payload: input.updates, operatorId: input.operatorId,
+        payload: updates, operatorId: input.operatorId,
       });
 
       return resultOk({ docId: input.docId, collection: input.collection });

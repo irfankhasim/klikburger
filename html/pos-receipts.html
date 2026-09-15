@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <title>Resit — Klik Burger</title>
     <link
       rel="stylesheet"
@@ -24,7 +33,9 @@
         align-items: center;
         justify-content: center;
         padding: 1rem;
-        background: rgba(26, 26, 26, 0.45);
+        background: rgba(18, 18, 18, 0.34);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15);
+        backdrop-filter: blur(18px) saturate(1.15);
         overflow-y: auto;
       }
       .refund-backdrop[hidden] {
@@ -52,15 +63,7 @@
         font-weight: 700;
         color: var(--text);
       }
-      #btn-refund-close {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 18px;
-        color: var(--text-muted);
-        padding: 4px;
-        line-height: 1;
-      }
+      /* Petak tutup diwarisi dari .btn-close-x (base.css) — jangan buang border/background di sini. */
       .refund-modal-body {
         padding: 16px 20px;
       }
@@ -153,26 +156,28 @@
         if (window.self !== window.parent) document.documentElement.classList.add("kb-embed");
       } catch (e) {}
     </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
   </head>
-  <body class="rc-body">
+  <body class="rc-body" data-i18n-doc-title="receipt.docTitle">
     <div class="rc-page ops-app">
       <p id="rc-rbac-banner" class="rc-rbac-banner" hidden role="status"></p>
 
       <!-- Utama: senarai resit dahulu (kerja pantas kaunter) -->
-      <section class="rc-primary" aria-label="Senarai resit">
+      <section class="rc-primary" aria-label="Senarai resit" data-i18n-aria-label="receipt.listLabel">
         <span id="rc-count" class="sr-only" aria-live="polite" aria-atomic="true"></span>
         <div class="rc-filters">
           <div class="rc-filters__search">
-            <label class="sr-only" for="rc-search">Cari</label>
+            <label class="sr-only" for="rc-search" data-i18n="receipt.search">Cari</label>
             <span class="rc-filters__icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="search" id="rc-search" class="rc-input rc-input--search" placeholder="No. resit / pesanan" autocomplete="off" />
+            <input type="search" id="rc-search" class="rc-input rc-input--search" placeholder="No. resit / pesanan" data-i18n-placeholder="receipt.searchPlaceholder" autocomplete="off" />
           </div>
           <div class="rc-filters__pay">
-            <label for="rc-filter-pay">Bayaran</label>
+            <label for="rc-filter-pay" data-i18n="receipt.filter.pay">Bayaran</label>
             <select id="rc-filter-pay" class="rc-input rc-input--select">
-              <option value="">Semua</option>
-              <option value="cash">Tunai</option>
-              <option value="qr">QR</option>
+              <option value="" data-i18n="receipt.filter.all">Semua</option>
+              <option value="cash" data-i18n="receipt.pay.cash">Tunai</option>
+              <option value="qr" data-i18n="receipt.pay.qr">QR</option>
             </select>
           </div>
         </div>
@@ -184,10 +189,10 @@
     <aside id="rc-drawer" class="ops-drawer rc-drawer" aria-hidden="true" aria-labelledby="rc-drawer-title">
       <div class="ops-drawer__head rc-drawer__head">
         <div>
-          <h2 id="rc-drawer-title" class="rc-drawer__title">Resit</h2>
+          <h2 id="rc-drawer-title" class="rc-drawer__title" data-i18n="receipt.drawer.title">Resit</h2>
           <p id="rc-drawer-sub" class="rc-drawer__sub"></p>
         </div>
-        <button type="button" class="rc-btn rc-btn--line rc-btn--icon btn-close-x" id="rc-drawer-close" aria-label="Tutup">✕</button>
+        <button type="button" class="rc-btn rc-btn--line rc-btn--icon btn-close-x" id="rc-drawer-close" aria-label="Tutup" data-i18n-aria-label="common.close">✕</button>
       </div>
       <div class="ops-drawer__body rc-drawer__body" id="rc-drawer-body"></div>
     </aside>
@@ -195,34 +200,35 @@
     <div id="refund-modal" class="refund-backdrop" hidden aria-hidden="true">
       <div class="refund-modal-box" role="dialog" aria-modal="true" aria-labelledby="refund-modal-title">
         <div class="refund-modal-head">
-          <h2 id="refund-modal-title">Pemulangan wang (Refund)</h2>
-          <button type="button" class="btn-close-x" id="btn-refund-close" aria-label="Tutup">✕</button>
+          <h2 id="refund-modal-title" data-i18n="receipt.refund.title">Pemulangan wang (Refund)</h2>
+          <button type="button" class="btn-close-x" id="btn-refund-close" aria-label="Tutup" data-i18n-aria-label="common.close">✕</button>
         </div>
 
         <div class="refund-modal-body">
           <div class="refund-info-row">
-            <span>No. Resit</span>
+            <span data-i18n="receipt.refund.receiptNo">No. Resit</span>
             <strong id="refund-receipt-no">—</strong>
           </div>
           <div class="refund-info-row">
-            <span>Jumlah refund</span>
+            <span data-i18n="receipt.refund.amount">Jumlah refund</span>
             <strong id="refund-amount" style="color:var(--warning)">RM 0.00</strong>
           </div>
           <div class="refund-info-row">
-            <span>Kaedah</span>
+            <span data-i18n="receipt.refund.method">Kaedah</span>
             <span id="refund-pm">—</span>
           </div>
 
           <div class="field">
-            <label for="refund-note">Sebab refund</label>
-            <input type="text" id="refund-note" placeholder="Contoh: Pesanan salah, pelanggan tidak berpuas hati" />
+            <label for="refund-note" data-i18n="receipt.refund.reason">Sebab refund</label>
+            <input type="text" id="refund-note" placeholder="Contoh: Pesanan salah, pelanggan tidak berpuas hati" data-i18n-placeholder="receipt.refund.reasonPlaceholder" />
           </div>
 
           <p id="refund-status" class="kb-status kb-status--hidden"></p>
         </div>
 
         <div class="refund-modal-foot">
-          <button type="button" class="btn btn--ghost" id="btn-refund-cancel">Batal</button>
+          <button type="button" class="btn btn--ghost" id="btn-refund-cancel" data-i18n="receipt.refund.cancel">Batal</button>
+          <!-- Teks butang ini ditukar oleh JS semasa memproses — diterjemah di pos-receipts-app.js, bukan dengan data-i18n. -->
           <button type="button" class="btn btn--warning" id="btn-refund-confirm">Sahkan refund</button>
         </div>
       </div>
@@ -231,5 +237,6 @@
     <script type="module" src="../js/pos-receipts-app.js"></script>
     <link rel="stylesheet" href="../css/ai-floating-widget.css" />
     <script type="module" src="../js/ai-assistant/global-widget-bootstrap.js"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

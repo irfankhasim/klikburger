@@ -1,0 +1,711 @@
+/**
+ * Clock In / Clock Out / Drawer / Kakitangan — satu bahasa visual.
+ * Warna ikut palet sedia ada. Fail ini dimuat terakhir supaya seragam.
+ */
+:root {
+  --ops-space-1: 0.4rem;
+  --ops-space-2: 0.7rem;
+  --ops-space-3: 1rem;
+  --ops-space-4: 1.25rem;
+  --ops-space-5: 1.6rem;
+  --ops-card-pad: 1.15rem 1.25rem;
+  --ops-label: 0.7rem;
+  --ops-body: 0.875rem;
+  --ops-title: 1.05rem;
+  --ops-value: 1.05rem;
+  --ops-line: 1.5;
+}
+
+/* —— Kad & stack Clock panel —— */
+.ops-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ops-space-3);
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.ops-card,
+.kb-shift-shell .rc-shift--compact,
+.staff-dash .sd-panel,
+.staff-dash .sd-toolbar,
+.staff-dash .sd-metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.ops-card {
+  padding: var(--ops-card-pad);
+}
+
+.ops-card__title {
+  margin: 0 0 var(--ops-space-1);
+  font-size: var(--ops-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.ops-card__hint {
+  margin: 0 0 var(--ops-space-3);
+  font-size: 0.8rem;
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+/* —— Clock summary —— */
+.kb-clock-summary {
+  text-align: left;
+}
+
+.kb-clock-summary .btn {
+  margin-top: 0;
+  width: 100%;
+}
+
+.kb-clock-duty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ops-space-2);
+  margin: 0 0 var(--ops-space-3);
+  font-size: var(--ops-body);
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+.kb-clock-status {
+  max-width: none;
+  margin: var(--ops-space-3) 0 0;
+  text-align: left;
+}
+
+.kb-clock-status p {
+  margin: 0;
+  font-size: var(--ops-body);
+  line-height: var(--ops-line);
+  color: var(--text);
+}
+
+.kb-clock-status p + p {
+  margin-top: var(--ops-space-2);
+  color: var(--text-muted);
+}
+
+.kb-clock-out-blocked,
+.kb-clock-in-blocked {
+  margin: var(--ops-space-2) 0 0 !important;
+  padding: 0.65rem 0.8rem;
+  max-width: none !important;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(183, 119, 13, 0.28);
+  background: #fff8e8;
+  color: var(--warning) !important;
+  font-size: 0.82rem !important;
+  line-height: var(--ops-line);
+}
+
+.btn:disabled,
+.rc-btn:disabled,
+button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  filter: grayscale(0.15);
+}
+
+.kb-badge {
+  margin-right: 0;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.kb-badge--duty {
+  background: rgba(46, 125, 30, 0.14);
+  color: var(--success);
+}
+
+/* —— Modal Clock In —— */
+.kb-clock-in-staff-modal {
+  width: min(26.5rem, 100%);
+  padding: 1.25rem 1.35rem 1.3rem;
+}
+
+.kb-clock-in-staff-modal__title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.kb-clock-in-staff-modal__lead {
+  margin: 0.45rem 0 1.15rem;
+  font-size: 0.84rem;
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+.kb-clock-in-staff-modal__proximity {
+  margin: -0.55rem 0 1rem;
+  font-size: 0.82rem;
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+.kb-clock-in-staff-modal__proximity.is-ok {
+  color: var(--success, #2e7d1e);
+  font-weight: 600;
+}
+
+.kb-clock-in-staff-modal__proximity.is-blocked {
+  color: var(--danger, #c0392b);
+  font-weight: 600;
+}
+
+.kb-clock-in-staff-modal__label {
+  margin: 0 0 0.4rem;
+  font-size: var(--ops-label);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.kb-clock-in-staff-modal__select,
+.kb-clock-in-staff-modal__input {
+  margin-bottom: 0;
+}
+
+#kb-role-section,
+#kb-totp-section {
+  margin-top: 1.1rem !important;
+}
+
+#kb-role-cashier-taken {
+  margin-top: 0.5rem !important;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--text-muted) !important;
+  font-size: 0.8rem !important;
+  line-height: var(--ops-line);
+}
+
+#kb-role-error,
+.kb-clock-in-staff-modal__error {
+  margin-top: 0.55rem;
+  font-size: 0.82rem;
+  line-height: var(--ops-line);
+}
+
+.kb-clock-in-staff-modal__error-title {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+
+.kb-clock-in-staff-modal__error-body {
+  display: block;
+  font-weight: 400;
+}
+
+.kb-clock-in-staff-modal__testing {
+  margin-top: 1.1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  border: 1px dashed var(--border-strong);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.kb-clock-in-staff-modal__testing input {
+  accent-color: var(--text-muted);
+}
+
+.kb-clock-in-staff-modal__actions {
+  margin-top: 1.2rem;
+  gap: var(--kb-btn-gap);
+}
+
+.kb-clock-in-staff-modal select:disabled,
+.kb-clock-in-staff-modal option:disabled {
+  color: var(--text-muted);
+}
+
+/* —— Roster aktif —— */
+.kb-active-roster {
+  margin-top: 0;
+}
+
+.kb-active-roster__title {
+  margin: 0 0 var(--ops-space-1) !important;
+  font-size: var(--ops-label) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted) !important;
+}
+
+.kb-active-roster__hint {
+  margin: 0 0 var(--ops-space-3);
+  font-size: 0.8rem;
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+.kb-active-roster__empty {
+  margin: 0;
+  font-size: var(--ops-body);
+  color: var(--text-muted);
+  line-height: var(--ops-line);
+}
+
+.kb-active-roster__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ops-space-2);
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-active-roster__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.kb-active-roster__who {
+  font-size: var(--ops-body);
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.kb-active-roster__muted {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ops-role {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.ops-role--cashier {
+  background: #eaf3de;
+  color: #3b6d11;
+}
+
+.ops-role--kitchen {
+  background: #fdeee0;
+  color: #b3540a;
+}
+
+.ops-role--owner {
+  background: #e6f1fb;
+  color: #185fa5;
+}
+
+/* —— Drawer / shift bar —— */
+.kb-shift-shell .rc-shift--compact {
+  padding: var(--ops-card-pad);
+  margin-bottom: 0;
+}
+
+.rc-shift-bar__top {
+  gap: var(--ops-space-2);
+  margin-bottom: var(--ops-space-3);
+}
+
+.rc-shift-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.32rem 0.65rem;
+}
+
+.rc-shift-line {
+  font-size: 0.82rem;
+  line-height: var(--ops-line);
+}
+
+.rc-shift-bar__metrics {
+  gap: var(--ops-space-2);
+  margin-bottom: var(--ops-space-3);
+}
+
+.rc-mini-metric {
+  padding: 0.65rem 0.75rem;
+}
+
+.rc-mini-metric__lbl {
+  font-size: var(--ops-label);
+  margin-bottom: 0.28rem;
+}
+
+.rc-mini-metric__val {
+  font-size: var(--ops-value);
+}
+
+.rc-pay-chip {
+  padding: 0.28rem 0.5rem;
+}
+
+.rc-pay-chip__k {
+  font-size: 0.65rem;
+}
+
+.rc-pay-chip__v {
+  font-size: 0.8rem;
+}
+
+.rc-shift-bar__actions {
+  gap: var(--ops-space-2);
+}
+
+.rc-shift-bar__actions .rc-btn--action {
+  min-height: var(--kb-btn-min-h);
+  padding: 0.65rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.kb-shift-panel + .kb-shift-log-tunai {
+  margin-top: 0;
+}
+
+.kb-shift-log-tunai.rc-notes {
+  padding: 0.85rem 1.15rem;
+  border-radius: var(--radius);
+}
+
+/* —— Modal drawer (open/close) —— */
+#kb-shift-modal .order-flow__panel.rc-modal-panel {
+  width: min(26.5rem, 100%);
+}
+
+#kb-shift-modal .order-flow__head {
+  padding: 1.1rem 1.3rem;
+}
+
+#kb-shift-modal .order-flow__title {
+  font-size: 1.08rem;
+}
+
+#kb-shift-modal .order-flow__body {
+  padding: 1.15rem 1.3rem 1.05rem;
+}
+
+#kb-shift-modal .order-flow__foot {
+  padding: 1rem 1.3rem 1.15rem;
+  flex-direction: column;
+  gap: var(--kb-btn-gap);
+}
+
+#kb-shift-modal .order-flow__foot .rc-btn {
+  width: 100%;
+  margin: 0;
+}
+
+.ops-cash-sheet {
+  margin: 0 0 var(--ops-space-3);
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 42%) 1fr;
+  gap: 0.55rem 0.85rem;
+  font-size: var(--ops-body);
+}
+
+.ops-cash-sheet dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ops-cash-sheet dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.ops-diff-live {
+  margin: 0 0 var(--ops-space-3) !important;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  font-size: 0.84rem !important;
+  line-height: var(--ops-line);
+}
+
+#kb-shift-modal .ops-muted {
+  margin: 0 0 var(--ops-space-3);
+  font-size: 0.84rem;
+  line-height: var(--ops-line);
+  color: var(--text-muted);
+}
+
+#kb-shift-modal .rc-input,
+#kb-shift-modal .rc-textarea {
+  margin-bottom: var(--ops-space-3);
+}
+
+#kb-shift-modal label.rc-filters__pay {
+  margin-bottom: 0.35rem;
+}
+
+/* —— Kakitangan —— */
+.staff-dash .sd-app {
+  padding: 1.15rem 1.15rem 2rem;
+}
+
+.staff-dash .sd-toolbar,
+.staff-dash .sd-panel,
+.staff-dash .sd-metric {
+  padding: var(--ops-card-pad);
+  margin-bottom: var(--ops-space-3);
+}
+
+.staff-dash .sd-metrics {
+  gap: var(--ops-space-2);
+  margin-bottom: var(--ops-space-3);
+}
+
+.staff-dash .sd-panel__title {
+  margin: 0 0 var(--ops-space-1);
+  font-size: var(--ops-title);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.staff-dash .sd-panel__hint {
+  margin: 0 0 var(--ops-space-3);
+  font-size: 0.82rem;
+  line-height: var(--ops-line);
+}
+
+.staff-dash .sd-table th,
+.staff-dash .sd-table td {
+  padding: 0.7rem 0.75rem;
+  vertical-align: middle;
+}
+
+.staff-dash .sd-table tbody tr {
+  cursor: default;
+}
+
+.staff-dash .sd-badge {
+  font-size: 0.68rem;
+  padding: 0.18rem 0.5rem;
+}
+
+.staff-dash .sd-empty {
+  margin: 0;
+  padding: 0.35rem 0;
+  font-size: var(--ops-body);
+  color: var(--text-muted);
+  line-height: var(--ops-line);
+}
+
+.staff-dash .sd-status {
+  padding: 0.7rem 0.9rem;
+  margin-bottom: var(--ops-space-3);
+  font-size: var(--ops-body);
+  line-height: var(--ops-line);
+}
+
+.ops-role--muted {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  text-transform: none;
+}
+
+.ops-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 0.85rem;
+  margin: 0 0 var(--ops-space-3);
+}
+
+.ops-fact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.ops-fact--span {
+  grid-column: 1 / -1;
+}
+
+.ops-fact__lbl {
+  font-size: var(--ops-label);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ops-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ops-chip--ok {
+  background: rgba(46, 125, 30, 0.14);
+  color: var(--success, #2e7d1e);
+}
+
+.ops-chip--warn {
+  background: #fff8e8;
+  color: var(--warning, #b7770d);
+}
+
+.ops-chip--short,
+.ops-chip--danger {
+  background: #fff5f4;
+  color: var(--danger, #c0392b);
+}
+
+.ops-chip--muted {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ops-totp-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+}
+
+.ops-totp-status[hidden] {
+  display: none !important;
+}
+
+#kb-role-section,
+#kb-totp-section,
+#kb-role-cashier-taken,
+#kb-role-error,
+#kb-totp-error {
+  display: none;
+}
+
+.kb-clock-in-staff-modal__error[hidden] {
+  display: none !important;
+}
+
+.content__default:has(.ops-stack) .kb-shift-panel {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.ops-field {
+  margin: 0 0 var(--ops-space-3);
+}
+
+.ops-field .rc-input,
+.ops-field .rc-textarea {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.ops-cash-sheet__emphasis {
+  font-size: 0.95rem;
+}
+
+.ops-cash-sheet dt.ops-cash-sheet__emphasis {
+  color: var(--text);
+}
+
+.ops-diff-live--ok {
+  background: #f4faf3;
+  border-color: #b8d4b0;
+  color: var(--success, #2e7d1e);
+}
+
+.ops-diff-live--short {
+  background: #fff5f4;
+  border-color: #e8b4b0;
+  color: var(--danger, #c0392b);
+}
+
+.ops-diff-live--over {
+  background: #fff8e8;
+  border-color: rgba(183, 119, 13, 0.28);
+  color: var(--warning, #b7770d);
+}
+
+.staff-dash .sd-panel__actions {
+  margin: var(--ops-space-3) 0 0;
+}
+
+.staff-dash .sd-badge--testing {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.staff-dash .sd-empty-cell {
+  text-align: center;
+  padding: 1.25rem 0.75rem !important;
+  color: var(--text-muted);
+}
+
+.staff-dash .sd-variance--balanced {
+  background: #f4faf3;
+  color: var(--success, #2e7d1e);
+  border-color: #b8d4b0;
+}
+
+.staff-dash .sd-variance--short {
+  background: #fff5f4;
+  color: var(--danger, #c0392b);
+  border-color: #e8b4b0;
+}
+
+.staff-dash .sd-variance--over {
+  background: #fff8e8;
+  color: var(--warning, #b7770d);
+  border-color: rgba(183, 119, 13, 0.28);
+}
+
+@media (max-width: 639px) {
+  .ops-stack {
+    max-width: none;
+  }
+
+  .ops-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-clock-in-staff-modal {
+    padding: 1.1rem 1.15rem 1.2rem;
+  }
+
+  .rc-shift-bar__actions .rc-btn--action {
+    font-size: 0.78rem;
+  }
+}

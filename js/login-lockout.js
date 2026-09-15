@@ -3,6 +3,8 @@
  * Akaun disekat hanya selepas MAX_FAILS percubaan gagal; tempoh 1 min → maks 1 jam.
  */
 
+import { t as tr, interpolate } from "./i18n/locale.js";
+
 export var MAX_FAILS_BEFORE_LOCK = 30;
 
 /** Minit: 0.5 → 1 → 2 → 5 (maks) */
@@ -52,12 +54,14 @@ function lockoutDurationMs(tier) {
 
 function formatRemaining(ms) {
   var sec = Math.max(0, Math.ceil(ms / 1000));
-  if (sec < 60) return sec + " saat";
+  if (sec < 60) return sec + " " + tr("login.unit.sec");
   var min = Math.ceil(sec / 60);
-  if (min < 60) return min + " minit";
+  if (min < 60) return min + " " + tr("login.unit.min");
   var hr = Math.floor(min / 60);
   var rm = min % 60;
-  return rm ? hr + " jam " + rm + " minit" : hr + " jam";
+  return rm
+    ? hr + " " + tr("login.unit.hr") + " " + rm + " " + tr("login.unit.min")
+    : hr + " " + tr("login.unit.hr");
 }
 
 /**
@@ -173,5 +177,5 @@ export function recordLoginSuccess(email) {
 
 export function lockoutMessageForState(state) {
   if (!state.locked) return "";
-  return "Akaun disekat buat sementara. Cuba lagi dalam " + formatRemaining(state.remainingMs) + ".";
+  return interpolate(tr("login.lockout"), { remaining: formatRemaining(state.remainingMs) });
 }

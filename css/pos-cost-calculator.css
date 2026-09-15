@@ -15,6 +15,11 @@
         --radius: 10px;
         --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --accent-soft: rgba(245, 166, 35, 0.18);
+        --accent-ring: rgba(245, 166, 35, 0.35);
+        --surface-muted: #fafafa;
+        --border-strong: #ccc;
+        --radius-md: 6px;
       }
 
       *,
@@ -59,10 +64,23 @@
         display: none !important;
       }
 
+      html.kb-embed {
+        height: auto;
+        overflow: visible;
+      }
+
+      html.kb-embed body {
+        height: auto;
+        min-height: 0;
+        display: block;
+        overflow: visible;
+      }
+
       html.kb-embed .app-main {
         width: 100%;
         max-width: none;
-        flex: 1;
+        height: auto;
+        overflow: visible;
       }
 
       /* ----- Sidebar ----- */
@@ -77,10 +95,11 @@
       }
 
       .app-sidebar__brand {
-        padding: 1.25rem 1rem;
+        padding: calc(1.45rem + env(safe-area-inset-top, 0px)) 1rem 1.75rem;
         border-bottom: 1px solid #333;
         font-weight: 700;
         font-size: 1.05rem;
+        line-height: 1.4;
         letter-spacing: -0.02em;
       }
 
@@ -148,9 +167,10 @@
       }
 
       .page-title {
-        margin: 0 0 0.25rem;
+        margin: 0 0 0.5rem;
         font-size: 1.45rem;
         font-weight: 700;
+        line-height: 1.35;
       }
 
       .page-desc {
@@ -264,7 +284,7 @@
       table.ing-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.875rem;
+        font-size: 1rem;
       }
 
       .ing-table th,
@@ -293,10 +313,23 @@
       .ing-table select {
         width: 100%;
         min-width: 0;
-        padding: 0.45rem 0.5rem;
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
         font: inherit;
+        font-size: var(--kb-control-font, 1.0625rem);
         border: 1px solid var(--border);
         border-radius: 6px;
+      }
+
+      .ing-table .kb-dd {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .ing-table .kb-dd__btn {
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
+        font-size: var(--kb-control-font, 1.0625rem);
       }
 
       .ing-table .num {
@@ -313,14 +346,17 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 0.35rem;
-        padding: 0.5rem 0.85rem;
+        gap: 0.45rem;
+        min-height: var(--kb-btn-min-h, 2.75rem);
+        padding: var(--kb-btn-pad-y, 0.7rem) var(--kb-btn-pad-x, 1.15rem);
         font: inherit;
-        font-size: 0.875rem;
+        font-size: var(--kb-btn-font, 0.95rem);
         font-weight: 600;
+        line-height: 1.25;
         border-radius: 6px;
         border: none;
         cursor: pointer;
+        touch-action: manipulation;
         transition: opacity 0.15s, transform 0.1s;
       }
 
@@ -357,14 +393,15 @@
       }
 
       .btn--sm {
-        padding: 0.35rem 0.55rem;
-        font-size: 0.8rem;
+        min-height: var(--kb-btn-sm-min-h, 2.85rem);
+        padding: 0.65rem 1.05rem;
+        font-size: var(--kb-btn-sm-font, 1rem);
       }
 
       .toolbar {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.75rem;
+        gap: var(--kb-btn-gap, 0.75rem);
         align-items: center;
         margin-bottom: 1rem;
       }
@@ -541,22 +578,20 @@
       }
 
       .pkg-member-list {
-        max-height: min(50vh, 280px);
-        overflow-y: auto;
         padding: 0.25rem 0;
       }
 
       .pkg-member-row {
         display: flex;
         align-items: flex-start;
-        gap: 0.45rem;
-        margin: 0.35rem 0;
-        font-size: 0.88rem;
+        gap: 0.55rem;
+        margin: 0.45rem 0;
+        font-size: 1rem;
         cursor: pointer;
       }
 
       .pkg-member-row input {
-        margin-top: 0.2rem;
+        margin-top: 0.15rem;
       }
 
       .product-tile--pkg-filter .product-tile__footer {
@@ -678,7 +713,9 @@
       .modal-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.45);
+        background: rgba(18, 18, 18, 0.34);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15);
+        backdrop-filter: blur(18px) saturate(1.15);
         z-index: 100;
         display: flex;
         align-items: center;
@@ -702,6 +739,7 @@
         max-height: min(90vh, 680px);
         display: flex;
         flex-direction: column;
+        overflow: hidden;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
         transform: scale(0.96);
         transition: transform 0.2s;
@@ -747,15 +785,31 @@
         color: var(--text-muted);
       }
 
+      .modal-ing-list-hint {
+        margin: -0.25rem 0 0.5rem;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+      }
+
+      .modal-ing-list-hint strong {
+        font-weight: 600;
+        color: var(--text);
+      }
+
       .modal-ing-scroll {
-        max-height: min(260px, 38vh);
-        overflow-y: auto;
-        overflow-x: hidden;
+        position: relative;
+        z-index: 0;
+        isolation: isolate;
+        height: min(38vh, 16.5rem);
+        max-height: min(38vh, 16.5rem);
+        overflow: auto !important;
+        -webkit-overflow-scrolling: touch;
         border: 1px solid var(--border);
         border-radius: 8px;
         background: #fafafa;
         padding: 0.15rem 0.65rem;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0;
       }
 
       .modal-ing-scroll::-webkit-scrollbar {
@@ -767,10 +821,16 @@
         border-radius: 999px;
       }
 
+      .modal-ing-toolbar[hidden] {
+        display: none !important;
+      }
+
       .modal__foot {
-        padding: 1rem 1.25rem 1.15rem;
+        position: relative;
+        z-index: 4;
+        padding: 0.85rem 1.25rem 1.15rem;
         border-top: 1px solid var(--border);
-        background: #fafafa;
+        background: #fff;
         display: flex;
         flex-direction: column;
         gap: 0.85rem;
@@ -792,24 +852,77 @@
       .field input[type="text"],
       .field input[type="number"] {
         width: 100%;
-        padding: 0.55rem 0.65rem;
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
         font: inherit;
+        font-size: var(--kb-control-font, 1.0625rem);
         border: 1px solid var(--border);
         border-radius: 6px;
       }
 
+      .field .kb-dd {
+        width: 100%;
+      }
+
+      .field .kb-dd__btn {
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
+        font-size: var(--kb-control-font, 1.0625rem);
+      }
+
       .ing-check-row {
         display: grid;
-        grid-template-columns: 1.125rem minmax(0, 1fr) 4.25rem 2.75rem 4.75rem;
-        gap: 0.35rem 0.65rem;
-        align-items: start;
-        padding: 0.55rem 0;
+        grid-template-columns: var(--kb-check-size, 1.45rem) minmax(0, 1fr) auto;
+        gap: 0.45rem 0.75rem;
+        align-items: center;
+        padding: 0.7rem 0;
         border-bottom: 1px solid #eee;
-        font-size: 0.85rem;
+        font-size: 1rem;
+      }
+
+      .ing-check-row__controls {
+        display: grid;
+        grid-template-columns: minmax(8.5rem, 12rem) minmax(4.5rem, 6.75rem) 5.75rem;
+        gap: 0.45rem 0.65rem;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .ing-qty-range {
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+        margin-top: 0;
+        min-width: 0;
+      }
+
+      .ing-qty-range__sep {
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        flex-shrink: 0;
+      }
+
+      .ing-qty-range input[type="number"] {
+        width: 100%;
+        min-width: 0;
+        flex: 1 1 0;
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) 0.45rem;
+        font: inherit;
+        font-size: var(--kb-control-font, 1.0625rem);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        text-align: right;
+      }
+
+      .ing-qty-range input[type="number"]:disabled {
+        opacity: 0.55;
       }
 
       .ing-check-row input[type="checkbox"] {
-        margin-top: 0.35rem;
+        margin-top: 0;
+        width: var(--kb-check-size, 1.45rem);
+        height: var(--kb-check-size, 1.45rem);
       }
 
       .ing-check-row__label {
@@ -819,7 +932,7 @@
         gap: 0.12rem;
         line-height: 1.3;
         cursor: pointer;
-        padding-top: 0.2rem;
+        padding-top: 0;
       }
 
       .ing-check-row__name {
@@ -833,36 +946,38 @@
         color: var(--text-muted);
       }
 
-      .ing-check-row input[type="number"],
       .ing-check-row select.js-modal-uom,
       .ing-check-row__uom-na,
       .ing-check-row .line-cost {
-        margin-top: 0.2rem;
+        margin-top: 0;
       }
 
       .ing-check-row:last-child {
         border-bottom: none;
       }
 
-      .ing-check-row input[type="number"] {
-        width: 100%;
-        max-width: 4.5rem;
-        padding: 0.4rem 0.45rem;
-        font: inherit;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        text-align: right;
-      }
-
       .ing-check-row select.js-modal-uom {
         width: 100%;
-        max-width: 4.75rem;
-        padding: 0.4rem 0.35rem;
+        max-width: 6.75rem;
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) 0.45rem;
         font: inherit;
-        font-size: 0.78rem;
+        font-size: var(--kb-control-font, 1.0625rem);
         border: 1px solid var(--border);
         border-radius: 6px;
         background: var(--surface);
+      }
+
+      .ing-check-row .kb-dd {
+        width: 100%;
+        max-width: 6.75rem;
+        margin-top: 0;
+      }
+
+      .ing-check-row .kb-dd__btn {
+        min-height: var(--kb-control-min-h, 3.15rem);
+        padding: var(--kb-control-pad-y, 0.72rem) 0.45rem;
+        font-size: var(--kb-control-font, 1.0625rem);
       }
 
       .ing-check-row__uom-na {
@@ -890,7 +1005,8 @@
         pointer-events: none;
       }
 
-      .ing-check-row.is-disabled select.js-modal-uom {
+      .ing-check-row.is-disabled select.js-modal-uom,
+      .ing-check-row.is-disabled .kb-dd {
         opacity: 0.45;
         pointer-events: none;
       }
@@ -951,7 +1067,7 @@
       .modal__actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: var(--kb-btn-gap, 0.75rem);
         align-items: center;
         justify-content: flex-end;
         margin-top: 0;
@@ -964,7 +1080,7 @@
       .product-tile__footer-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.35rem;
+        gap: 0.65rem;
         align-items: center;
         flex-shrink: 0;
       }
@@ -1044,50 +1160,41 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.75rem 1rem;
+        gap: 0.85rem 1.1rem;
         margin-bottom: 0.85rem;
       }
 
-      .ing-add-draft {
-        margin-bottom: 0.85rem;
-        padding: 0.9rem 1rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: #fafbfd;
-        box-shadow: var(--shadow);
-      }
-
-      .ing-add-draft[hidden] {
-        display: none !important;
+      .ing-add-modal {
+        max-width: 32rem;
       }
 
       .ing-add-draft__form {
         margin: 0;
-      }
-
-      .ing-add-draft__title {
-        margin: 0 0 0.65rem;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: var(--text);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
       }
 
       .ing-add-draft__grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 0.5rem 0.75rem;
+        gap: 0.85rem 1rem;
+      }
+
+      .field--full {
+        grid-column: 1 / -1;
+      }
+
+      .field-hint {
+        margin: 0.35rem 0 0;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        line-height: 1.4;
       }
 
       .ing-add-draft__err {
-        margin: 0.5rem 0 0 !important;
-      }
-
-      .ing-add-draft__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: flex-end;
-        margin-top: 0.75rem;
+        margin: 0.85rem 0 0 !important;
       }
 
       @media (max-width: 520px) {
@@ -1291,7 +1398,7 @@
         display: inline-flex;
         flex-direction: column;
         align-items: stretch;
-        gap: 0.35rem;
+        gap: 0.65rem;
       }
 
       .ing-actions .btn {
@@ -1326,7 +1433,9 @@
         justify-content: center;
         padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
         overflow-y: auto;
-        background: rgba(26, 26, 26, 0.36);
+        background: rgba(18, 18, 18, 0.34);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15);
+        backdrop-filter: blur(18px) saturate(1.15);
         -webkit-overflow-scrolling: touch;
       }
 
@@ -1383,17 +1492,11 @@
         font-weight: 400;
       }
 
+      /* Petak tutup diwarisi dari .btn-close-x; di sini hanya penempatan dalam kepala panel. */
       .ing-drawer__close {
         flex-shrink: 0;
         position: relative;
         z-index: 2;
-        border-color: transparent;
-        color: var(--text-muted);
-      }
-
-      .ing-drawer__close:hover {
-        color: var(--text);
-        background: #f3f3f3;
       }
 
       .ing-ledger-modal .ing-drawer__body {
@@ -1440,10 +1543,10 @@
 
       .ing-drawer-form__fields .field label {
         display: block;
-        font-size: 0.75rem;
+        font-size: 0.88rem;
         font-weight: 600;
         color: #6a6a6a;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.35rem;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1506,7 +1609,7 @@
       .ing-drawer-form__actions {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.7rem;
         margin-top: 0.65rem;
       }
 
@@ -1532,11 +1635,10 @@
 
       .ing-ledger-modal .ing-drawer-table-wrap {
         border-radius: 8px;
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: visible;
         border: 1px solid #ececec;
         background: #fafafa;
-        max-height: 11rem;
-        overflow-y: auto;
       }
 
       .ing-ledger-table {
@@ -1647,13 +1749,22 @@
 
       .ing-quick-add__actions {
         display: flex;
-        gap: 0.5rem;
+        gap: var(--kb-btn-gap, 0.75rem);
         justify-content: flex-end;
         margin-top: 0.65rem;
       }
 
       #modal-btn-add-ingredient {
-        margin-top: 0.35rem;
+        position: relative;
+        z-index: 1;
+        display: block;
+        width: 100%;
+        margin: 0;
+      }
+
+      .modal-ing-toolbar .ing-quick-add {
+        margin-top: 0;
+        margin-bottom: 0.65rem;
       }
 
       @media (min-width: 1024px) {
@@ -1708,9 +1819,17 @@
         }
 
         .ing-check-row {
-          grid-template-columns: 1.125rem minmax(0, 1fr) 3.5rem 2.25rem 4rem;
-          gap: 0.3rem 0.45rem;
-          font-size: 0.8rem;
+          grid-template-columns: var(--kb-check-size, 1.45rem) minmax(0, 1fr);
+          gap: 0.4rem 0.55rem;
+          align-items: start;
+          font-size: 0.88rem;
+        }
+
+        .ing-check-row__controls {
+          grid-column: 1 / -1;
+          padding-left: calc(var(--kb-check-size, 1.45rem) + 0.55rem);
+          grid-template-columns: minmax(0, 1fr) minmax(3.5rem, 5.5rem) auto;
+          gap: 0.4rem 0.5rem;
         }
 
         .modal-stats {
@@ -1729,7 +1848,9 @@
         justify-content: center;
         padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
         overflow-y: auto;
-        background: rgba(26, 26, 26, 0.36);
+        background: rgba(18, 18, 18, 0.34);
+        -webkit-backdrop-filter: blur(18px) saturate(1.15);
+        backdrop-filter: blur(18px) saturate(1.15);
         -webkit-overflow-scrolling: touch;
       }
 
@@ -1751,6 +1872,10 @@
         display: flex;
         flex-direction: column;
         box-shadow: 0 20px 56px rgba(0, 0, 0, 0.22);
+      }
+
+      .bulk-modal.ing-add-modal {
+        max-width: 32rem;
       }
 
       .bulk-modal__head {
@@ -1777,13 +1902,9 @@
         margin: 2px 0 0;
       }
 
+      /* Petak tutup diwarisi dari .btn-close-x — jangan tetapkan border/background di sini. */
       .bulk-modal__close {
-        background: none;
-        border: none;
         cursor: pointer;
-        font-size: 18px;
-        color: var(--text-muted);
-        padding: 4px;
       }
 
       .bulk-modal__body {
@@ -1815,14 +1936,14 @@
         border-top: 1px solid var(--border);
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
+        gap: var(--kb-btn-gap, 0.75rem);
         flex-shrink: 0;
         background: var(--surface);
       }
 
       .bulk-row-head {
         display: grid;
-        grid-template-columns: 2fr 1fr 1fr 80px 36px;
+        grid-template-columns: minmax(0, 2fr) minmax(4.5rem, 0.85fr) minmax(4.5rem, 0.85fr) 5.5rem 2rem;
         gap: 8px;
         padding: 0 0 8px;
         border-bottom: 1px solid var(--border);
@@ -1836,20 +1957,45 @@
 
       .bulk-ing-row {
         display: grid;
-        grid-template-columns: 2fr 1fr 1fr 80px 36px;
+        grid-template-columns: minmax(0, 2fr) minmax(4.5rem, 0.85fr) minmax(4.5rem, 0.85fr) 5.5rem 2rem;
         gap: 8px;
         align-items: center;
-        padding: 8px 0;
+        padding: 10px 0;
         border-bottom: 1px solid var(--border);
+      }
+
+      .bulk-ing-name-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .bulk-ing-name-wrap .bulk-ing-name {
+        flex: 1;
+        min-width: 0;
       }
 
       .bulk-ing-row input,
       .bulk-ing-row select {
         width: 100%;
-        font-size: 13px;
-        padding: 6px 8px;
+        min-height: var(--kb-control-min-h, 3.15rem);
+        font-size: var(--kb-control-font, 1.0625rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
         border-radius: 8px;
         border: 1px solid var(--border);
+      }
+
+      .bulk-ing-row .kb-dd {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .bulk-ing-row .kb-dd__btn {
+        font-size: var(--kb-control-font, 1.0625rem);
+        padding: var(--kb-control-pad-y, 0.72rem) var(--kb-control-pad-x, 0.85rem);
+        border-radius: 8px;
+        min-height: var(--kb-control-min-h, 3.15rem);
       }
 
       .bulk-tag-new {
@@ -1865,7 +2011,8 @@
 
       .bulk-add-row {
         display: flex;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: var(--kb-btn-gap, 0.75rem);
         margin-top: 12px;
         padding-top: 12px;
         border-top: 1px solid var(--border);
@@ -1901,6 +2048,18 @@
         padding: 6px 8px;
         border-radius: 8px;
         border: 1px solid var(--border);
+      }
+
+      .bulk-tax-row .kb-dd {
+        width: 70px;
+        flex: 0 0 70px;
+      }
+
+      .bulk-tax-row .kb-dd__btn {
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        min-height: 0;
       }
 
       .bulk-tax-result {
@@ -1965,13 +2124,92 @@
       .bulk-btn-del {
         width: 28px;
         height: 28px;
-        border-radius: 8px;
+        border-radius: 6px;
         display: flex;
         align-items: center;
         justify-content: center;
         color: var(--danger);
         cursor: pointer;
-        border: 1px solid var(--border);
-        background: none;
+        border: 1px solid var(--border-strong, #ccc);
+        background: var(--surface);
         font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .bulk-btn-del:hover {
+        background: #fdecea;
+        border-color: var(--danger);
+      }
+
+      @media (max-width: 760px) {
+        .bulk-row-head {
+          display: none;
+        }
+
+        .bulk-ing-row {
+          grid-template-columns: 1fr 1fr;
+          gap: 8px 10px;
+          padding: 12px 0;
+        }
+
+        .bulk-ing-col--name {
+          grid-column: 1 / -1;
+        }
+
+        .bulk-btn-del {
+          justify-self: end;
+        }
+      }
+
+      /**
+       * Butang tutup modal/panel — petak tutup seragam yang jelas kelihatan tanpa perlu hover.
+       * Halaman ini tidak memuatkan base.css, jadi blok yang sama diulang di sini.
+       * Pemilih button.btn-close-x lebih spesifik supaya menang terhadap
+       * .bulk-modal__close dan .ing-drawer__close tanpa !important.
+       */
+      button.btn-close-x {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        min-width: 2.25rem;
+        min-height: 2.25rem;
+        margin-top: 0;
+        padding: 0;
+        flex-shrink: 0;
+        border: 1px solid var(--border-strong, #ccc);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.95rem;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease,
+          color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+
+      button.btn-close-x:hover:not(:disabled) {
+        background: var(--surface-muted, #fafafa);
+        border-color: var(--text-muted);
+        color: var(--text);
+      }
+
+      button.btn-close-x:active:not(:disabled) {
+        transform: scale(0.96);
+      }
+
+      button.btn-close-x:focus-visible {
+        outline: none;
+        border-color: var(--text-muted);
+        box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.35);
       }

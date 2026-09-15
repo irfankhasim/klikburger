@@ -11,9 +11,9 @@ import {
   subscribeRbac,
   canBypassStaffRestrictions,
   canAccessOperationalModules,
-  isReadOnlyMode,
   staffLockMessage
 } from "./pos-rbac-session.js";
+import { t as tr, onLocaleChange } from "./i18n/locale.js";
 
 function formatRM(n) {
   return "RM " + (Math.round(n * 100) / 100).toFixed(2);
@@ -39,7 +39,7 @@ function payPill(method) {
 
 function kitchenMutationsAllowed() {
   if (canBypassStaffRestrictions()) return true;
-  return canAccessOperationalModules() && !isReadOnlyMode();
+  return canAccessOperationalModules();
 }
 
 function lineDisplayTotal(l) {
@@ -74,7 +74,7 @@ function ticketCard(o) {
   if (!canGo) {
     actions =
       '<p class="ops-muted" style="margin:0;font-size:0.76rem">' +
-      escapeHtml(isReadOnlyMode() ? "Read-only (shift closed)." : staffLockMessage()) +
+      escapeHtml(isReadOnlyMode() ? tr("order.board.readOnly") : staffLockMessage()) +
       "</p>";
   } else {
     var nextByStage = { waiting: "preparing", preparing: "ready", ready: "handed", handed: "done" };
@@ -93,7 +93,9 @@ function ticketCard(o) {
         escapeAttr(toPrev) +
         '" data-id="' +
         escapeAttr(o.id) +
-        '" aria-label="Alih ke kolum sebelumnya">←</button>';
+        '" aria-label="' +
+        escapeAttr(tr("order.board.aria.prev")) +
+        '">←</button>';
     }
     if (toNext) {
       rightBtn =
@@ -102,9 +104,9 @@ function ticketCard(o) {
         '" data-id="' +
         escapeAttr(o.id) +
         '" aria-label="' +
-        (nextIsDone ? "Tandakan pesanan Selesai" : "Alih ke kolum seterusnya") +
+        escapeAttr(nextIsDone ? tr("order.board.aria.markDone") : tr("order.board.aria.next")) +
         '" title="' +
-        (nextIsDone ? "Tandakan Selesai (keluar dari papan)" : "Kolum seterusnya") +
+        escapeAttr(nextIsDone ? tr("order.board.title.markDone") : tr("order.board.title.next")) +
         '">→</button>';
     }
     actions = '<div class="ops-ticket__nav">' + leftBtn + rightBtn + "</div>";
@@ -129,7 +131,9 @@ function ticketCard(o) {
     '<ul class="ops-ticket__lines">' +
     lines +
     "</ul>" +
-    '<p class="ops-ticket__total">Jumlah <strong>' +
+    '<p class="ops-ticket__total">' +
+    escapeHtml(tr("order.totals.total")) +
+    " <strong>" +
     escapeHtml(formatRM(typeof o.subtotal === "number" ? o.subtotal : parseFloat(o.subtotal) || 0)) +
     "</strong></p>" +
     '<div class="ops-ticket__actions">' + actions + "</div></article>"
@@ -164,7 +168,11 @@ function columnHtml(title, stageKey, orders, state, extraClass) {
     stageKey +
     '">' +
     list.map(ticketCard).join("") +
-    (list.length ? "" : '<p class="ops-muted" style="margin:0.35rem;font-size:0.78rem">Tiada pesanan</p>') +
+    (list.length
+      ? ""
+      : '<p class="ops-muted" style="margin:0.35rem;font-size:0.78rem">' +
+        escapeHtml(tr("order.board.noOrders")) +
+        "</p>") +
     "</div></div>"
   );
 }
@@ -176,10 +184,10 @@ function render() {
   if (!root) return;
   var orders = state.orders || [];
   root.innerHTML =
-    columnHtml("Menunggu", "waiting", orders, state, "ops-kcol--waiting") +
-    columnHtml("Penyediaan", "preparing", orders, state, "ops-kcol--prep") +
-    columnHtml("Siap", "ready", orders, state, "ops-kcol--ready") +
-    columnHtml("Diserahkan", "handed", orders, state, "ops-kcol--handed");
+    columnHtml(tr("order.board.col.waiting"), "waiting", orders, state, "ops-kcol--waiting") +
+    columnHtml(tr("order.board.col.preparing"), "preparing", orders, state, "ops-kcol--prep") +
+    columnHtml(tr("order.board.col.ready"), "ready", orders, state, "ops-kcol--ready") +
+    columnHtml(tr("order.board.col.handed"), "handed", orders, state, "ops-kcol--handed");
   root.querySelectorAll(".js-kb").forEach(function (btn) {
     btn.addEventListener("click", async function () {
       if (!kitchenMutationsAllowed()) return;
@@ -207,12 +215,6 @@ function renderBoardRbacBanner() {
     el.style.display = "block";
     el.hidden = false;
     el.textContent = staffLockMessage();
-    return;
-  }
-  if (isReadOnlyMode()) {
-    el.style.display = "block";
-    el.hidden = false;
-    el.textContent = "Drawer ditutup — papan pesanan dalam mod baca sahaja.";
     return;
   }
   el.style.display = "none";
@@ -249,6 +251,9 @@ subscribePosHub(function () {
   render();
 });
 subscribeRbac(function () {
+  render();
+});
+onLocaleChange(function () {
   render();
 });
 setupAutoSim();

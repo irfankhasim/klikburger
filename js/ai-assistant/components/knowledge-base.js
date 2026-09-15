@@ -8,6 +8,7 @@ import {
   saveOwnerKnowledgeText
 } from "../ai-service.js";
 import { parseKnowledgeBody, KB_DEFAULT_BODY } from "../knowledge-format.js";
+import { t, onLocaleChange, applyI18n } from "../../i18n/locale.js";
 
 export function mountKnowledgeBase(root, options) {
   options = options || {};
@@ -27,16 +28,16 @@ export function mountKnowledgeBase(root, options) {
   root.innerHTML =
     '<header class="kb-page-header">' +
     '<div class="kb-page-header__row">' +
-    '<h1 class="kb-page-title">Pangkalan data</h1>' +
+    '<h1 class="kb-page-title" data-i18n="ai.kb.title">Pangkalan data</h1>' +
     '<div class="bs-settings__header-actions ai-kb-editor-actions">' +
-    '<button type="button" class="btn btn--outline" data-ai-action="edit"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</button>' +
-    '<button type="button" class="btn btn--primary" data-ai-action="save" disabled><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Simpan</button>' +
+    '<button type="button" class="btn btn--outline" data-ai-action="edit"><i class="fa-solid fa-pen" aria-hidden="true"></i> <span data-i18n="ai.kb.edit">Edit</span></button>' +
+    '<button type="button" class="btn btn--primary" data-ai-action="save" disabled><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> <span data-i18n="ai.kb.save">Simpan</span></button>' +
     "</div></div>" +
-    '<p class="kb-page-lead">Maklumat rujukan untuk Pembantu AI. Baca dalam mod paparan; klik <strong>Edit</strong> untuk ubah.</p>' +
+    '<p class="kb-page-lead" data-i18n-html="ai.kb.lead">Maklumat rujukan untuk Pembantu AI. Baca dalam mod paparan; klik <strong>Edit</strong> untuk ubah.</p>' +
     "</header>" +
     '<section class="sd-panel bs-kb-editor-panel">' +
     '<label class="sd-field sd-field--full" for="ai-kb-editor">' +
-    "Kandungan pengetahuan" +
+    '<span data-i18n="ai.kb.contentLabel">Kandungan pengetahuan</span>' +
     '<textarea id="ai-kb-editor" class="ai-kb-editor ai-kb-editor--readonly" data-ai-editor readonly spellcheck="true" ' +
     'placeholder="## Soalan atau topik&#10;Jawapan penuh di sini…"></textarea>' +
     "</label></section>";
@@ -44,6 +45,10 @@ export function mountKnowledgeBase(root, options) {
   var editor = root.querySelector("[data-ai-editor]");
   var btnEdit = root.querySelector('[data-ai-action="edit"]');
   var btnSave = root.querySelector('[data-ai-action="save"]');
+  applyI18n(root);
+  onLocaleChange(function () {
+    applyI18n(root);
+  });
 
   function notifyItemsChange() {
     if (typeof options.onItemsChange === "function") {
@@ -71,7 +76,7 @@ export function mountKnowledgeBase(root, options) {
     var body = editor.value;
     var user = await waitForAuthUser();
     if (!user) {
-      alert("Sila log masuk semula.");
+      alert(t("ai.kb.alertRelogin"));
       return;
     }
     saving = true;
@@ -84,7 +89,7 @@ export function mountKnowledgeBase(root, options) {
       notifyItemsChange();
     } catch (err) {
       console.error("[knowledge-base] save", err);
-      alert("Gagal simpan. Sila cuba lagi.");
+      alert(t("ai.kb.alertSaveFail"));
       btnEdit.disabled = false;
       btnSave.disabled = false;
     } finally {
@@ -110,7 +115,7 @@ export function mountKnowledgeBase(root, options) {
       editor.value = KB_DEFAULT_BODY;
       lastSavedBody = editor.value;
       setReadOnlyMode(true);
-      alert("Gagal memuatkan data.");
+      alert(t("ai.kb.alertLoadFail"));
     });
 
   return {

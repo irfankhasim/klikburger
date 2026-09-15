@@ -44,6 +44,23 @@ export function getActiveFifoBatchFromList(list) {
   return sorted[0] || null;
 }
 
+/**
+ * Set `effectiveCostPerUnit` from the active FIFO lot so `costPerUnit()`
+ * matches POS COGS, reports, and inventory (not the catalogue list price).
+ */
+export function applyFifoCostsToIngredients(ingredients, batchesByIngredientId) {
+  var by = batchesByIngredientId || {};
+  return (ingredients || []).map(function (ing) {
+    var active = getActiveFifoBatchFromList(by[ing.id] || []);
+    var cpu = active && active.costPerUnit > 0 ? active.costPerUnit : 0;
+    if ((ing.effectiveCostPerUnit || 0) === cpu) return ing;
+    var next = Object.assign({}, ing);
+    if (cpu > 0) next.effectiveCostPerUnit = cpu;
+    else delete next.effectiveCostPerUnit;
+    return next;
+  });
+}
+
 export function subscribeIngredientBatches(onNext, onError) {
   return onSnapshot(collection(db, COL_INGREDIENT_BATCHES), onNext, onError);
 }

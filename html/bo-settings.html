@@ -6,6 +6,15 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <title>Tetapan — TAB KAUNTER</title>
     <link
       rel="stylesheet"
@@ -15,7 +24,7 @@
     />
     <link rel="stylesheet" href="../css/base.css" />
     <link rel="stylesheet" href="../css/staff-dashboard.css" />
-    <link rel="stylesheet" href="../css/bo-settings.css" />
+    <link rel="stylesheet" href="../css/bo-settings.css?v=43" />
     <script>
       try {
         if (window.self !== window.parent) {
@@ -23,27 +32,19 @@
         }
       } catch (e) {}
     </script>
+    <link rel="stylesheet" href="../css/i18n-toggle.css" />
+    <link rel="stylesheet" href="../css/kb-modal.css" />
   </head>
-  <body class="staff-dash">
+  <body class="staff-dash" data-i18n-doc-title="settings.docTitle">
     <div class="sd-app bs-settings bs-settings--shell">
       <header class="kb-page-header">
-        <h1 class="kb-page-title">Tetapan</h1>
-        <p class="kb-page-lead">
-          Urus rekod kakitangan dan pangkalan pengetahuan AI untuk pembantu digital.
+        <h1 class="kb-page-title" data-i18n="settings.title">Tetapan</h1>
+        <p class="kb-page-lead" data-i18n="settings.lead">
+          Urus rekod kakitangan operasi.
         </p>
       </header>
 
       <div class="bs-settings-shell">
-        <nav class="bs-settings-subnav" aria-label="Sub-tetapan">
-          <button type="button" class="bs-settings-subnav__btn" data-tab="staff">
-            <i class="fa-solid fa-users" aria-hidden="true"></i>
-            Kakitangan
-          </button>
-          <button type="button" class="bs-settings-subnav__btn" data-tab="database">
-            <i class="fa-solid fa-database" aria-hidden="true"></i>
-            Pangkalan data
-          </button>
-        </nav>
         <div class="bs-settings-shell__frame-wrap">
           <iframe
             id="bs-sub-iframe"
@@ -56,6 +57,7 @@
       </div>
     </div>
 
-    <script type="module" src="../js/staff/bo-settings-shell.js"></script>
+    <script type="module" src="../js/staff/bo-settings-shell.js?v=55"></script>
+    <script type="module" src="../js/i18n/lang-toggle.js"></script>
   </body>
 </html>

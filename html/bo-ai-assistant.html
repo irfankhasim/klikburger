@@ -6,15 +6,24 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAB KAUNTER" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/ios-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/ios-icon-precomposed.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/ios-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/ios-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/ios-icon-152.png" />
     <title>Mengalihkan…</title>
     <script>
-      /** URL lama — Pengetahuan AI kini di Tetapan → Pangkalan data */
+      /** URL lama — alih ke Tetapan (kakitangan). */
       (function () {
         try {
-          sessionStorage.setItem("fyp_bo_settings_tab_v1", "database");
+          sessionStorage.setItem("fyp_bo_settings_tab_v1", "staff");
         } catch (e1) {}
         try {
-          var p = { v: 1, r: "bo-settings", module: "bo", settingsTab: "database" };
+          var p = { v: 1, r: "bo-settings", module: "bo", settingsTab: "staff" };
           var s = JSON.stringify(p);
           sessionStorage.setItem("fyp_klikburger_restore_v1", s);
           localStorage.setItem("fyp_klikburger_restore_ls_v1", s);
